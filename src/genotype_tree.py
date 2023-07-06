@@ -1,22 +1,24 @@
 import networkx as nx
-
+from dataclasses import dataclass
 class GenotypeTree:
-    def __init__(self, tree:nx.DiGraph=None, genotypes:dict={}, node_mapping: dict=None, id=0) -> None:
-        self.tree = tree 
 
-  
+    tree: nx.DiGraph
+    node_mapping: dict
+    id: int = 0
 
-        for n in self.tree:
-            if n in genotypes:
-                self.tree.nodes[n]["genotype"] = genotypes[n]
-        
+    # def __init__(self, tree:nx.DiGraph=None, node_mapping: dict=None, id=0) -> None:
+
+
+    def __post_init__(self):
+
+
+        #dynamically find the root node
         for n in self.tree:
             if self.tree.in_degree[n] ==0:
                 self.root = n 
                 break
-        self.id = id
+
         
-        self.node_mapping = node_mapping
 
     def __str__(self):
         mystr = ""
@@ -27,7 +29,7 @@ class GenotypeTree:
         return(mystr)
     
     def preorder(self):
-        return nx.dfs_preorder_nodes(self.tree, source=self.root)
+        return list(nx.dfs_preorder_nodes(self.tree, source=self.root))
     
     def generate_CNA_tree(self):
 
