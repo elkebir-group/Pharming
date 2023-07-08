@@ -2,13 +2,58 @@ from genotype_tree import GenotypeTree
 import networkx as nx 
 import numpy as np
 from fit_segment_tree import BuildSegmentTree
+from dcf_clustering import DCF_Clustering
 import pandas as pd 
 from data import Data
 import argparse
         
+
+       
+        
+class Pharming:
+    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=10, rng=None) -> None:
+        self.T_CNAs = T_CNAs 
+        self.T_SNVs = T_SNVs
+        self.max_clusters = max_dcf_clusters
+        self.nrestarts = nrestarts
+        if rng is None:
+            self.rng = np.random.default_rng(1026)
+        else:
+            self.rng = rng
+
+
+    def fit_segment(self, s):
+        cells_by_cn = self.data.cells_by_cn(s)
+        snvs, alt, total = self.data.count_marginals(s)
+    
+        #get genotypes tree for these snvs
+        
+    
+        # T_SNVs = {s: self.T_SNVs[s] for s in snvs}
+        #get all possible cna trees 
+        #get T_SNVs
+        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=5, rng=self.rng)
+        dcfs, snv_clusters =clust.fit( snvs, alt, total)
+        #BuildSegmentTree()
+
+
+
+
+
+            # print(vaf_by_cn[cn])
+
+
+
+    def fit(self, data):
+        self.data = data 
+        self.segments = data.segments
+        for s in self.segments:
+            self.fit_segment(s)
+        print("done")
+
 def convert_tree_string(edge_string,id):
     tree = nx.DiGraph()
-    genotypes = {}
+
     index = 0
     node_id = -1
     node_mapping = {}
@@ -21,28 +66,22 @@ def convert_tree_string(edge_string,id):
         if geno_u not in node_mapping:
             node_id += 1
             node_mapping[geno_u] = node_id
-            genotypes[node_id] = geno_u
+   
 
         if geno_v not in node_mapping:
             node_id +=1
             node_mapping[geno_v] = node_id
-            genotypes[node_id] = geno_v
+
+  
         u_node_id = node_mapping[geno_u]
         v_node_id = node_mapping[geno_v]
         tree.add_edge(u_node_id, v_node_id)
+        tree.nodes[v_node_id]["genotype"]= geno_v
+        tree.nodes[u_node_id]["genotype"]= geno_u
         index += 2
     
-    return GenotypeTree(tree, genotypes, node_mapping, id=id)
-    
-
-
-
-
-    
-
-        
-        
-            
+    return GenotypeTree(tree, node_mapping, id=id)
+                   
 def read_genotype_trees(fname):
     genotype_trees = []
     id =0
@@ -63,38 +102,26 @@ def read_genotype_trees(fname):
                 id += 1
                 
     return genotype_trees 
-       
-        
-class Pharming:
-    def __init__(self, max_dcf_clusters=5, nrestarts=10) -> None:
-        self.max_clusters = max_dcf_clusters
-        self.nrestarts = nrestarts
-
-    def fit_segment(self, s):
-        seg_snvs = self.data.seg_to_snvs[s]
-        cells_by_cn = self.data.cells_by_cn(s)
-        vaf_by_cn = {}
-        for cn, cells in cells_by_cn.items():
-            print(f"segment: {s} copy number {cn}: #cells {len(cells)}")
-            vaf_by_cn[cn] = self.data.compute_vafs(cells = cells, snvs=seg_snvs)
-            
-            # print(vaf_by_cn[cn])
 
 
+def posterior_dcf(dcf, cn, alt, total, T_SNV):
+    #equation 15
+    # print(T_SNV)
+    v, u = T_SNV.find_split_pairs()
+    split_node, split_geno = u
+    x_star,y_star,m_star  = split_geno
+    gamma = T_SNV.get_node_genotypes()
+    desc_genotypes = T_SNV.get_desc_genotypes(split_node)
+    cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in gamma}
 
-    def fit(self, data):
-        self.data = data 
-        self.segments = data.segments
-        for s in self.segments:
-            self.fit_segment(s)
-        print("done")
 
+     
 
+  
 
 if __name__ == "__main__":
 
-    # fname = "/scratch/data/leah/pharming/src/test_state_trees.txt"
-    # geno_trees = read_genotype_trees(fname)
+  
 
 
     # T_CNA = geno_trees[0].generate_CNA_tree()
@@ -123,16 +150,63 @@ if __name__ == "__main__":
                         help="input file for variant and total read counts with unlabled columns: [chr segment snv cell var total]")
     parser.add_argument("-c" ,"--copy_numbers", required=True,
                         help="input files of copy numbers by segment with unlabeled columns [segment cell totalCN]")
+    parser.add_argument("-s" ,"--seed", required=False, type=int,
+                        help="random number seed (default: 1026)")
+    parser.add_argument("--state-trees", required=True, 
+                        help= "filename of state trees" )
     tpath = "/scratch/data/leah/pharming/test"
     args = parser.parse_args([
         "-f", f"{tpath}/input/read_counts.tsv",
-        "-c", f"{tpath}/input/copy_numbers.tsv"
+        "-c", f"{tpath}/input/copy_numbers.tsv",
+        "-s", "11",
+        "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
     ])
 
+    df = pd.read_csv(f"{tpath}/decifer_out.seg20.csv")
+    print(df.head())
+    
+
+
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
+
+    snv_trees = read_genotype_trees(args.state_trees)
+    for g in snv_trees:
+        print(g)
+    T_CNAs = [snv_trees[0].generate_CNA_tree()]
+    # for g in snv_trees:
+    #     print(g.is_refinement(T_CNA))
+
+    # test_tree = snv_trees[2]
+    # for d, cn in zip([0.175, 1],[2,5]):
+    #     v = posterior_dcf(d, cn ,5, 10, test_tree)
+    #     print(f"cn_sample: {cn} d: {d} v: {v}")
+
+    # for index, row in df.iterrows():
+    # # Extract the necessary column values
+    #     tree_index = int(row['tree_index'])
+    #     cn =5
+
+    #     vaf= row['VAR_1']/row['TOT_1']
+    #     dcf = row['point_estimate_DCF1']
+    #     T_SNV = snv_trees[tree_index]
+    #     v= T_SNV.dcf_to_v(dcf,cn)
+    #     d = T_SNV.v_to_dcf(vaf,cn)
+    #     print(f"m:{int(row['mut_index'])} cn: {cn}\nobs_vaf: {vaf} est_vaf: {v}\nobs_dcf: {dcf} est_dcf: {d}\n")
+    #     if np.abs(d - dcf) > 0.2:
+    #         print(T_SNV)
+    #         # v_check = T_SNV.dcf_to_v(dcf,cn)
+    #         d_check =  T_SNV.v_to_dcf(v,cn)
+    #         d_check2 =  T_SNV.v_to_dcf(vaf,cn)
+    #         print(f"d_check: {d_check} check2: {d_check2}")
+    #         print("check")
+    # print("done")
+    # Pass the values to your function
+  
+
+
     col_names = ['chr', 'segment', 'mutation_label', 'cell_label','var', 'total']
 
-
+    rng = np.random.default_rng(args.seed)
     
     read_counts = pd.read_table(
         args.file, sep="\t", header=None, names=col_names, skiprows=[0])
@@ -149,13 +223,10 @@ if __name__ == "__main__":
     #create indexed series of mapping of cell index to label
     cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
     mut_lookup = pd.Series(data=mut_labels, name="chr_mutation").rename_axis("mut")
-
-
-
+    
     read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
     read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='chr_mutation', how='left')
    
-
     copy_numbers = pd.read_table(args.copy_numbers, names=["segment", "cell_label", "cn"])
     segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
     seg_labels = np.sort(segs['segment'].unique())
@@ -165,7 +236,6 @@ if __name__ == "__main__":
     copy_numbers= pd.merge(copy_numbers, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
 
 
-    
     read_counts = pd.merge(read_counts, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
     seg_to_mut_mapping = read_counts.loc[:, ["seg_id", "mut"]].drop_duplicates()
     snv_to_seg = seg_to_mut_mapping.set_index("mut")["seg_id"].to_dict()
@@ -192,7 +262,7 @@ if __name__ == "__main__":
     copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
 
     dat = Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs)
-    Pharming().fit(dat)
+    Pharming(T_CNAs, snv_trees, rng=rng).fit(dat)
 
 
 
