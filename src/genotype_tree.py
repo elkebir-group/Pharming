@@ -169,7 +169,7 @@ class GenotypeTree:
          const_part = sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
     
          v_vec = dcf_vec*self.m_star/cn + const_part
-         logpost = -1*beta.logpdf(v_vec, a_vec, d_vec, cn)
+         logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
          return logpost 
         # Call the non-static function for a single element
 

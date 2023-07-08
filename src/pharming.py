@@ -32,8 +32,13 @@ class Pharming:
         # T_SNVs = {s: self.T_SNVs[s] for s in snvs}
         #get all possible cna trees 
         #get T_SNVs
-        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=5, rng=self.rng)
-        dcfs, snv_clusters =clust.fit( snvs, alt, total)
+        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=10, rng=self.rng)
+        #clust results is a 
+        clust_results =clust.fit( snvs, alt, total)
+        print(f"Segment {s} obj per snvs: {clust_results.likelihood/len(snvs)}\nDCFs:")
+        print(clust_results.DCFs)
+        
+
         #BuildSegmentTree()
 
 

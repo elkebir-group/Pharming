@@ -1,21 +1,34 @@
 from genotype_tree import GenotypeTree
 import numpy as np
 from dataclasses import dataclass
-from scipy.stats import beta
-from scipy.special import betaln
-from scipy.special import gammaln
 from scipy.optimize import minimize_scalar
-import time
 
 
-TOLERANCE = 1e-03
+
+TOLERANCE = 1e-04
 EPSILON = -1e40
 SEQERROR = 1e-40
 
 
-
+def scalar_obj( dcf, id_to_index, trees, alt_vec, total_vec,cn):
+        obj = 0
+        for id, tree in zip(id_to_index, trees):
+            alt = alt_vec[cn][id_to_index[id]]
+            total =total_vec[cn][id_to_index[id]]
+            obj += tree.vectorized_posterior(dcf, alt, total,cn).sum()
+        return -1*obj
+def unpack_assignments(cluster, assignments):
+    tree_id_to_indices ={}
+    for index, assign in enumerate(assignments):
+        k, tree_id = assign
+        if k == cluster:
+            if tree_id in tree_id_to_indices:
+                    tree_id_to_indices[tree_id].append(index)
+            else:
+                    tree_id_to_indices[tree_id] = [index]
+    return tree_id_to_indices
 class DCF_Clustering:
-    def __init__(self, T_CNAs, T_SNVs, clusters= 3, nrestarts=10, rng=None):
+    def __init__(self, T_CNAs, T_SNVs, clusters= 3, nrestarts=10, rng=None, verbose=False):
         self.nrestarts =nrestarts 
         if rng is None:
             self.rng = rng 
@@ -27,7 +40,15 @@ class DCF_Clustering:
         self.T_CNAs = T_CNAs
 
         self.T_SNVs = T_SNVs
-        self.max_iterations=10
+        self.id_to_tree = {tree.id: tree for tree in T_SNVs}
+        self.max_iterations=500
+        self.combos = []
+   
+        for k in range(self.k):
+            for t,tree in enumerate(self.T_SNVs):
+                    self.combos.append((k,t))
+        
+        self.verbose = verbose
     
 
     def init_cluster_centers(self):
@@ -37,18 +58,18 @@ class DCF_Clustering:
         return self.rng.uniform(low=0.0, high=1.0, size=(self.nsamples, self.k))
 
 
-    def optimize_snv_assignments(self, T_SNVs, dcfs, snvs, alt, total):
+    def optimize_snv_assignments(self, T_SNVs, dcfs, alt, total):
         #assignment of snvs to T_SNV_tree
-        T_SNV_dict= {}
-        snv_lookup= {i: snvs[i] for i in range(snvs.shape[0])}
-        clusters = np.full_like(snvs, fill_value=1)
+        # T_SNV_dict= {}
         CNs = list(alt.keys())
         #for each homogenous sample
         combos = []
-        for k in range(self.dcfs.shape[1]):
-                all_arrs = []
+        all_arrs = []
+        for k in range(dcfs.shape[1]):
+                
                 for tree in T_SNVs:
-                    combos.append((k,tree.id))
+                    combos.append((k, tree.id))
+          
 
                     post_arr =[]
                     for sample, cn in enumerate(CNs):
@@ -58,13 +79,15 @@ class DCF_Clustering:
                         dcf = dcfs[sample,k]
         
                         post_arr.append(tree.vectorized_posterior(dcf, a_vec,d_vec, cn))
-                        all_arrs.append(np.vstack(post_arr).sum(1))
+                    sample_arr = np.vstack(post_arr).sum(axis=0)
+                    all_arrs.append(sample_arr)
         cand_assign = np.vstack(all_arrs)
-        likelihood = cand_assign.max(axis=1).sum()
-        combo_assign = np.argmax(all_arrs, axis=1)
-        for i,c in enumerate(combo_assign):
-            clusters[i], T_SNV_dict[snv_lookup[i]] = combos[c]
-        return clusters, T_SNV_dict, likelihood
+        likelihood = cand_assign.max(axis=0).sum()
+        combo_assign = np.argmax(cand_assign, axis=0)
+        #assignments is list of length snvs containing a two-tuple of cluster and tree id to which the 
+        assignments = [combos[c] for c in combo_assign ]
+ 
+        return assignments, likelihood
 
                 
 
@@ -80,28 +103,71 @@ class DCF_Clustering:
             #compute the likelihood
             
      
+
+
+    def optimize_cluster_centers(self, assignments, alt, total):
+        
+        new_dcfs = []
+        CNs = list(alt.keys())
+        #optimize the cluster dcf for each sample and cluster
+        for c in CNs:
+             sample_dcf =[]
+             for k in range(self.k):
+                tree_id_to_indices= unpack_assignments(k, assignments)
+                trees =[self.id_to_tree[i] for i in tree_id_to_indices]  
+                if len(trees) >0:
+                    new_dcf= minimize_scalar(scalar_obj, args=(tree_id_to_indices, trees, alt, total, c), method='bounded', bounds=[0,1]).x
+                    
+                else:
+                    new_dcf = self.rng.random()    
+                sample_dcf.append(new_dcf)
+                    
+             new_dcfs.append(sample_dcf)
+        
+        
+        return np.array(new_dcfs)
+    
+
+    def compute_likelihood(self,dcfs, assignments, alt, total):
    
+        CNs = list(alt.keys())
+        likelihood = 0
+        #optimize the cluster dcf for each sample and cluster
+        for j,c in enumerate(CNs):
+             for k in range(self.k):
+                tree_id_to_indices= unpack_assignments(k, assignments)
+                trees =[self.id_to_tree[i] for i in tree_id_to_indices]  
+                if len(trees) >0:
+                    likelihood += -1*scalar_obj(dcfs[j,k],tree_id_to_indices, trees, alt, total, c)
+                    
+        return likelihood
+        
+        
 
-    def optimize_cluter_centers(self):
-        pass 
-
-    def compute_likelihood(self):
-        pass 
-
-    def fit_cna_tree(self, T_CNA, T_SNVs, dcfs, snvs, alt, total, ):
+    def fit_cna_tree(self, T_CNA, T_SNVs, dcfs,  alt, total, ):
 
 
-
+    
         for j in range(self.max_iterations):
 
-            snv_clusters, T_SNVs, likelihood = self.optimize_snv_assignments(cand_genotype_trees, dcfs, snvs,alt, total)
-            dcfs = self.optimize_cluster_centers(snv_clusters, T_SNVs)
-            likelihood = self.compute_likelihood(dcfs, snv_clusters, T_SNVs)
-            if likelihood > best_likelihood:
-                best_likelihood = likelihood
-        return DCF_Data(best_likelihood, snv_clusters, T_SNVs, T_CNA, dcfs)
+            assignments, likelihood = self.optimize_snv_assignments(T_SNVs, dcfs, alt, total)
+            old_dcfs = dcfs.copy()
+            dcfs = self.optimize_cluster_centers(assignments, alt, total)
+            new_likelihood = self.compute_likelihood(dcfs, assignments, alt, total)
+            diff = new_likelihood -likelihood
+            if self.verbose:
+                print(f"Previous likelihood: {likelihood} New likelihood: {new_likelihood} Diff: {diff}")
+            if diff < 0 or abs(diff) <  TOLERANCE:
+                 dcfs = old_dcfs 
+                 break
+            # if likelihood > best_likelihood:
+            #     best_likelihood = likelihood
+        
+        return DCF_Data(likelihood, assignments, T_CNA, dcfs)
 
     def fit(self, snvs, alt, total):
+        self.snv_lookup= {i: snvs[i] for i in range(len(snvs))}
+
         self.nsamples = len(alt)
 
         for i in range(self.nrestarts):
@@ -113,12 +179,12 @@ class DCF_Clustering:
             res = []
             for cna_tree in self.T_CNAs:
                 cand_T_SNVs = [tree for tree in self.T_SNVs if tree.is_refinement(cna_tree)]
-                tree_results= self.fit_cna_tree(cna_tree, cand_T_SNVs,dcfs, snvs, alt, total)
+                tree_results= self.fit_cna_tree(cna_tree, cand_T_SNVs,dcfs, alt, total)
                 cna_tree_likes.append(tree_results.likelihood)
                 res.append(tree_results)
             max_index = cna_tree_likes.index(max(cna_tree_likes))
 
-        if best_likelihood > max(cna_tree_likes):
+        if best_likelihood < max(cna_tree_likes):
             best_likelihood = max(cna_tree_likes)
             best_res = res[max_index]
         return best_res
@@ -129,10 +195,11 @@ class DCF_Clustering:
 @dataclass 
 class DCF_Data:
     likelihood: float 
-    clusters: np.array 
-    T_SNVs: dict
+    assigments: list
     T_CNA: GenotypeTree 
     DCFs: np.array
+
+
 
 
         
