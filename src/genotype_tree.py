@@ -1,11 +1,15 @@
 import networkx as nx
 from dataclasses import dataclass
+
+
+from scipy.stats import beta
 @dataclass
 class GenotypeTree:
 
     tree: nx.DiGraph
     node_mapping: dict
     id: int = 0
+    EPSILON: float= 10e-10
 
     # def __init__(self, tree:nx.DiGraph=None, node_mapping: dict=None, id=0) -> None:
 
@@ -18,6 +22,14 @@ class GenotypeTree:
             if self.tree.in_degree[n] ==0:
                 self.root = n 
                 break
+        split_pair = self.find_split_pairs()
+        if split_pair is not None:
+            u,v = split_pair
+            self.split_node, self.split_geno = v
+            self.x_star,self.y_star,self.m_star  = self.split_geno
+            self.cn_star = self.x_star + self.y_star
+            self.gamma = self.get_node_genotypes()
+            self.desc_genotypes = self.get_desc_genotypes(self.split_node)
 
         
 
@@ -75,6 +87,20 @@ class GenotypeTree:
     def get_node_genotypes(self):
         
         return [self.tree.nodes[n]["genotype"] for n in self.tree]
+
+    def get_desc_genotypes(self, node=None, geno=None):
+        if node is not None:
+            node_id = node
+        elif geno is not None:
+            node_id = self.node_mapping[geno]
+        else:
+            _,v = self.find_split_pairs()
+            node_id, _ = v
+   
+        desc_nodes = nx.dfs_preorder_nodes(self.tree, source=node_id)
+        return [self.tree.nodes[n]["genotype"] for n in desc_nodes if n != node_id]
+
+
     
     def get_edge_genotypes(self, cna=False):
         edge_genos =[]
@@ -103,7 +129,7 @@ class GenotypeTree:
     #is self a refinment of tree2?   
     def is_refinement(self, cna_tree):
 
-        #every node in tree 2 must be in tree 1
+        #every cna gentoype in tree 2 must be in tree 1
         tree1_genotypes = self.get_node_genotypes()
         tree1_cna_genotypes = set([(x,y) for x,y,_ in tree1_genotypes])
         for node, data in cna_tree.tree.nodes(data=True):
@@ -111,30 +137,99 @@ class GenotypeTree:
             if (n_x, n_y) not in tree1_cna_genotypes:
                 return False
     
-   
-        #if we remove genotype edges in tree 1 that not are not tree 2 then the
-        #edge genotype sets should be equivalent
 
+        #if we remove mutation edges where the CNA does change
+        #the trees should be identical
         t1_edges  = self.get_edge_genotypes(cna=True)
         t1_filt= set([(u,v) for u,v in t1_edges if u !=v])
   
         t2_edges  = cna_tree.get_edge_genotypes(cna=True)
         return(t1_filt==t2_edges)
-        # missing_genos = t1_edges -t2_edges
-        # present = t1_edges - missing_genos
-        # present_edges = [(self.node_mapping[u], self.node_mapping[v]) for u,v in present]
-        
-        # induced_subgraph= self.tree.edge_subgraph(present_edges).copy()
-   
-        # new_edge = []
-        # for u,v in induced_subgraph.edges:
-        #     u_x, u_y, _ =  induced_subgraph.nodes[u]["genotype"]
-        #     v_x, v_y, _=  induced_subgraph.nodes[v]["genotype"]
-        #     new_edge.append(((u_x, u_y), (v_x, v_y)))
+    
 
-        # return set(new_edge) == t2_edges
+    def posterior_dcf(self, dcf,a,d,cn ):
+
+        if d==0:
+            posterior = self.EPSILON
+        else:
+            
+            cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+            #v = self.dcf(dcf, cn)
+            #copy code so that posterior 
+            v = (dcf*self.m_star)/cn \
+                + (1/cn)*sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
+    
+            posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
+        return posterior
+        
+
+
+    def vectorized_posterior(self, dcf_vec, a_vec, d_vec, cn):
+         cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+         const_part = sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
+    
+         v_vec = dcf_vec*self.m_star/cn + const_part
+         logpost = -1*beta.logpdf(v_vec, a_vec, d_vec, cn)
+         return logpost 
+        # Call the non-static function for a single element
+
+
+    def dcf_to_v(self,dcf,cn):
+       
+        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+        v = (dcf*self.m_star)/cn \
+            + (1/cn)*sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
+    
+        if v < 0:
+            return 0
+        elif v > 1:
+            return 1
+        
+        return v
+    
+    
+
+    def v_to_dcf(self,v,cn, trunc=True):
+        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+        if cn == self.cn_star:
+            d = (1/self.m_star)*(v*cn -sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes]))
+        else:
+            d = sum([cn_prop[x+y] for x,y,m in self.desc_genotypes if x+y==cn])
+        if trunc:
+            if d < 0: return 0
+            elif d > 1: return 1
+        return d
+    
+
+
+    def v_minus(self, cn):
+        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+        return (1/cn)*sum([ m*cn_prop[x+y] for x,y,m in self.desc_genotypes if x==self.x_star and y==self.y_star])
+    
+    def v_plus(self, cn):
+        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+        return (self.v_min(cn) + self.m_star * cn_prop[self.x_star + self.y_star]/cn)
+
+    # def calc_lamb(self, v,cn):
+    #     cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+    #     return  (1/self.m_star)*(v*cn - sum([]))
+    
+     
+  
+    # def geno_prop(self, geno, v):
+    #     '''
+    #     we make the assumption that a sample is composed of cells with the same cn number state
+    #     so that mu_{x,y} is either 1 or 0
+    #     '''
+    #     x, y, m = geno
+    #     if x != self.x_star and y != self.y_star:
+    #         return 1
+    #     else:
+    #         self.lamb = self.calc_lamb()
+
 
     
+
 
 
 
