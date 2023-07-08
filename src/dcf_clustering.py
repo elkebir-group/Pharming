@@ -27,7 +27,7 @@ class DCF_Clustering:
         self.T_CNAs = T_CNAs
 
         self.T_SNVs = T_SNVs
-    
+        self.max_iterations=10
     
 
     def init_cluster_centers(self):
@@ -88,10 +88,10 @@ class DCF_Clustering:
     def compute_likelihood(self):
         pass 
 
-    def fit_cna_tree(self, T_CNA,  snvs, alt, total):
+    def fit_cna_tree(self, T_CNA, T_SNVs, dcfs, snvs, alt, total, ):
 
 
-        cand_genotype_trees = self.filter_genotype_trees(T_CNA)
+
         for j in range(self.max_iterations):
 
             snv_clusters, T_SNVs, likelihood = self.optimize_snv_assignments(cand_genotype_trees, dcfs, snvs,alt, total)
@@ -103,7 +103,7 @@ class DCF_Clustering:
 
     def fit(self, snvs, alt, total):
         self.nsamples = len(alt)
-        CNs = list(alt.keys())
+
         for i in range(self.nrestarts):
             
             dcfs = self.init_cluster_centers()
@@ -113,7 +113,7 @@ class DCF_Clustering:
             res = []
             for cna_tree in self.T_CNAs:
                 cand_T_SNVs = [tree for tree in self.T_SNVs if tree.is_refinement(cna_tree)]
-                tree_results= self.fit_CNA(cand_T_SNVs, snvs, alt, total)
+                tree_results= self.fit_cna_tree(cna_tree, cand_T_SNVs,dcfs, snvs, alt, total)
                 cna_tree_likes.append(tree_results.likelihood)
                 res.append(tree_results)
             max_index = cna_tree_likes.index(max(cna_tree_likes))
