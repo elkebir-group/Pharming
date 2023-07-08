@@ -42,6 +42,15 @@ class Data:
         total = self.total[np.ix_(cells, snvs)]
         return var.sum(axis=0)/total.sum(axis=0)
     
+    def count_marginals(self, seg):
+        cell_map = self.cells_by_cn(seg)
+        snvs = self.seg_to_snvs[seg]
+        alt = {cn: self.var[np.ix_(cells, snvs)].sum(axis=0) for cn,cells in cell_map.items()}
+        total = {cn: self.total[np.ix_(cells, snvs)].sum(axis=0) for cn,cells in cell_map.items()}
+
+        return snvs, alt, total
+
+    
     def compute_likelihood(self):
         pass 
 
