@@ -42,11 +42,11 @@ Output:
 
 
 class BuildSegmentTree:
-    def __init__(self, id, T_CNA, T_SNVs, DCF,clusters,cells_by_sample, data=None):
+    def __init__(self, id, T_CNA, T_SNVs, DCF,clusters):
         self.id = id
         self.DCF = DCF
         self.T_CNA = T_CNA
-        self.T_SNVs = T_SNVs
+        self.T_SNVs = T_SNVs  #dictionary with snv as keys and genotype trees as values
         self.tree_to_snvs = {}
         self.clusters = clusters 
         self.id_to_tree = {tree.id: tree for key, tree in self.T_SNVs.items()}
@@ -58,7 +58,7 @@ class BuildSegmentTree:
         
         self.snvs = list(T_SNVs.keys())
         self.m = len(self.snvs)
-        self.data = data
+   
         self.T_Seg = nx.DiGraph()
         self.root = self.T_CNA.root
         for u,v in self.T_CNA.tree.edges:
@@ -82,16 +82,9 @@ class BuildSegmentTree:
         self.mut_mapping = {}
         self.cell_mapping = None
         self.mut_loss_mapping = {}
-        if self.data is not None:
-            self.cells = self.data.cell_lookup.index.to_list()
-        else:
-            self.cells = []
+ 
         self.alpha = 0.001
-        self.total_cn_by_sample = {}
-        self.cells_by_sample = cells_by_sample
-        for s in self.cells_by_sample:
-            
-            self.total_cn_by_sample[s] = self.data.copy_numbers[self.cells_by_sample[s], :][0,0]
+
         
 
 
@@ -164,8 +157,15 @@ class BuildSegmentTree:
 
         
     
-    def fit(self):
+    def fit(self, data, cells_by_sample):
+        self.data = data
+        self.cells_by_sample = cells_by_sample
+        self.total_cn_by_sample = {}
         
+        for s in self.cells_by_sample:
+            
+            self.total_cn_by_sample[s] = self.data.copy_numbers[self.cells_by_sample[s], :][0,0]
+
         for k in np.unique(self.clusters):
             
             state_tree_snvs_pairs = self.get_unique_state_trees(self.snvs_by_cluster[k])
@@ -179,7 +179,7 @@ class BuildSegmentTree:
         self.cell_mapping = {n: [] for n in self.T_Seg}
         cell_assign = self.map_assign_cells()
         print(self)
-        return cell_assign
+        return self.T_Seg, self.mut_mapping, cell_assign
 
 
  
