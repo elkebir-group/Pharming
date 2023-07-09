@@ -11,7 +11,7 @@ import argparse
        
         
 class Pharming:
-    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=10, rng=None) -> None:
+    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=5, rng=None) -> None:
         self.T_CNAs = T_CNAs 
         self.T_SNVs = T_SNVs
         self.max_clusters = max_dcf_clusters
@@ -32,14 +32,23 @@ class Pharming:
         # T_SNVs = {s: self.T_SNVs[s] for s in snvs}
         #get all possible cna trees 
         #get T_SNVs
-        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=10, rng=self.rng)
+        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=self.nrestarts, rng=self.rng)
         #clust results is a 
         clust_results =clust.fit( snvs, alt, total)
         print(f"Segment {s} obj per snvs: {clust_results.likelihood/len(snvs)}\nDCFs:")
         print(clust_results.DCFs)
+        clusters = clust_results.get_clusters()
+        T_SNV_dict = clust_results.snv_to_tree(snvs, self.T_SNVs)
+            
+
+       
+
         
 
-        #BuildSegmentTree()
+        bst = BuildSegmentTree(s, clust_results.T_CNA,T_SNV_dict, clust_results.DCFs, clusters)
+        T_Seg, mut_assign, cell_assign = bst.fit(self.data, cells_by_cn)
+        print(T_Seg)
+
 
 
 
