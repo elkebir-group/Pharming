@@ -41,7 +41,7 @@ class DCF_Clustering:
 
         self.T_SNVs = T_SNVs
         self.id_to_tree = {tree.id: tree for tree in T_SNVs}
-        self.max_iterations=500
+        self.max_iterations=100
         self.combos = []
    
         for k in range(self.k):
@@ -195,12 +195,25 @@ class DCF_Clustering:
 @dataclass 
 class DCF_Data:
     likelihood: float 
-    assigments: list
+    assignments: list
     T_CNA: GenotypeTree 
     DCFs: np.array
 
 
 
+    def get_clusters(self):
+         return np.array([k for k, _ in self.assignments],dtype=int)
+    
+    def snv_to_tree(self, snvs, T_SNVs):
+         mydict = {}
+         index = 0
+         for _, tree_id in self.assignments:
+              for t in T_SNVs:
+                   if t.id == tree_id:
+                        mydict[snvs[index]] = t
+                        index +=1
+                        break
+         return mydict
 
         
 #equation 28
