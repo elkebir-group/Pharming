@@ -1,8 +1,10 @@
 import networkx as nx
 from dataclasses import dataclass
-
-
+import numpy as np
+from scipy.stats import binom
 from scipy.stats import beta
+
+EPSILON = -10e10
 @dataclass
 class GenotypeTree:
 
@@ -146,6 +148,66 @@ class GenotypeTree:
         t2_edges  = cna_tree.get_edge_genotypes(cna=True)
         return(t1_filt==t2_edges)
     
+    def get_nodes_by_cn(self, cn):
+        return [self.node_mapping[(x,y,m)] for x,y,m in self.node_mapping if x+y==cn]
+
+    # def likelihood_function( a,d,y,c, alpha):
+        
+    #     if d ==0:
+    #         return 0
+    #     elif y ==0:
+        
+    #         return binom.pmf(a,d,alpha)
+          
+    #     else:
+    #         vaf = np.arange(1, c)/c
+    #         # vaf  = 1/c
+    #         # vaf = 0.5
+    #         adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+    #         # return binom.pmf(a,d,adjusted_vaf)
+    #         return (1/vaf.shape[0])*np.sum(binom.pmf(a,d,adjusted_vaf))
+    def likelihood(self, cells_by_cn, a,d, alpha):
+        '''
+        cells_by_cn: a dict of lists (np:arrays?) that map the cn number to the cells with that total_cn
+        a, d: vectors representing the column in the data of a particular snv
+
+        '''
+
+        all_cells =[]
+        for cn ,cells in cells_by_cn.items():
+            all_cells += cells.tolist()
+        all_cells.sort()
+        # index_to_cells= {i: c for i,c in enumerate(all_cells)}
+        # cells_to_index = {c: i for i,c in enumerate(all_cells)}
+        #for each node in the tree, calculate the likelihood of cells being assign to that node
+        # m0,m1 = self.find_split_pairs()
+        node_assign = {}
+        # mut_node, mut_geno = m1
+        # desc_genos = self.get_desc_genotypes(mut_node)
+        total_likelihood = 0
+        for cn, cells in cells_by_cn.items(): 
+
+            # cn_indices = [cells_to_index[c] for c in cells]
+            a_vec, d_vec  = a[cells],d[cells]
+            cand_nodes = self.get_nodes_by_cn(cn)
+            like_list = []
+            for n in cand_nodes:
+                x,y,m = self.tree.nodes[n]["genotype"]
+
+                vaf = m/(x+y)
+                adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+          
+                like_list.append(binom.logpmf(a_vec, d_vec,adjusted_vaf))
+            cell_like_by_cand_node = np.vstack(like_list)
+            assign = cell_like_by_cand_node.argmax(axis=0)
+            cn_like = cell_like_by_cand_node.max(axis=0).sum()
+            total_likelihood += cn_like
+            for c,ass in zip(cells, assign):
+                node_assign[c] = cand_nodes[ass]
+        return total_likelihood, node_assign
+            
+        
+
 
     def posterior_dcf(self, dcf,a,d,cn ):
 
@@ -165,11 +227,20 @@ class GenotypeTree:
 
 
     def vectorized_posterior(self, dcf_vec, a_vec, d_vec, cn):
+         alpha =0.001
          cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
          const_part = sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
     
-         v_vec = dcf_vec*self.m_star/cn + const_part
-         logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
+         vaf = dcf_vec*self.m_star/cn + const_part/cn
+         if vaf> 1:
+             print(self)
+         adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+         logpost = binom.logpmf(a_vec, d_vec, adjusted_vaf)
+        #  logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
+         if np.any(logpost==np.NINF):
+             print("contains -NINF")
+        #  logpost[logpost==np.NINF] = EPSILON
+
          return logpost 
         # Call the non-static function for a single element
 

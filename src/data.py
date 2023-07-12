@@ -27,6 +27,17 @@ class Data:
         self.segments.sort()
         self.cells = np.arange(self.N)
         self.muts = np.arange(self.M)
+
+
+        # Create the multi-index
+        multi_index = pd.MultiIndex.from_product([self.cells, self.muts], names=['cell', 'snv'])
+
+
+        # Flatten the array to create the Series data
+        self.total_series = pd.Series(self.total.flatten(), index=multi_index)
+        self.total_series = self.total_series[self.total_series > 0]
+
+
     
     def __str__(self):
         mystr= f"Input data contains: {self.N} cells, {self.M} SNVs and {self.nseg} segments"
@@ -50,6 +61,23 @@ class Data:
 
         return snvs, alt, total
 
+    def count_cells_by_snv(self, seg):
+        snvs = self.seg_to_snvs[seg]
+        cells_by_snvs = {j: [] for j in snvs}
+        filtered_series = self.total_series.loc[pd.IndexSlice[:, snvs]]
+        for i,j in filtered_series.index:
+              cells_by_snvs[j].append(i)
+
+        # indices = np.argwhere(self.total > 0)
+
+
+        # for i,j in indices:
+        #     if j not in snvs:
+        #         continue 
+        #     print(f"cell{i}, snv: {j}  {self.total[i,j]}")
+          
+
+        return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
     def compute_likelihood(self):
         pass 

@@ -11,43 +11,50 @@ import argparse
        
         
 class Pharming:
-    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=5, rng=None) -> None:
+    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=25, rng=None) -> None:
         self.T_CNAs = T_CNAs 
         self.T_SNVs = T_SNVs
         self.max_clusters = max_dcf_clusters
         self.nrestarts = nrestarts
         if rng is None:
-            self.rng = np.random.default_rng(1026)
+            self.rng = np.random.default_rng(102)
         else:
             self.rng = rng
 
 
-    def fit_segment(self, s):
-        cells_by_cn = self.data.cells_by_cn(s)
-        snvs, alt, total = self.data.count_marginals(s)
-    
+    def fit_segment(self, segment):
+
+        bst = BuildSegmentTree(segment, self.T_CNAs, self.T_SNVs)
+        T_Seg, mut_assign, cell_assign = bst.fit(self.data, segment)
+
+        # for s,cc in zip(snvs,cell_counts_by_snv):
+        #     print(f"{mut_lookup[s]}: {cc}")
+
+
+   
+        # for s, id in T_SNV_dict.items():
+        #     print(f"{mut_lookup[s]}: {id} ")
+       
         #get genotypes tree for these snvs
         
     
         # T_SNVs = {s: self.T_SNVs[s] for s in snvs}
         #get all possible cna trees 
         #get T_SNVs
-        clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, clusters=4, nrestarts=self.nrestarts, rng=self.rng)
-        #clust results is a 
-        clust_results =clust.fit( snvs, alt, total)
-        print(f"Segment {s} obj per snvs: {clust_results.likelihood/len(snvs)}\nDCFs:")
-        print(clust_results.DCFs)
-        clusters = clust_results.get_clusters()
-        T_SNV_dict = clust_results.snv_to_tree(snvs, self.T_SNVs)
+      
+        # clust= DCF_Clustering(self.T_CNAs, self.T_SNVs, T_SNV_Clusters, clusters=4, nrestarts=self.nrestarts, rng=self.rng)
+        # #clust results is a 
+        # clust_results =clust.fit(tree_id_to_indices, snvs, alt, total)
+        # print(f"Segment {segment} obj per snvs: {clust_results.likelihood/len(snvs)}\nDCFs:")
+        # print(clust_results.DCFs)
+        # clusters = clust_results.get_clusters()
+        # T_SNV_dict = clust_results.snv_to_tree(snvs, self.T_SNVs)
             
 
-       
 
-        
 
-        bst = BuildSegmentTree(s, clust_results.T_CNA,T_SNV_dict, clust_results.DCFs, clusters)
-        T_Seg, mut_assign, cell_assign = bst.fit(self.data, cells_by_cn)
-        print(T_Seg)
+   
+
 
 
 
@@ -61,8 +68,9 @@ class Pharming:
     def fit(self, data):
         self.data = data 
         self.segments = data.segments
-        for s in self.segments:
-            self.fit_segment(s)
+        # for s in self.segments:
+        test_seg= 20
+        self.fit_segment(test_seg)
         print("done")
 
 def convert_tree_string(edge_string,id):
@@ -118,15 +126,6 @@ def read_genotype_trees(fname):
     return genotype_trees 
 
 
-def posterior_dcf(dcf, cn, alt, total, T_SNV):
-    #equation 15
-    # print(T_SNV)
-    v, u = T_SNV.find_split_pairs()
-    split_node, split_geno = u
-    x_star,y_star,m_star  = split_geno
-    gamma = T_SNV.get_node_genotypes()
-    desc_genotypes = T_SNV.get_desc_genotypes(split_node)
-    cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in gamma}
 
 
      
@@ -185,6 +184,7 @@ if __name__ == "__main__":
 
     snv_trees = read_genotype_trees(args.state_trees)
     for g in snv_trees:
+        print(g.id)
         print(g)
     T_CNAs = [snv_trees[0].generate_CNA_tree()]
     # for g in snv_trees:
