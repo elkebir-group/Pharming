@@ -6,6 +6,7 @@ from dcf_clustering import DCF_Clustering
 import pandas as pd 
 from data import Data
 import argparse
+from clonal_tree import ClonalTree
         
 
        
@@ -25,7 +26,10 @@ class Pharming:
     def fit_segment(self, segment):
 
         bst = BuildSegmentTree(segment, self.T_CNAs, self.T_SNVs)
-        T_Seg, mut_assign, cell_assign = bst.fit(self.data, segment)
+        T_Seg, mut_mapping = bst.fit(self.data, segment)
+        SegTree = ClonalTree(segment, T_Seg, mut_mapping )
+        return SegTree
+       
 
         # for s,cc in zip(snvs,cell_counts_by_snv):
         #     print(f"{mut_lookup[s]}: {cc}")
@@ -70,8 +74,9 @@ class Pharming:
         self.segments = data.segments
         # for s in self.segments:
         test_seg= 20
-        self.fit_segment(test_seg)
-        print("done")
+        segTree = self.fit_segment(test_seg)
+        print(segTree)
+        print(f"Segment {test_seg} complete!")
 
 def convert_tree_string(edge_string,id):
     tree = nx.DiGraph()
@@ -175,17 +180,17 @@ if __name__ == "__main__":
         "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
     ])
 
-    df = pd.read_csv(f"{tpath}/decifer_out.seg20.csv")
-    print(df.head())
+    # df = pd.read_csv(f"{tpath}/decifer_out.seg20.csv")
+    # print(df.head())
     
 
 
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
 
     snv_trees = read_genotype_trees(args.state_trees)
-    for g in snv_trees:
-        print(g.id)
-        print(g)
+    # for g in snv_trees:
+    #     print(g.id)
+    #     print(g)
     T_CNAs = [snv_trees[0].generate_CNA_tree()]
     # for g in snv_trees:
     #     print(g.is_refinement(T_CNA))

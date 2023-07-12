@@ -87,7 +87,7 @@ class BuildSegmentTree:
         self.mut_loss_mapping = {}
  
         self.alpha = 0.001
-        self.verbose =True
+        self.verbose =False
 
         
 
@@ -242,7 +242,7 @@ class BuildSegmentTree:
         
         cell_counts_by_snv, cells_by_snvs = self.data.count_cells_by_snv(segment)
         
-        print(f"Average cell count per SNV: {cell_counts_by_snv.mean()}")
+        self.print_verb(f"Average cell count per SNV: {cell_counts_by_snv.mean()}")
         #construct overlap graph and check if it is fully connected
         G = self.construct_overlap_graph(snvs, cells_by_snvs)
         num_components = nx.number_connected_components(G)
@@ -288,9 +288,10 @@ class BuildSegmentTree:
         
             self.total_cn_by_sample[s] = self.data.copy_numbers[self.cells_by_cn[s], :][0,0]
     
-        cell_assign = self.map_assign_cells()
-        print(self)
-        return self.T_Seg, self.mut_mapping, cell_assign
+        # cell_assign = self.map_assign_cells()
+
+
+        return self.T_Seg, self.mut_mapping
                        
 
             
