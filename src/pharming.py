@@ -284,7 +284,7 @@ if __name__ == "__main__":
     Pharming(T_CNAs, snv_trees, rng=rng).fit(dat)
 
 
-
+    print("\nPharming complete...let's go sell our trees at the Pharmer's Market!")
  
 
 
