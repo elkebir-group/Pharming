@@ -5,9 +5,9 @@ import networkx as nx
 from collections import Counter
 from itertools import product, chain, combinations
 from dataclasses import dataclass
-
-
-
+from scipy.stats import binom
+from scipy.special import logsumexp
+from itertools import chain
 
 
 
@@ -139,7 +139,7 @@ class ClonalTree:
 
     """
 
-    def __init__(self, key, tree, mut_mapping, mut_loss_mapping=None,cell_mapping=None, ):
+    def __init__(self, key, tree, mut_mapping, mut_loss_mapping=None,cell_mapping=None, mutated_copies=None ):
         self.tree: nx.DiGraph = tree
         
         self.root= self.find_root()
@@ -150,6 +150,8 @@ class ClonalTree:
 
         self.mut_mapping = mut_mapping
 
+        self.mutated_copies = mutated_copies
+
         if mut_loss_mapping is None:
             self.mut_loss_mapping = {}
         else:
@@ -157,6 +159,7 @@ class ClonalTree:
 
 
         self.key = key
+        self.loglikelihood = np.NaN
 
         # self.node_attrs = {k for node_data in self.tree.nodes.data() for k in node_data[1].keys()}
         # self.edge_attrs =  {k for edge_data in self.tree.edges.data() for k in edge_data[1].keys()}
@@ -216,6 +219,7 @@ class ClonalTree:
                 nmuts = 0
             mystr += f"\n{n}\t{nmuts}\t{ncells}\t{genotype}"
         mystr += "\n"
+        mystr += f"\nLog-likelihood: {self.loglikelihood}\n"
         return mystr
   
 
@@ -445,19 +449,74 @@ class ClonalTree:
 
         return pairs
 
-    def compute_likelihood(self, data):
+    def compute_likelihood(self, data, seg, alpha=0.001, attachment="marginal", use_existing=False):
 
-        self.use_rd = data.use_read_depth
+        seg_snvs = data.seg_to_snvs[seg]
       
-        self.loglikelihood_dict = {"total": 0, "variant": 0, "bin": 0}
+        # self.loglikelihood_dict = {"total": 0, "variant": 0, "bin": 0}
         self.node_likelihood = {}
-        for n in self.cell_mapping:
-            if len(self.get_tip_cells(n)) > 0:
-                self.node_likelihood[n] = self.compute_likelihood_by_node(n, data)
+        if attachment =="marginal":
+            all_nodes = []
+            total_cn = {}
+            prob = {}
+            for n in self.tree:
+                x,y = self.tree.nodes[n]["genotype"]
+                total_cn[n] = x+y 
+                if x+y in prob:
+                    prob[x+y] += 1
+                else:
+                    prob[x+y] =1
+            prob = {key: 1/val for key, val in prob.items()}
+            
 
-        for n in self.node_likelihood:
-            for key in self.loglikelihood_dict:
-                self.loglikelihood_dict[key] += self.node_likelihood[n][key]
+            for n in self.tree:
+         
+                vaf = np.zeros(data.M)
+        
+                cn = total_cn[n]
+                snvs = self.get_ancestral_muts(n)
+                # for s in snvs:
+                vaf[snvs]= [self.mutated_copies[s] for s in snvs]
+                vaf= vaf/cn
+                # vaf[snvs] = self.mutated_copies[snvs]/cn
+
+                adj_vaf =vaf*(1- alpha) + (1-vaf)*(alpha/3)
+                adj_vaf = adj_vaf[seg_snvs].reshape(1,-1)
+          
+                #should have dim = cells x snvs
+                part1 = binom.pmf(data.var[:, seg_snvs], data.total[:,seg_snvs], adj_vaf)
+                part2 =(data.copy_numbers[:, seg] == cn)*prob[cn]
+                part2 = part2.reshape(-1,1)
+                node_like= np.log(part1*part2)
+                node_like = node_like.sum(axis=1)
+
+            
+                all_nodes.append(node_like)
+         
+            self.loglikelihood = logsumexp(all_nodes, axis=0).sum()
+            
+            return self.loglikelihood
+
+         
+
+
+                
+
+
+                # for key in self.loglikelihood_dict:
+                #  self.loglikelihood_dict[key] += self.node_likelihood[n][key]
+
+    
+        elif attachment == 'map' and use_existing:
+            for n in self.cell_mapping:
+                if len(self.get_tip_cells(n)) > 0:
+                    self.node_likelihood[n] = self.compute_likelihood_by_node(n, data)
+        else:
+            #MAP assign cells to clone and compute likelihood 
+            return None
+     
+
+
 
         self.loglikelihood = self.loglikelihood_dict['total']
         self.variant_likelihood = self.loglikelihood_dict['variant']
@@ -528,19 +587,21 @@ class ClonalTree:
                 return n
 
     def get_ancestral_muts(self, node):
-        root = self.find_root()
-        path = list(nx.shortest_simple_paths(self.tree, root, node))[0]
-        path = path[:-1]
-        if len(path) > 0:
-            present_muts = np.concatenate([self.mut_mapping[p] for p in path])
-            lost_muts = [self.mut_loss_mapping[p]
-                         for p in path if p in self.mut_loss_mapping]
-            if len(lost_muts) > 0:
-                lost_muts = np.concatenate(lost_muts)
-                present_muts = np.setdiff1d(present_muts, lost_muts)
-        else:
-            present_muts = np.empty(shape=0, dtype=int)
+       
+        path = list(nx.shortest_path(self.tree, self.root, node))
+
+     
+        present_muts =list(chain.from_iterable([self.mut_mapping[p] for p in path if p in self.mut_mapping]))
+       
+        lost_muts = list(chain.from_iterable([self.mut_loss_mapping[p]
+                        for p in path if p in self.mut_loss_mapping]))
+        present_muts = list(set(present_muts) - set(lost_muts))
+        # if len(lost_muts) > 0:
+        #     lost_muts = list(chain.from_iterable((lost_muts)))
+   
         return present_muts
+
+
 
 # class SegmentTree(ClonalTree):
 #     def __init__(self, tree, cell_mapping, mut_mapping, cna_genotypes, mut_loss_mapping=None, key=0):

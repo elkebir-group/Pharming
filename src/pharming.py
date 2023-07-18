@@ -7,14 +7,16 @@ import pandas as pd
 from data import Data
 import argparse
 from clonal_tree import ClonalTree
+import utils
         
 
        
         
 class Pharming:
-    def __init__(self, T_CNAs, T_SNVs, max_dcf_clusters=5, nrestarts=25, rng=None) -> None:
-        self.T_CNAs = T_CNAs 
-        self.T_SNVs = T_SNVs
+    def __init__(self,cmd_path, max_dcf_clusters=4, nrestarts=25, rng=None) -> None:
+        # self.T_CNAs = T_CNAs 
+        # self.T_SNVs = T_SNVs
+        self.cmd_path = cmd_path
         self.max_clusters = max_dcf_clusters
         self.nrestarts = nrestarts
         if rng is None:
@@ -23,9 +25,9 @@ class Pharming:
             self.rng = rng
 
 
-    def fit_segment(self, segment):
+    def fit_segment(self, segment, T_CNA, T_SNVs):
 
-        bst = BuildSegmentTree(segment, self.T_CNAs, self.T_SNVs)
+        bst = BuildSegmentTree(segment, T_CNA, T_SNVs)
         T_Seg, mut_mapping = bst.fit(self.data, segment)
         SegTree = ClonalTree(segment, T_Seg, mut_mapping )
         return SegTree
@@ -67,68 +69,80 @@ class Pharming:
 
             # print(vaf_by_cn[cn])
 
-
-
-    def fit(self, data):
-        self.data = data 
-        self.segments = data.segments
-        # for s in self.segments:
-        test_seg= 20
-        segTree = self.fit_segment(test_seg)
-        print(segTree)
-        print(f"Segment {test_seg} complete!")
-
-def convert_tree_string(edge_string,id):
-    tree = nx.DiGraph()
-
-    index = 0
-    node_id = -1
-    node_mapping = {}
-  
-    while index < len(edge_string):
-        u = edge_string[index].split(",")
-        v = edge_string[index+1].split(",")
-        geno_u = tuple([int(i) for i in u])
-        geno_v = tuple([int(i) for i in v])
-        if geno_u not in node_mapping:
-            node_id += 1
-            node_mapping[geno_u] = node_id
-   
-
-        if geno_v not in node_mapping:
-            node_id +=1
-            node_mapping[geno_v] = node_id
-
-  
-        u_node_id = node_mapping[geno_u]
-        v_node_id = node_mapping[geno_v]
-        tree.add_edge(u_node_id, v_node_id)
-        tree.nodes[v_node_id]["genotype"]= geno_v
-        tree.nodes[u_node_id]["genotype"]= geno_u
-        index += 2
-    
-    return GenotypeTree(tree, node_mapping, id=id)
-                   
-def read_genotype_trees(fname):
-    genotype_trees = []
-    id =0
-    with open(fname, "r+") as file:
-        state_tree_section = False
-        for line in file:
+    @staticmethod
+    def enumerate_T_CNA(T_SNVs):
+        id = 0    
+        T_CNAs = []
+        TCNA_to_TSNVs = {}
+        for t_snv in T_SNVs:
+            
+            cand = t_snv.generate_CNA_tree()
+            inlist = False 
+            for ct in T_CNAs:
+                if ct.is_identical(cand):
+                
+                    TCNA_to_TSNVs[ct.id].append(t_snv.id)
+                    inlist = True
+                    break
+                    
+            if not inlist:
+                cand.set_id(id)
+                T_CNAs.append(cand)
+                TCNA_to_TSNVs[id] = [t_snv.id]
+                id += 1
+        return T_CNAs, TCNA_to_TSNVs
             
 
-            line = line.strip()
-            if "state_trees" in line:
-                state_tree_section = True
-                continue
+    def combine_trees(self):
+        pass 
 
-            if state_tree_section:
-                tree_string = line.split()
+    def fit(self, data):
+        
+        self.data = data 
+        self.segments = data.segments
+        self.SegTrees = {}
+        self.segments =[20]
+        for g in self.segments:
+           
+            cn_states =  data.cn_states_by_seg(g)
+            T_SNVs = utils.get_snv_trees(cn_states, cmd_path= self.cmd_path)
+            T_CNAs, TCNA_to_TSNVS = self.enumerate_T_CNA(T_SNVs)
+            best_like = np.NINF
+    
+            for t_cna in T_CNAs:
+                TSNV_set = [T_SNVs[i] for i in TCNA_to_TSNVS[t_cna.id]]
                 
-                genotype_trees.append(convert_tree_string(tree_string, id))
-                id += 1
-                
-    return genotype_trees 
+                bst = BuildSegmentTree(g, t_cna, TSNV_set)
+                T_Seg, mut_mapping, mut_copies = bst.fit(self.data, g)
+                SegTree = ClonalTree(g, T_Seg, mut_mapping, mutated_copies= mut_copies )
+             
+                likelihood = SegTree.compute_likelihood(data,g)
+                if likelihood > best_like:
+                    best_like = likelihood
+                    self.SegTrees[g] = SegTree
+
+      
+            print(f"Segment {g} complete!")
+            print(self.SegTrees[g])
+
+        self.combine_trees()
+
+
+
+
+
+
+       
+
+
+
+
+
+
+        # for s in self.segments:
+        # test_seg= 20
+
+
 
 
 
@@ -171,27 +185,32 @@ if __name__ == "__main__":
     parser.add_argument("-s" ,"--seed", required=False, type=int,
                         help="random number seed (default: 1026)")
     parser.add_argument("--state-trees", required=True, 
-                        help= "filename of state trees" )
+                        help= "filename of pregenerated state trees or path of program to generate state trees" )
     tpath = "/scratch/data/leah/pharming/test"
     args = parser.parse_args([
         "-f", f"{tpath}/input/read_counts.tsv",
         "-c", f"{tpath}/input/copy_numbers.tsv",
         "-s", "11",
-        "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
+        # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
+        "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
     ])
 
     # df = pd.read_csv(f"{tpath}/decifer_out.seg20.csv")
     # print(df.head())
     
-
+    # test_cmd = [args.state_trees, "temp.txt"] 
+    # dat = "1,1;4,1"
+    # with open("temp.txt", "w+") as temp:
+    #     temp.write(dat)
+    # foo = utils.capture_program_output(test_cmd, dat)
 
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
 
-    snv_trees = read_genotype_trees(args.state_trees)
+    # snv_trees = read_genotype_trees(args.state_trees)
     # for g in snv_trees:
     #     print(g.id)
     #     print(g)
-    T_CNAs = [snv_trees[0].generate_CNA_tree()]
+    # T_CNAs = [snv_trees[0].generate_CNA_tree()]
     # for g in snv_trees:
     #     print(g.is_refinement(T_CNA))
 
@@ -281,10 +300,10 @@ if __name__ == "__main__":
     copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
 
     dat = Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs)
-    Pharming(T_CNAs, snv_trees, rng=rng).fit(dat)
+    Pharming(args.state_trees, rng=rng).fit(dat)
 
 
-    print("\nPharming complete...let's go sell our trees at the Pharmer's Market!")
+    print("\nPharming complete...let's go sell our trees at the local Pharmer's Market!")
  
 
 
