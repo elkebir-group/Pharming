@@ -46,7 +46,7 @@ Output:
 class BuildSegmentTree:
     def __init__(self, id, T_CNA, T_SNVs, DCF=None,clusters=None):
         self.id = id
-        self.T_CNA = T_CNA[0]
+        self.T_CNA = T_CNA
         self.T_SNVs = T_SNVs  #dictionary with snv as keys and genotype trees as values
         self.tree_to_snvs = {}
         self.clusters = clusters 
@@ -262,6 +262,10 @@ class BuildSegmentTree:
                 if like > max_like:
                     max_like = like
                     self.T_SNV_dict[s] = tree.id
+        self.mutated_copies = {}
+        for s in self.snvs:
+            tree = self.id_to_tree[self.T_SNV_dict[s]]
+            self.mutated_copies[s]=tree.m_star
         T_SNV_Clusters = [[0], [1,2], [3]]
         for tree_clust in T_SNV_Clusters:
        
@@ -291,7 +295,7 @@ class BuildSegmentTree:
         # cell_assign = self.map_assign_cells()
 
 
-        return self.T_Seg, self.mut_mapping
+        return self.T_Seg, self.mut_mapping, self.mutated_copies
                        
 
             

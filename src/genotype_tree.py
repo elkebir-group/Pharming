@@ -102,7 +102,25 @@ class GenotypeTree:
         desc_nodes = nx.dfs_preorder_nodes(self.tree, source=node_id)
         return [self.tree.nodes[n]["genotype"] for n in desc_nodes if n != node_id]
 
+    def is_identical(self, tree):
+        if type(tree) is GenotypeTree:
+            nodes1 = sorted(self.get_node_genotypes())
 
+ 
+            nodes2 = sorted(tree.get_node_genotypes())
+
+            if nodes1 != nodes2:
+                return False
+
+            edges1 = sorted(self.get_edge_genotypes())
+            edges2 = sorted(tree.get_edge_genotypes())
+
+            if edges1 != edges2:
+                return False
+
+            return True
+        else:
+            return False 
     
     def get_edge_genotypes(self, cna=False):
         edge_genos =[]
@@ -117,6 +135,9 @@ class GenotypeTree:
 
         return set(edge_genos)
     
+    def set_id(self, id):
+        self.id = id 
+
     def find_path(self, parent_cna_geno, child_cna_geno):
         p_x, p_y = parent_cna_geno
         c_x, c_y = child_cna_geno
