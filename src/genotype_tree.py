@@ -3,38 +3,23 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.stats import binom
 from scipy.stats import beta
-
+from copy import deepcopy
+import itertools
 EPSILON = -10e10
-@dataclass
-class GenotypeTree:
 
-    tree: nx.DiGraph
-    node_mapping: dict
-    id: int = 0
-    EPSILON: float= 10e-10
-
-    # def __init__(self, tree:nx.DiGraph=None, node_mapping: dict=None, id=0) -> None:
-
-
-    def __post_init__(self):
-
-
-        #dynamically find the root node
+class BaseTree:
+    def __init__(self,  tree, node_mapping, id=0) -> None:
+        self.tree: nx.DiGraph = tree
+        self.node_mapping: dict = node_mapping
+        for key, val in self.node_mapping.items():
+            self.tree.nodes[val]["genotype"] = key
+        self.id = id
         for n in self.tree:
             if self.tree.in_degree[n] ==0:
                 self.root = n 
                 break
-        split_pair = self.find_split_pairs()
-        if split_pair is not None:
-            u,v = split_pair
-            self.split_node, self.split_geno = v
-            self.x_star,self.y_star,self.m_star  = self.split_geno
-            self.cn_star = self.x_star + self.y_star
-            self.gamma = self.get_node_genotypes()
-            self.desc_genotypes = self.get_desc_genotypes(self.split_node)
-
-        
-
+        self.node_to_geno = {val: key for key, val in self.node_mapping.items()}
+    
     def __str__(self):
         mystr = ""
         
@@ -45,6 +30,167 @@ class GenotypeTree:
     
     def preorder(self):
         return list(nx.dfs_preorder_nodes(self.tree, source=self.root))
+    
+    def node_genotypes(self):
+        
+        return [self.tree.nodes[n]["genotype"] for n in self.tree]
+    
+
+    def edge_genotypes(self):
+        edge_genos =[]
+        for u,v in self.tree.edges:
+            u_g = self.tree.nodes[u]["genotype"]
+            v_g = self.tree.nodes[v]["genotype"]
+            
+            edge_genos.append((u_g, v_g))
+        return set(edge_genos)
+    
+    def set_id(self, id):
+        self.id = id 
+    
+    def is_leaf(self,node):
+        return self.tree.out_degree[node] ==0
+    
+
+class CNATree(BaseTree):
+    def __init__(self, tree, node_mapping, id):
+        super().__init__(tree, node_mapping, id)
+    
+    @staticmethod
+    def assign_permutations(tree, node, current_genos):
+            node_mapping_list =[]
+            # Get the descendant nodes of the input node
+       
+            descendants =  list(nx.dfs_preorder_nodes(tree, node))
+            descendants = [n for n in descendants if n != node]
+          
+
+            # Generate all permutations of [0, 1] with the length equal to the number of descendants
+            permutations = list(itertools.product([0, 1], repeat=len(descendants)))
+            for perm in permutations:
+        
+                geno = {key: val for key,val in current_genos.items()}
+                for p,n in zip(perm, descendants):
+          
+                    v_x, v_y, v_m = current_genos[n]
+                    parent = list(tree.predecessors(n))[0]
+                    u_x, u_y, u_m = geno[parent]
+                    #the non-mutated copy is amplified and m remains at u_m
+                    if p ==0:
+                        geno[n] = (v_x, v_y, u_m)
+                    else:
+                      #the mutated copy is amplified
+                      diff = max([v_x- u_x, v_y-u_y])
+                      geno[n] = (v_x, v_y, u_m+diff)
+                nm = {val: key for key,val in geno.items()}
+                node_mapping_list.append(nm)
+            return node_mapping_list
+    
+
+    def enumerate_snv_trees(self):
+        '''
+        returns list of list of tree clusters by tree id  and full list of TSNVs
+        '''
+    
+
+        tree_clusters = []
+        T_SNVS = []
+
+        node_mapping = {}
+        for geno in self.node_mapping:
+            x,y = geno
+            node_mapping[(x,y,0)] = self.node_mapping[geno]
+        genos = {val: key for key, val in node_mapping.items()}
+        id = 0
+        
+      
+
+                 
+        num_nodes = len(self.tree)
+        for node in self.tree:
+            x,y,m = genos[node]
+            #always add a mutation edge as the direct descendent of node
+            children = list(self.tree.neighbors(node))
+            for i in range(len(children)+1):
+            
+                n_id = num_nodes
+                snv_node_map = deepcopy(node_mapping)
+   
+                snv_node_map[(x,y,1)] =n_id
+                genos[n_id]=(x,y,1)
+
+
+                if i ==0:
+                    snv_tree =  nx.DiGraph()
+                    snv_tree.add_edges_from(self.tree.edges())
+                    snv_tree.add_edge(node, n_id)
+                    T_SNV = SNVTree(snv_tree, snv_node_map,id)
+                    # print(id)
+                    # print(T_SNV)
+                    T_SNVS.append(T_SNV)
+                    tree_clusters.append( [id])
+                    id += 1
+                else:
+                    for kids in itertools.combinations(children, i):
+                        #insert a mutation edge before this subet of children
+                        snv_tree =  nx.DiGraph()
+                        snv_tree.add_edges_from(self.tree.edges())
+                        snv_tree.add_edge(node, n_id)
+
+                        for v in kids:
+                          
+                            snv_tree.remove_edge(node, v)
+                            snv_tree.add_edge(n_id, v)
+                        
+                        node_mapping_list = self.assign_permutations(snv_tree,n_id, genos)
+                        clust_tree = []
+                        for nm in node_mapping_list:
+                            # print(id)
+             
+                            tree= SNVTree(snv_tree, deepcopy(nm),id)
+                            # print(tree)
+                            T_SNVS.append(deepcopy(tree))
+                            clust_tree.append(id)
+                            id+=1
+                        tree_clusters.append(clust_tree)
+            
+
+
+             
+                                    
+        return tree_clusters, T_SNVS            
+                
+
+                           
+
+
+
+
+    def get_nodes_by_cn(self, cn):
+        return [self.node_mapping[(x,y)] for x,y in self.node_mapping if x+y==cn]
+    
+class SNVTree(BaseTree):
+    def __init__(self, tree, node_mapping, id):
+        super().__init__(tree, node_mapping, id)  # Call the parent class constructor
+        
+
+   
+        self.EPSILON: float= 10e-10
+        split_pair = self.find_split_pairs()
+        if split_pair is not None:
+            u,v = split_pair
+            self.split_node_parent, self.split_node_parent_geno = u
+            self.split_node, self.split_geno = v
+            self.x_star,self.y_star,self.m_star  = self.split_geno
+            self.cn_star = self.x_star + self.y_star
+            self.gamma = self.node_genotypes()
+            self.desc_genotypes = self.get_desc_genotypes(self.split_node)
+
+        
+
+
+    
+
     
     def generate_CNA_tree(self):
 
@@ -72,7 +218,7 @@ class GenotypeTree:
                     T_CNA.add_edge(u_node, v_node)
 
                     node_mapping[(v_x, v_y)] = v_node
-        return GenotypeTree(T_CNA, node_mapping=node_mapping)
+        return CNATree(T_CNA, node_mapping=node_mapping)
 
     def find_split_pairs(self):
         split_cand =[]
@@ -86,9 +232,36 @@ class GenotypeTree:
                     if x==v_x and y==v_y:
                         return (v,v_geno), (u, geno)
     
-    def get_node_genotypes(self):
-        
-        return [self.tree.nodes[n]["genotype"] for n in self.tree]
+
+    def occurs_within( self, start_cna_geno, target_cna_geno):
+
+        visited = set()  # Set to keep track of visited nodes
+        x,y = start_cna_geno
+        start_node = self.node_mapping[(x,y,0)]
+        stack = [start_node]  # Stack to store nodes to visit
+        split_node_passed = False 
+        while stack:
+            node = stack.pop()  # Get the next node from the stack
+            if node == self.split_node:
+                split_node_passed = True 
+            x,y,_ = self.tree.nodes[node]["genotype"]
+            if target_cna_geno == (x,y):
+            
+                # Terminate the search when the target node is found
+                # print("Target node found!")
+                return split_node_passed
+
+            visited.add(node)  # Mark the node as visited
+
+            # Add unvisited neighbors to the stack
+            neighbors = self.tree.neighbors(node)
+            unvisited_neighbors = [n for n in neighbors if n not in visited]
+            stack.extend(unvisited_neighbors)
+
+        # If the loop finishes without finding the target node
+        return False 
+
+
 
     def get_desc_genotypes(self, node=None, geno=None):
         if node is not None:
@@ -103,17 +276,17 @@ class GenotypeTree:
         return [self.tree.nodes[n]["genotype"] for n in desc_nodes if n != node_id]
 
     def is_identical(self, tree):
-        if type(tree) is GenotypeTree:
-            nodes1 = sorted(self.get_node_genotypes())
+        if type(tree) is SNVTree:
+            nodes1 = sorted(self.node_genotypes())
 
  
-            nodes2 = sorted(tree.get_node_genotypes())
+            nodes2 = sorted(tree.node_genotypes())
 
             if nodes1 != nodes2:
                 return False
 
-            edges1 = sorted(self.get_edge_genotypes())
-            edges2 = sorted(tree.get_edge_genotypes())
+            edges1 = sorted(self.edge_genotypes())
+            edges2 = sorted(tree.edge_genotypes())
 
             if edges1 != edges2:
                 return False
@@ -122,21 +295,8 @@ class GenotypeTree:
         else:
             return False 
     
-    def get_edge_genotypes(self, cna=False):
-        edge_genos =[]
-        for u,v in self.tree.edges:
-            u_g = self.tree.nodes[u]["genotype"]
-            v_g = self.tree.nodes[v]["genotype"]
-            
-            edge_genos.append((u_g, v_g))
-        
-        if cna:
-            edge_genos =[((u_g[0], u_g[1]), (v_g[0], v_g[1])) for u_g, v_g in edge_genos]
+ 
 
-        return set(edge_genos)
-    
-    def set_id(self, id):
-        self.id = id 
 
     def find_path(self, parent_cna_geno, child_cna_geno):
         p_x, p_y = parent_cna_geno
@@ -149,44 +309,32 @@ class GenotypeTree:
         genotypes_in_shortest_path = [self.tree.nodes[node]["genotype"] for node in shortest_path]
         return shortest_path, genotypes_in_shortest_path
 
-    #is self a refinment of tree2?   
+    #is self a refinment of a CNATree object   
     def is_refinement(self, cna_tree):
+        if isinstance(cna_tree, CNATree):
+            #every cna gentoype in tree 2 must be in tree 1
+            tree1_genotypes = self.node_genotypes()
+            tree1_cna_genotypes = set([(x,y) for x,y,_ in tree1_genotypes])
+            for node, data in cna_tree.tree.nodes(data=True):
+                n_x, n_y, _ = data["genotype"]
+                if (n_x, n_y) not in tree1_cna_genotypes:
+                    return False
+        
 
-        #every cna gentoype in tree 2 must be in tree 1
-        tree1_genotypes = self.get_node_genotypes()
-        tree1_cna_genotypes = set([(x,y) for x,y,_ in tree1_genotypes])
-        for node, data in cna_tree.tree.nodes(data=True):
-            n_x, n_y, _ = data["genotype"]
-            if (n_x, n_y) not in tree1_cna_genotypes:
-                return False
+            #if we remove mutation edges where the CNA does change
+            #the trees should be identical
+            t1_edges  = self.edge_genotypes(cna=True)
+            t1_filt= set([(u,v) for u,v in t1_edges if u !=v])
     
-
-        #if we remove mutation edges where the CNA does change
-        #the trees should be identical
-        t1_edges  = self.get_edge_genotypes(cna=True)
-        t1_filt= set([(u,v) for u,v in t1_edges if u !=v])
-  
-        t2_edges  = cna_tree.get_edge_genotypes(cna=True)
-        return(t1_filt==t2_edges)
+            t2_edges  = cna_tree.edge_genotypes(cna=True)
+            return(t1_filt==t2_edges)
+        else:
+            return False 
     
     def get_nodes_by_cn(self, cn):
         return [self.node_mapping[(x,y,m)] for x,y,m in self.node_mapping if x+y==cn]
 
-    # def likelihood_function( a,d,y,c, alpha):
-        
-    #     if d ==0:
-    #         return 0
-    #     elif y ==0:
-        
-    #         return binom.pmf(a,d,alpha)
-          
-    #     else:
-    #         vaf = np.arange(1, c)/c
-    #         # vaf  = 1/c
-    #         # vaf = 0.5
-    #         adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
-    #         # return binom.pmf(a,d,adjusted_vaf)
-    #         return (1/vaf.shape[0])*np.sum(binom.pmf(a,d,adjusted_vaf))
+
     def likelihood(self, cells_by_cn, a,d, alpha):
         '''
         cells_by_cn: a dict of lists (np:arrays?) that map the cn number to the cells with that total_cn
@@ -302,22 +450,7 @@ class GenotypeTree:
         cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
         return (self.v_min(cn) + self.m_star * cn_prop[self.x_star + self.y_star]/cn)
 
-    # def calc_lamb(self, v,cn):
-    #     cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
-    #     return  (1/self.m_star)*(v*cn - sum([]))
-    
-     
-  
-    # def geno_prop(self, geno, v):
-    #     '''
-    #     we make the assumption that a sample is composed of cells with the same cn number state
-    #     so that mu_{x,y} is either 1 or 0
-    #     '''
-    #     x, y, m = geno
-    #     if x != self.x_star and y != self.y_star:
-    #         return 1
-    #     else:
-    #         self.lamb = self.calc_lamb()
+ 
 
 
     
