@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
-
+import pickle
 
 
 '''
@@ -17,8 +17,8 @@ class Data:
     copy_numbers: np.array# N x G matrix with the copy number profile of each cell in each segment
     snv_to_seg: dict  # a dictionary that maps each snv to seg
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
-    # cell_lookup : pd.Series # an N length series mapping internal cell index to input cell label
-    # mut_lookup : pd.Series #an M length series mapping interal SNV index to input SNV label
+    cell_lookup : pd.Series # an N length series mapping internal cell index to input cell label
+    mut_lookup : pd.Series #an M length series mapping interal SNV index to input SNV label
 
     def __post_init__(self):
         self.nseg = len(self.seg_to_snvs)
@@ -104,3 +104,53 @@ class Data:
 
 
 
+    def save(self, fname):
+        with open(fname, 'wb') as file:
+            pickle.dump(self, file)
+
+def load(read_counts_fname,copy_numbers_fname ):
+    col_names = ['chr', 'segment', 'mutation_label', 'cell_label','var', 'total']
+
+
+    
+    read_counts = pd.read_table(
+        read_counts_fname, sep="\t", header=None, names=col_names, skiprows=[0])
+    
+    read_counts['chr_mutation'] = read_counts['chr'].astype('str') + "_" + \
+             read_counts['mutation_label'].astype(str)
+    
+
+    cell_labels = np.sort(read_counts['cell_label'].unique())
+    mut_labels = np.sort(read_counts['chr_mutation'].unique())
+
+
+
+    #create indexed series of mapping of cell index to label
+    cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
+    mut_lookup = pd.Series(data=mut_labels, name="chr_mutation").rename_axis("mut")
+    
+    read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
+    read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='chr_mutation', how='left')
+   
+    copy_numbers = pd.read_table(copy_numbers_fname, names=["segment", "cell_label", "cn"])
+    segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
+    seg_labels = np.sort(segs['segment'].unique())
+    seg_lookup = pd.Series(data=seg_labels, name="segment").rename_axis("seg_id")
+
+    copy_numbers = pd.merge(copy_numbers, cell_lookup.reset_index(), on='cell_label', how='left').drop("cell_label", axis=1)
+    copy_numbers= pd.merge(copy_numbers, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
+
+
+    read_counts = pd.merge(read_counts, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
+    seg_to_mut_mapping = read_counts.loc[:, ["seg_id", "mut"]].drop_duplicates()
+    snv_to_seg = seg_to_mut_mapping.set_index("mut")["seg_id"].to_dict()
+    seg_to_snvs =  {value: [k for k, v in snv_to_seg.items() if v == value] for value in set(snv_to_seg.values())}
+
+
+    read_counts= read_counts.set_index(["cell", "mut"])
+    var = read_counts["var"].unstack(level="mut", fill_value=0).to_numpy()
+    total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
+    copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
+    copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
+
+    return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
