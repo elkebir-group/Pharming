@@ -1,13 +1,17 @@
-from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 import networkx as nx
 from collections import Counter
 from itertools import product, chain, combinations
-from dataclasses import dataclass
 from scipy.stats import binom
 from scipy.special import logsumexp
 from itertools import chain
+import pickle 
+import pygraphviz as pgv
+# import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 
 
@@ -159,7 +163,7 @@ class ClonalTree:
 
 
         self.key = key
-        self.loglikelihood = np.NaN
+        self.loglikelihood = None
 
         # self.node_attrs = {k for node_data in self.tree.nodes.data() for k in node_data[1].keys()}
         # self.edge_attrs =  {k for edge_data in self.tree.edges.data() for k in edge_data[1].keys()}
@@ -181,6 +185,9 @@ class ClonalTree:
 
     def has_loss(self):
         return len(self.mut_loss_mapping) > 0
+    
+    def set_cell_mapping(self, cell_mapping):
+        self.cell_mapping  = cell_mapping
 
     def __str__(self) -> str:
         all_cells = self.get_all_cells()
@@ -278,13 +285,65 @@ class ClonalTree:
 
         return presence  # n x m binary matrix cell y_ij=1 if mutation j  is harbored in cell i
 
+    def create_color_map(self, cmap):
+        genos = []
+        for n in self.tree:
+            geno = self.tree.nodes[n]["genotype"]
+            genos.append(sum(geno))
+     
+        color_values = set(genos)
+        colormap = cm.get_cmap(cmap, len(color_values))
+        return list(color_values), colormap
 
+# Define the colormap
 
+    def draw(self, fname, cmap='Set3'):
 
+        mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
+        cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
+        labels = {}
+        color_values, colormap = self.create_color_map(cmap)
+        for n in self.tree:
+                labels[n] = str(n)
+                
+                if cell_count[n] > 0:
+                    labels[n] += "\nCells:" + str(cell_count[n])
+                # SNV
+                if n in self.mut_mapping:
+                    if mut_count[n] > 0:
+                        labels[n] += "\nSNVs:" + str(mut_count[n])
+        like_label = f"Segment {self.key}\n"
+        tree = pgv.AGraph(strict=False, directed=False)
+        tree.node_attr['style']='filled'
+        if self.loglikelihood is not None:
+            total_like = np.round(self.loglikelihood)
+            like_label += f"Log Likelihood: {total_like}"
+            tree.graph_attr["label"] = like_label
+ 
+        for n in self.tree:
 
-    # def save(self, path):
-    #     pickle_save(self, path)
+            tree.add_node(n, label=labels[n])
+      
+            node_attr = tree.get_node(n)
+            try:
+                x,y = self.tree.nodes[n]["genotype"]
+                color_value = x+y
+            except:
+                color_value = None
+        
+            if color_value is not None:
+               
     
+                color = colormap(color_values.index(color_value))
+                hex_color = mcolors.rgb2hex(color)
+                node_attr.attr['fillcolor'] =hex_color
+                # node_attr['fillcolor'] = hex_color
+    
+        tree.add_edges_from(list(self.tree.edges))
+        tree.layout("dot")
+        tree.draw(fname)
+  
+
 
     def save_text(self, path):
         
@@ -564,19 +623,19 @@ class ClonalTree:
 
 
 
-    def compute_variant_likelihood_by_node_without_events(self, node, like0, like1, bin_mapping=None):
+    # def compute_variant_likelihood_by_node_without_events(self, node, like0, like1, bin_mapping=None):
 
-        m = like0.shape[1]
-        cells = self.get_tip_cells(node)
-        like0 = like0[cells, :]
-        like1 = like1[cells, :]
+    #     m = like0.shape[1]
+    #     cells = self.get_tip_cells(node)
+    #     like0 = like0[cells, :]
+    #     like1 = like1[cells, :]
 
-        y = self.presence_by_node(m, cells, node)     
+    #     y = self.presence_by_node(m, cells, node)     
 
-        loglikelihood = np.multiply(
-            (1-y), like0).sum() + np.multiply(y, like1).sum()
+    #     loglikelihood = np.multiply(
+    #         (1-y), like0).sum() + np.multiply(y, like1).sum()
 
-        return loglikelihood
+    #     return loglikelihood
 
 
 
@@ -600,9 +659,78 @@ class ClonalTree:
         #     lost_muts = list(chain.from_iterable((lost_muts)))
    
         return present_muts
+    @staticmethod
+    def mapping_to_dataframe(mapping, id_name):
+  
+        pred_list = []
+        if len(mapping)==0:
+            return pd.DataFrame(columns=[id_name, "cluster"])
+        for k in mapping:
+                temp = pd.DataFrame(mapping[k], columns=[id_name])
+                temp['cluster'] =k
+                pred_list.append(temp)
+
+        pred = pd.concat(pred_list)
+        pred= pred.sort_values(by=[id_name])
+        
+
+        return pred
+    
+    def generate_mut_dataframe( self,lookup):
+    #convert mapping to series in order of mutations
+        pred_df= self.mapping_to_dataframe(self.mut_mapping, "mutation_id")
+
+        pred_df["mutation"] = lookup[pred_df['mutation_id']].values
+
+        pred_df = pred_df.drop(['mutation_id'], axis=1)
+        return pred_df
+    
+    def generate_cell_dataframe( self,lookup):
+    #convert mapping to series in order of cells
+        pred_df= self.mapping_to_dataframe(self.cell_mapping, "cell_id")
+
+        pred_df["cell"] = lookup[pred_df['cell_id']].values
+
+        pred_df = pred_df.drop(['cell_id'], axis=1)
+        return pred_df 
+    
+
+    def generate_results(self, cell_lookup, mut_lookup):
+        pcell = self.generate_cell_dataframe(cell_lookup)
+        pmut = self.generate_mut_dataframe(mut_lookup)
+        # ploss = generate_mut_dataframe(self.mut_loss_mapping, mut_lookup)
 
 
+        return pcell, pmut
+    
+    def save(self, path):
+        with open(path, "wb") as file:
+              pickle.dump(self, file)
 
+    
+
+    def save_text(self, path):
+        
+        
+        leafs = [n for n in self.tree.nodes if len(list(self.tree.successors(n))) ==0]
+      
+                    
+        with open(path, "w+") as file:
+            file.write(f"{len(list(self.tree.edges))} #edges\n")
+            for u,v in list(self.tree.edges):
+                file.write(f"{u} {v}\n")
+            file.write(f"{len(leafs)} #leaves\n")
+            for l in leafs:
+                file.write(f"{l}\n")
+            
+
+    # def save_results(self, cell_lookup, mut_lookup, pcell_fname, pmut_fname, ploss_fname, pevents_fname):
+    #     pcell, pmut, ploss, pevents = self.generate_results(
+    #         cell_lookup, mut_lookup)
+    #     pcell.to_csv(pcell_fname, index=False)
+    #     pmut.to_csv(pmut_fname, index=False)
+    #     ploss.to_csv(ploss_fname, index=False)
+    #     pevents.to_csv(pevents_fname)
 # class SegmentTree(ClonalTree):
 #     def __init__(self, tree, cell_mapping, mut_mapping, cna_genotypes, mut_loss_mapping=None, key=0):
 #         super().__init__(tree, {}, {}, {}, {}, key, type)
@@ -610,38 +738,38 @@ class ClonalTree:
     
 
 
-@dataclass
-class Clone:
+# @dataclass
+# class Clone:
 
-    cells: np.array
-    muts: np.array
-    id: int= None
-    cna_genotype: list=None
+#     cells: np.array
+#     muts: np.array
+#     id: int= None
+#     cna_genotype: list=None
 
 
      
-    def __str__(self):
+#     def __str__(self):
 
-        outstring = f"Cells: {len(self.cells)} Muts: {len(self.muts)}" # Ancestral Muts: {len(self.ancestral_muts)} "
-        return outstring
+#         outstring = f"Cells: {len(self.cells)} Muts: {len(self.muts)}" # Ancestral Muts: {len(self.ancestral_muts)} "
+#         return outstring
 
-    def __eq__(self, object):
+#     def __eq__(self, object):
 
-        # ancestral_muts_same = np.array_equal(
-        #     np.sort(self.ancestral_muts), np.sort(object.ancestral_muts))
+#         # ancestral_muts_same = np.array_equal(
+#         #     np.sort(self.ancestral_muts), np.sort(object.ancestral_muts))
 
-        if type(object) is type(self):
-            return np.array_equal(self.cells, object.cells) \
-                and np.array_equal(self.muts, object.muts) #\
-        #         and ancestral_muts_same
-        else:
-            return False
+#         if type(object) is type(self):
+#             return np.array_equal(self.cells, object.cells) \
+#                 and np.array_equal(self.muts, object.muts) #\
+#         #         and ancestral_muts_same
+#         else:
+#             return False
 
-    def set_id(self, id):
-        self.id = id
+#     def set_id(self, id):
+#         self.id = id
     
-    def get_id(self):
-        return self.id
+#     def get_id(self):
+#         return self.id
 
 
     # def strip(self, var):
