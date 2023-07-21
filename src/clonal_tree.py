@@ -302,12 +302,12 @@ class ClonalTree:
         mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
         cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
         labels = {}
-        color_values, colormap = self.create_color_map(cmap)
+        # color_values, colormap = self.create_color_map(cmap)
         for n in self.tree:
                 labels[n] = str(n)
-                
-                if cell_count[n] > 0:
-                    labels[n] += "\nCells:" + str(cell_count[n])
+                if n in self.cell_mapping:
+                    if cell_count[n] > 0:
+                        labels[n] += "\nCells:" + str(cell_count[n])
                 # SNV
                 if n in self.mut_mapping:
                     if mut_count[n] > 0:
@@ -320,6 +320,7 @@ class ClonalTree:
             like_label += f"Log Likelihood: {total_like}"
             tree.graph_attr["label"] = like_label
  
+        colormap = cm.get_cmap(cmap)
         for n in self.tree:
 
             tree.add_node(n, label=labels[n])
@@ -333,8 +334,8 @@ class ClonalTree:
         
             if color_value is not None:
                
-    
-                color = colormap(color_values.index(color_value))
+                
+                color = colormap(color_value)
                 hex_color = mcolors.rgb2hex(color)
                 node_attr.attr['fillcolor'] =hex_color
                 # node_attr['fillcolor'] = hex_color
