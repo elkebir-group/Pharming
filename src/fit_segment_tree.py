@@ -232,8 +232,7 @@ class BuildSegmentTree:
         return G
 
 
-    def cluster_snvs(self, tree_clust, snvs, snv_index, alt, total):
-        clust_snvs = [s for s in snvs if self.T_SNV_dict[s] in  tree_clust]
+    def cluster_snvs(self, clust_snvs, snv_index, alt, total):
 
         dcfs = np.zeros(shape=(len(clust_snvs)))
         #todo
@@ -285,10 +284,10 @@ class BuildSegmentTree:
         for s,j in zip(clust_snvs, snv_clusters):
             cluster_map[j].append(s)
 
-            
         
 
         return best_k, cluster_map, clust_dcfs
+    
     def optimal_clonal_tree(self, data, g):
         best_like = np.NINF
         # print(self)
@@ -345,8 +344,11 @@ class BuildSegmentTree:
             self.mutated_copies[s]=tree.m_star
         # T_SNV_Clusters = [[0], [1,2], [3]]
         for tree_clust in self.T_SNV_Clusters:
+            clust_snvs = [s for s in snvs if self.T_SNV_dict[s] in  tree_clust]
+            if len(clust_snvs) ==0:
+                continue
        
-            k, snv_clusters, dcfs = self.cluster_snvs(tree_clust, snvs, snv_index, alt, total)
+            k, snv_clusters, dcfs = self.cluster_snvs(clust_snvs, snv_index, alt, total)
     
             self.print_verb(f"{tree_clust}: k={k}, dcfs={dcfs}")
             dcfs = dcfs.reshape(-1)
