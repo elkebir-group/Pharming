@@ -14,11 +14,11 @@ import cProfile
        
         
 class Pharming:
-    def __init__(self,seed=1026, max_dcf_clusters=4, nrestarts=25, start_state=(1,1)) -> None:
+    def __init__(self,seed=1026, max_dcf_clusters=3, start_state=(1,1)) -> None:
 
         self.rng = np.random.default_rng(seed)
         self.max_clusters = max_dcf_clusters
-        self.nrestarts = nrestarts
+       
 
     
         self.start_state = start_state
@@ -79,7 +79,7 @@ class Pharming:
         for T_CNA in T_CNAs:
             seed = self.rng.integers(1e8, size=1)[0]
             try:
-                SegTree =BuildSegmentTree(T_CNA,seed).fit(self.data, g)
+                SegTree =BuildSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
 
                 if SegTree.loglikelihood > best_like:
                     best_like = SegTree.loglikelihood
@@ -198,7 +198,9 @@ if __name__ == "__main__":
                         help="input files of copy numbers by segment with unlabeled columns [segment cell totalCN]")
     parser.add_argument("-s" ,"--seed", required=False, type=int,
                         help="random number seed (default: 1026)")
-    
+    parser.add_argument("-j" ,"--num-cores", required=False, type=int,
+                        help="Max number of cores to use for inferring segment trees")
+
     parser.add_argument("-g" ,"--segment", required=False, type=int,
                         help="segment id of tree to build")
     parser.add_argument("-o" ,"--out", required=False, type=str,
@@ -212,15 +214,17 @@ if __name__ == "__main__":
     # parser.add_argument('-g', '--segment', type=int, required=False)
     # parser.add_argument("-d", "--data", type=str)
 
-    # tpath = "/scratch/data/leah/pharming/sim_study/pharming/s12_n1000_m15000_c5_p0.05_l0"
+    # instance = "s13_n1000_m15000_c5_p0.1_l0"
+    # tpath = f"/scratch/data/leah/pharming/sim_study/pharming/{instance}"
+
     # args = parser.parse_args([
     #     # "-f", f"{tpath}/input/read_counts.tsv",
     #     # "-c", f"{tpath}/input/copy_numbers.tsv",
     #     "-d", f"{tpath}/data.pickle",
     #     "-s", "13",
-    #     "--segment", "1",
+    #     "--segment", "16",
     #     "--out", f"{tpath}/SegTrees",
-    #     "-L", f"{tpath}/like.csv"
+    #     # "-L", f"{tpath}/like.csv"
     #     # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
     #     # "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
     # ])
@@ -241,7 +245,7 @@ if __name__ == "__main__":
     else:
         segments = [args.segment]
     # segments = segments[:4]
-    SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=10)
+    SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=args.num_cores)
     # SegTrees = Pharming(args.seed).fit(dat, segments)
     # SegTrees ={}
     # cProfile.run("my_function()")
@@ -260,7 +264,7 @@ if __name__ == "__main__":
             pred_mut.to_csv(f"{args.out}/pred_mut_g{g}.csv",index=False)
             T_Seg.draw(f"{args.out}/tree_g{g}.png")
             T_Seg.save(f"{args.out}/tree_g{g}.pickle")
-            T_Seg.save_text(f"{args.out}/tree__g{g}.txt")
+            T_Seg.save_text(f"{args.out}/tree_g{g}.txt")
 
 
     if args.likelihoods is not None:
