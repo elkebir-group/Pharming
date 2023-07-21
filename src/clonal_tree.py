@@ -12,9 +12,23 @@ import pygraphviz as pgv
 # import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+from sklearn.metrics.cluster import adjusted_rand_score
 
 
-
+SET3_HEX = [
+    '#8dd3c7',
+    '#ffffb3',
+    '#bebada',
+    '#fb8072',
+    '#80b1d3',
+    '#fdb462',
+    '#b3de69',
+    '#fccde5',
+    '#d9d9d9',
+    '#bc80bd',
+    '#ccebc5',
+    '#ffed6f'
+]
 
 
 class ClonalTree:
@@ -206,8 +220,11 @@ class ClonalTree:
         for u in node_order:
         
             for v in self.tree.neighbors(u):
-                # if "event" in self.edge_attrs:
-                etype = self.tree[u][v]["event"]
+                etype= ""
+                # if "event" in self.tree.edge_attrs:
+                #     etype = self.tree[u][v]["event"]
+                # else:
+                #     etype = "NA"
            
                 mystr+= f"\nNode {u}->Node {v}\t{etype}"
                
@@ -285,17 +302,9 @@ class ClonalTree:
 
         return presence  # n x m binary matrix cell y_ij=1 if mutation j  is harbored in cell i
 
-    def create_color_map(self, cmap):
-        genos = []
-        for n in self.tree:
-            geno = self.tree.nodes[n]["genotype"]
-            genos.append(sum(geno))
-     
-        color_values = set(genos)
-        colormap = cm.get_cmap(cmap, len(color_values))
-        return list(color_values), colormap
 
-# Define the colormap
+
+
 
     def draw(self, fname, cmap='Set3'):
 
@@ -320,7 +329,7 @@ class ClonalTree:
             like_label += f"Log Likelihood: {total_like}"
             tree.graph_attr["label"] = like_label
  
-        colormap = cm.get_cmap(cmap)
+        # colormap = cm.get_cmap(cmap)
         for n in self.tree:
 
             tree.add_node(n, label=labels[n])
@@ -335,9 +344,9 @@ class ClonalTree:
             if color_value is not None:
                
                 
-                color = colormap(color_value)
-                hex_color = mcolors.rgb2hex(color)
-                node_attr.attr['fillcolor'] =hex_color
+                # color = colormap(color_value)
+                # hex_color = mcolors.rgb2hex(color)
+                node_attr.attr['fillcolor'] =SET3_HEX[color_value]
                 # node_attr['fillcolor'] = hex_color
     
         tree.add_edges_from(list(self.tree.edges))
@@ -407,30 +416,51 @@ class ClonalTree:
         n_cell = len(self.get_all_cells())
         clusters = np.zeros(n_cell, dtype=int)
         for cluster, cells in self.cell_mapping.items():
-            if len(cells[0]) > 0:
-                clusters[cells[0]] = cluster
+            if len(cells) > 0:
+                clusters[cells] = cluster
         return clusters
 
     def get_all_muts(self):
-        muts = np.concatenate([self.mut_mapping[i] for i in self.mut_mapping])
-        muts = np.sort(muts)
+        muts = list(chain.from_iterable([mut for n,mut in self.mut_mapping.items()]))
+        muts.sort()
         return muts
 
     def get_mut_clusters(self, n_mut=None):
         if n_mut is None:
-            n_mut = len(self.get_all_muts())
-            clusters = np.zeros(n_mut, dtype=int)
+            muts = self.get_all_muts()
+            clusters = np.zeros(len(muts), dtype=int)
+            mut_to_index= {m: i for i,m in enumerate(muts)}
         else:
             clusters  = np.full(shape=n_mut, fill_value=-1)
         for cluster, muts in self.mut_mapping.items():
+            mut_indices = [mut_to_index[m] for m in muts]
             if len(muts) > 0:
-                clusters[muts] = cluster
+                clusters[mut_indices] = cluster
         return clusters
 
+    @staticmethod
+    def recall(gt_pairs, inf_pairs) -> float:
+        if sum(gt_pairs.values()) == 0:
+            return 1
+        return  sum((gt_pairs & inf_pairs).values())\
+                           / sum(gt_pairs.values())
 
 
 
+    @staticmethod
+    def ari(v1, v2) -> float:
+        return adjusted_rand_score(v1, v2)
+    
+    def compute_cell_ari(self, obj) -> float:
+        gt_cell = self.get_cell_clusters()
+        pred_cell = obj.get_cell_clusters()
+        return self.ari(gt_cell, pred_cell)
 
+    
+    def compute_mut_ari(self,obj) -> float:
+         gt_mut = self.get_mut_clusters()
+         pred_mut = obj.get_mut_clusters()
+         return self.ari(gt_mut, pred_mut)
 
 
 
@@ -446,14 +476,183 @@ class ClonalTree:
             if s in self.mut_mapping[node]:
                 return node  
 
+    @staticmethod
+    def is_incomparable(graph: nx.DiGraph, u, v) -> bool:
+        for path in nx.all_simple_paths(graph, source=0, target=v):
+            if u in path:
+                return False
+        for path in nx.all_simple_paths(graph, source=0, target=u):
+            if v in path:
+                return False
+        return True
+
+    
+    def ancestor_pair_recall(self, obj, include_loss=False):
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+           
+            ancestral = self.get_ancestor_pairs(include_loss)
+            
+            return self.recall(ancestral, obj.get_ancestor_pairs(include_loss))
+    
+    def ancestor_cell_pair_recall(self, obj):
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+           
+            ancestral = self.get_cell_ancestor_pairs()
+            return self.recall(ancestral, obj.get_cell_ancestor_pairs())
+
+    def incomp_pair_recall(self, obj, include_loss=False):
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+           
+            ancestral = self.get_ancestor_pairs(include_loss)
+            
+            return self.recall(ancestral, obj.get_ancestor_pairs(include_loss))
+    
+    
+    def clustered_pair_recall(self, obj, feature="cell") -> float:
+        if feature == "cell":
+            mapping= self.cell_mapping 
+            obj_mapping = obj.cell_mapping
+        else:
+            mapping = self.mut_mapping
+            obj_mapping = obj.mut_mapping
+        
+        clustered = self.get_cluster_pairs(mapping)
+        recall = self.recall(clustered, obj.get_cluster_pairs(obj_mapping))
+        return recall 
+    
+    def incomp_cell_pair_recall(self, obj):
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+           
+            ancestral = self.get_cell_incomparable_pairs()
+            return self.recall(ancestral, obj.get_cell_incomparable_pairs())
 
 
+    def get_incomparable_pairs(self, include_loss: bool=True) -> Counter:
+        mut_mapping = self.update_mapping(self.tree,self.mut_mapping)
+        pairs = Counter()
+        if include_loss:
+            raise NotImplementedError("not impletmented")
+            # for u, v in combinations(self.tree.nodes, 2):
+            #     if include_loss and u in self.mut_loss_mapping:
+            #         u_loss = self.mut_loss_mapping[u]
+            #     else:
+            #         u_loss = []
+            #     if include_loss and v in self.mut_loss_mapping:
+            #         v_loss = self.mut_loss_mapping[v]
+            #     else:
+            #         v_loss = []
+
+            #     if self.is_incomparable(self.tree, u, v):
+            #         for mut1 in chain(
+            #             product(self.mut_mapping[u], [1]),
+            #             product(u_loss, [0])
+            #         ):
+            #             for mut2 in chain(
+            #                 product(self.mut_mapping[v], [1]),
+            #                 product(v_loss, [0])
+            #             ):
+            #                 if mut1 < mut2:
+            #                     pairs[(mut1, mut2)] += 1
+            #                 else:
+            #                     pairs[(mut2, mut1)] += 1
+        else:
+            for u, v in combinations(self.tree.nodes, 2):
+                if self.is_incomparable(self.tree, u, v):
+                    pairs.update((min(a, b), max(a, b)) for a, b in product(mut_mapping[u], mut_mapping[v]))
+        return pairs
+
+    @staticmethod
+    def update_mapping(tree, mapping):
+        full_mapping = mapping.copy()
+        for n in tree:
+            if n not in full_mapping:
+                full_mapping[n] = []
+        return full_mapping
+
+    def score_cells(self, obj) -> dict:
+       
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+             
+             scores = {
+                 'feature' : 'cell',
+                 'ari' : self.compute_cell_ari(obj),
+                 'anc_pair_recall' : self.ancestor_cell_pair_recall(obj),
+                 'incomp_pair_recall': self.incomp_cell_pair_recall(obj),
+                 'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="cell"),
+                 'gt_nodes' : len(self.cell_mapping),
+                 'inf_nodes' : len(obj.cell_mapping)
+             }
+             return scores 
+    
+    def score_snvs(self, obj) -> dict:
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree")
+        else:
+             
+             scores = {
+                 'feature' : 'SNV',
+                 'ari' : self.compute_mut_ari(obj),
+                 'anc_pair_recall' : self.ancestor_pair_recall(obj),
+                 'incomp_pair_recall': self.incomp_pair_recall(obj),
+                 'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="snv"),
+                 'gt_nodes' : len(self.mut_mapping),
+                 'inf_nodes' : len(obj.mut_mapping)
+             }
+             return scores 
+    
+    def score(self, obj):
+        if type(obj) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree")
+        else:
+            cell_scores = self.score_cells(obj)
+            snv_scores = self.score_snvs(obj)   
+
+            return pd.concat([pd.DataFrame(cell_scores, index=[self.key]), pd.DataFrame(snv_scores,index=[self.key])])     
+           
+
+    def get_cluster_pairs(self, mapping) -> Counter:
+        mapping = self.update_mapping(self.tree, mapping)
+        pairs = Counter()
+        for node in self.tree.nodes:
+                pairs.update(combinations(sorted(mapping[node]), 2))
+        return pairs
+
+        # if include_loss:
+        #     raise NotImplementedError("not impletmented")
+        #     for node in self.tree.nodes:
+        #         if include_loss and node in self.mut_loss_mapping:
+        #             node_loss = self.mut_loss_mapping[node]
+        #         else:
+        #             node_loss = []
+        #         for mut1, mut2 in combinations(
+        #             chain(
+        #                 product(self.mut_mapping[node], [1]),
+        #                 product(node_loss, [0])
+        #             ),
+        #             2
+        #         ):
+        #             if mut1 < mut2:
+        #                 pairs[(mut1, mut2)] += 1
+        #             else:
+        #                 pairs[(mut2, mut1)] += 1
+        # else:
     def get_cell_ancestor_pairs(self) -> Counter:
+        mapping = self.update_mapping(self.tree,self.cell_mapping)
         pairs = Counter()
         for node in self.tree.nodes:
             for children in nx.dfs_successors(self.tree, source=node).values():
                 for child in children:
-                    pairs.update(product(self.cell_mapping[node][0], self.cell_mapping[child][0]))
+                    pairs.update(product(mapping[node], mapping[child]))
         return pairs
 
     def get_cell_cluster_pairs(self) -> Counter:
@@ -463,19 +662,16 @@ class ClonalTree:
         return pairs
 
     def get_cell_incomparable_pairs(self) -> Counter:
+        cell_mapping= self.update_mapping(self.tree, self.cell_mapping)
         pairs = Counter()
         for u, v in combinations(self.tree.nodes, 2):
             if self.is_incomparable(self.tree, u, v):
-                pairs.update((min(a, b), max(a, b)) for a, b in product(self.cell_mapping[u][0], self.cell_mapping[v][0]))
-                # for cell1 in self.cell_mapping[u][0]:
-                #     for cell2 in self.cell_mapping[v][0]:
-                #         if cell1 < cell2:
-                #             pairs[(cell1, cell2)] += 1
-                #         else:
-                #             pairs[(cell2, cell1)] += 1
+                pairs.update((min(a, b), max(a, b)) for a, b in product(cell_mapping[u], cell_mapping[v]))
+           
         return pairs
 
     def get_ancestor_pairs(self, include_loss: bool=True) -> Counter:
+        mut_mapping = self.update_mapping(self.tree, self.mut_mapping)
         pairs = Counter()
         if include_loss:
             raise NotImplementedError("not impletmented")
@@ -504,10 +700,10 @@ class ClonalTree:
             for node in self.tree.nodes:
                 for children in nx.dfs_successors(self.tree, source=node).values():
                     for child in children:
-                        pairs.update(product(self.mut_mapping[node], self.mut_mapping[child]))
+                        pairs.update(product(mut_mapping[node], mut_mapping[child]))
         return pairs
 
-        return pairs
+        # return pairs
 
     def compute_likelihood(self, data, seg, alpha=0.001, attachment="marginal", use_existing=False):
 
@@ -724,7 +920,10 @@ class ClonalTree:
             for l in leafs:
                 file.write(f"{l}\n")
             
-
+def load(fname):
+    with open(fname, "rb") as file:
+        ct = pickle.load(file)
+    return ct 
     # def save_results(self, cell_lookup, mut_lookup, pcell_fname, pmut_fname, ploss_fname, pevents_fname):
     #     pcell, pmut, ploss, pevents = self.generate_results(
     #         cell_lookup, mut_lookup)
