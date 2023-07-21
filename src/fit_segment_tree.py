@@ -6,6 +6,17 @@ from scipy.stats import binom
 from clonal_tree import ClonalTree
 from sklearn import metrics
 from sklearn.cluster import KMeans
+import time
+
+def time_it(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Function '{func.__name__}' took {elapsed_time:.6f} seconds to execute.")
+        return result
+    return wrapper
 
 def likelihood_function( a,d,y,c, alpha):
         
@@ -44,10 +55,14 @@ Output:
 
 
 class BuildSegmentTree:
-    def __init__(self, T_CNA, verbose=False):
+    def __init__(self, T_CNA, seed=1026, max_clusters=4, silhouette_min=0.6, silhouette_improve=0.2, verbose=False):
         self.verbose =verbose 
         self.T_CNA = T_CNA
+        self.max_clusters = max_clusters
+        self.sil_min = silhouette_min
+        self.sil_improve = silhouette_improve
         T_Seg = nx.DiGraph()
+        self.rng= np.random.RandomState(seed)
         self.root = self.T_CNA.root
         if len(self.T_CNA.tree) > 1:
 
@@ -247,9 +262,9 @@ class BuildSegmentTree:
         
             max_score = -1
            
-            for k in [2,3,4]:
+            for k in range(2, self.max_clusters+1):
             
-                km = KMeans(k)
+                km = KMeans(k, random_state=self.rng)
                 clusters = km.fit_predict(dcfs)
                 # for c in np.unique(clusters):
                 #     print(f"{c}: {clusters[clusters==c].shape[0]}")
@@ -261,7 +276,7 @@ class BuildSegmentTree:
                     sil_improve = 1
                 
                 # print(f"{k}: {sil_score}")
-                if sil_score > 0.6 and sil_score > max_score and sil_improve > 0.2:
+                if sil_score > self.sil_min and sil_score > max_score and sil_improve > self.sil_improve:
                     max_score = sil_score
                     best_k = k
                     clust_dcfs =cluster_centers
@@ -359,8 +374,10 @@ class BuildSegmentTree:
                 for T_Seg_base in self.T_Seg_List:
                    
                     next_node =max(T_Seg_base.nodes) + 1
-                 
-                    root_id = [n for n in T_Seg_base if T_Seg_base.out_degree[n]==0 and T_Seg_base.nodes[n]["genotype"]==(x,y)][0]
+                    # for n in nx.dfs_postorder_nodes(T_Seg_base, self.root):
+
+                    root_ids = [n for n in T_Seg_base if (T_Seg_base.out_degree[n]==0 or n==self.root) and T_Seg_base.nodes[n]["genotype"]==(x,y) ]
+                    root_id = root_ids[0]
                     node_to_dcfs= {}
                     node_mapping = {-1: root_id}
                     for i,dcf in enumerate(dcfs):
@@ -482,7 +499,7 @@ class BuildSegmentTree:
     
 
      
-
+    @time_it
     def map_assign_cells(self, T_Seg, data, seg):
         # print(self.tree_to_string(T_Seg))
         clone_order = list(nx.dfs_preorder_nodes(T_Seg, source=self.root))
