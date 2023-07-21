@@ -211,7 +211,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # parser.add_argument('-g', '--segment', type=int, required=False)
     # parser.add_argument("-d", "--data", type=str)
-    
+
     # tpath = "/scratch/data/leah/pharming/sim_study/pharming/s12_n1000_m15000_c5_p0.05_l0"
     # args = parser.parse_args([
     #     # "-f", f"{tpath}/input/read_counts.tsv",
@@ -241,8 +241,8 @@ if __name__ == "__main__":
     else:
         segments = [args.segment]
     # segments = segments[:4]
-    # SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=10)
-    SegTrees = Pharming(args.seed).fit(dat, segments)
+    SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=10)
+    # SegTrees = Pharming(args.seed).fit(dat, segments)
     # SegTrees ={}
     # cProfile.run("my_function()")
 
