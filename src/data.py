@@ -2,8 +2,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import pickle
-
-
+from segment_genome import Segment
+import argparse
 '''
 N = number of cells
 M = number of SNVs
@@ -108,17 +108,24 @@ class Data:
         with open(fname, 'wb') as file:
             pickle.dump(self, file)
 
-def load(read_counts_fname,copy_numbers_fname ):
-    col_names = ['chr', 'segment', 'mutation_label', 'cell_label','var', 'total']
+def load_from_files(read_counts_fname,copy_numbers_fname ):
+        col_names = ['chr', 'segment', 'mutation_label', 'cell_label','var', 'total']
 
 
     
-    read_counts = pd.read_table(
-        read_counts_fname, sep="\t", header=None, names=col_names, skiprows=[0])
+        read_counts = pd.read_table(
+            read_counts_fname, sep="\t", header=None, names=col_names, skiprows=[0])
+        
     
-    read_counts['chr_mutation'] = read_counts['chr'].astype('str') + "_" + \
-             read_counts['mutation_label'].astype(str)
-    
+
+        copy_numbers = pd.read_table(copy_numbers_fname, names=["segment", "cell_label", "cn"])
+        return load(read_counts, copy_numbers)
+
+def load(read_counts,copy_numbers ):
+
+    # read_counts['chr_mutation'] = read_counts['chr'].astype('str') + "_" + \
+    #             read_counts['mutation_label'].astype(str)
+    read_counts['chr_mutation'] = read_counts['mutation_label']
 
     cell_labels = np.sort(read_counts['cell_label'].unique())
     mut_labels = np.sort(read_counts['chr_mutation'].unique())
@@ -132,7 +139,7 @@ def load(read_counts_fname,copy_numbers_fname ):
     read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
     read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='chr_mutation', how='left')
    
-    copy_numbers = pd.read_table(copy_numbers_fname, names=["segment", "cell_label", "cn"])
+    #in long format
     segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
     seg_labels = np.sort(segs['segment'].unique())
     seg_lookup = pd.Series(data=seg_labels, name="segment").rename_axis("seg_id")
@@ -154,3 +161,50 @@ def load(read_counts_fname,copy_numbers_fname ):
     copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
 
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
+
+def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
+    '''
+    cn_profiles: an numpy array with shape N x B (cell by bin) matrix with the total copy number profiles of for each cell in each bin
+    
+    returns: a pd.DataFrame with Segment ID as index and columns start and end bin (inclusive)
+    '''
+    return Segment(tol=tol, pseudo_counts=pseudo_counts).fit(cn_profiles)
+
+
+def load_from_pickle(fname):
+    with open(fname, 'rb') as file:
+        data = pickle.load(file)
+    return data 
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--file", required=True,
+                        help="input file for variant and total read counts with unlabled columns: [chr segment snv cell var total]")
+    parser.add_argument("-c", "--profiles", type=str,
+        help="filename of input copy number profiles")
+    # parser.add_argument("-i", "--index", type=str, default="cell",
+    #     help="index of copy number profiles")
+    # parser.add_argument("-t", "--tolerance",  type=float, default=0.0,
+    #     help="lower bound KL-divergence to establish a new segment")
+    # parser.add_argument("-p", "--pseudo", required=False, type=float, default=1e-6,
+    #     help="pseudo counts to use for computing KL- divergence")
+    parser.add_argument("-D", "--data",  type=str, 
+        help="filename of pickled data object")
+    
+    args = parser.parse_args()
+
+    dat = load(args.file, args.profiles)
+    if args.data is not None:
+        dat.save(args.data)
+#     parser.add_argument("--segmentation_in",  type=str, 
+#         help="filename of segmentation  to output")
+#     args = parser.parse_args()
+
+#     cn_profile_df = pd.read_csv(args.profiles)
+# # fname = "/scratch/data/leah/phertilizer2.0/sim_study/input//s13_n1000_m15000_c5_p0.25_l0/copy_number_profiles.csv"
+# # fname ="/scratch/data/leah/phertilizer2.0/DLP/cn_profiles.csv"
+
+#     cn_profile_df = cn_profile_df.set_index(args.index)
+#     cn_prof = cn_profile_df.values
+#     segments = Segment().fit(cn_prof)
+#     segments.to_csv(args.segmentation)
