@@ -90,7 +90,8 @@ class Pharming:
         
         return BestSegTree
         
-      
+    
+
 
     @staticmethod
     def enumerate_T_CNA(T_SNVs):
@@ -214,16 +215,17 @@ if __name__ == "__main__":
     # parser.add_argument('-g', '--segment', type=int, required=False)
     # parser.add_argument("-d", "--data", type=str)
 
-    # instance = "s13_n1000_m15000_c5_p0.1_l0"
+    # instance = "s12_n1000_m15000_c5_p0.25_l0"
     # tpath = f"/scratch/data/leah/pharming/sim_study/pharming/{instance}"
 
     # args = parser.parse_args([
     #     # "-f", f"{tpath}/input/read_counts.tsv",
     #     # "-c", f"{tpath}/input/copy_numbers.tsv",
     #     "-d", f"{tpath}/data.pickle",
-    #     "-s", "13",
-    #     "--segment", "16",
+    #     "-s", "12",
+    #     # "--segment", "1",
     #     "--out", f"{tpath}/SegTrees",
+    #     "-j", "10"
     #     # "-L", f"{tpath}/like.csv"
     #     # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
     #     # "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
@@ -257,6 +259,7 @@ if __name__ == "__main__":
         print(f"Directory '{args.out}' already exists.")
     likelihoods = {}
     for g, T_Seg in SegTrees.items():
+        print(T_Seg)
         if T_Seg is not None:
             pred_cell, pred_mut = T_Seg.generate_results(dat.cell_lookup, dat.mut_lookup)
             likelihoods[g]= T_Seg.compute_likelihood(dat,g)
