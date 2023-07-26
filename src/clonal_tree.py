@@ -509,9 +509,9 @@ class ClonalTree:
             raise TypeError("Comparable must be a ClonalTree") 
         else:
            
-            ancestral = self.get_ancestor_pairs(include_loss)
+            ancestral = self.get_incomparable_pairs(include_loss)
             
-            return self.recall(ancestral, obj.get_ancestor_pairs(include_loss))
+            return self.recall(ancestral, obj.get_incomparable_pairs(include_loss))
     
     
     def clustered_pair_recall(self, obj, feature="cell") -> float:
@@ -590,6 +590,7 @@ class ClonalTree:
                  'incomp_pair_recall': self.incomp_cell_pair_recall(obj),
                  'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="cell"),
                  'gt_nodes' : len(self.cell_mapping),
+                 'n_assigned': len(self.get_all_cells()),
                  'inf_nodes' : len(obj.cell_mapping)
              }
              return scores 
@@ -606,7 +607,8 @@ class ClonalTree:
                  'incomp_pair_recall': self.incomp_pair_recall(obj),
                  'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="snv"),
                  'gt_nodes' : len(self.mut_mapping),
-                 'inf_nodes' : len(obj.mut_mapping)
+                'n_assigned': len(self.get_all_muts()),
+                'inf_nodes' : len(obj.mut_mapping)
              }
              return scores 
     
@@ -704,14 +706,123 @@ class ClonalTree:
         return pairs
 
         # return pairs
+    @staticmethod
+    def likelihood_function( a,d,y,c, alpha):
+        
+        # if d ==0:
+        #     return 1e-10
+        
+        vaf = (1/c)*y
+        # elif y ==0:
 
-    def compute_likelihood(self, data, seg, alpha=0.001, attachment="marginal", use_existing=False):
+        #     val =  binom.pmf(a,d,alpha)
+        #     return val
+          
+        # else:
+            # vaf = np.arange(1, c)/c
+            # vaf  = 1/c
+            # vaf = 0.5
+        adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+        val = binom.logpmf(a,d,adjusted_vaf)
 
+        # val[np.isnan(val)] = np.log(1e-10)
+            # return binom.pmf(a,d,adjusted_vaf)
+        return val.sum(axis=1)
+    
+    def compute_map_likelihood(self, data, seg):
+        # print(self.tree_to_string(self.tree))
+        clone_order = list(nx.dfs_preorder_nodes(self.tree, source=self.root))
+        # clone_order = [c for c in clone_order if c != self.root]
+        cells_by_cn = data.cells_by_cn(seg)
+        total_cn_states = {}
+        like_list =[]
         seg_snvs = data.seg_to_snvs[seg]
+        cell_mapping = {}
+        cell_mapping[self.root] = []
+        for n in clone_order:
+            x,y = self.tree.nodes[n]["genotype"]
+            total_cn = x+y 
+            total_cn_states[n]= total_cn
+            cna_geno = np.full(self.m, total_cn, dtype=int).reshape(1,-1)
+            clone = nx.shortest_path(self.tree, source=self.root, target=n)
+            # if self.tree[clone[-2]][clone[-1]]["event"]== "mutation":
+            snvs = []
+            for c in clone:
+                if c in self.mut_mapping:
+                    snvs += self.mut_mapping[c]
+                
+            y_vec = np.zeros(shape=data.M, dtype=int)
+           
+            y_vec[snvs] = 1
+            y_vec= y_vec[seg_snvs]
+            y_vec = y_vec.reshape(1,-1)
+
+            # cell_by_snv_like = np.zeros((data.var.shape[0],self.m))
+            # for i in range(self.data.var.shape[0]):
+            #     for j in range(self.m):
+            #         a = self.data.var[i,j]
+            #         d = self.data.total[i,j]
+            #         c = cna_geno[:,j][0]
+            #         alpha= self.alpha 
+            #         y = y_vec[:,j][0]
+                    
+            #         out = likelihood_function(a,d,y,c,alpha)
+            #         if np.log(out) > 0:
+            #             print(f"a:{a} d:{d} y:{y} c:{c}: prob: {out} logprob:{np.log(out)}")
+            #         cell_by_snv_like[i,j] =out
+            # print(cell_by_snv_like)
+            cell_like = self.likelihood_function(data.var[:, seg_snvs], data.total[:,seg_snvs], y_vec, cna_geno, 0.001)
+         
+            # assert(np.array_equal(cell_by_snv_like, cell_by_snv_like2))
+            # print(cell_by_snv_like2)
+            # cell_by_snv_like = np.log(cell_by_snv_like)
+            # print(cell_by_snv_like)
+            # print(f"node: {n} :{cell_by_snv_like.sum(axis=1)}")
+            like_list.append(cell_like)
+     
+
+        #rows are nodes and columns are cells
+        cell_likes = np.vstack(like_list)
+
+        likelihood =0
+        cell_assign = {}
+ 
+        #now only consider clone assignments for cells with the correct CN
+        for s in cells_by_cn:
+            # cn = self.total_cn_by_sample[s]
+            clone_filter = [total_cn_states[n]==s for n in clone_order]
+
+            clones = [c for i,c in enumerate(clone_order) if clone_filter[i]]
+            for c in clones:
+                cell_mapping[c] = []
+            cells = cells_by_cn[s]
+            sample_likes = cell_likes[clone_filter][:, cells]
+
+            like = np.max(sample_likes, axis=0).sum()
+            likelihood += like
+            map_clone = np.argmax(sample_likes, axis=0)
+            for c, m in zip(cells, map_clone):
+                cell_assign[c]= clones[m]
+   
+                cell_mapping[clones[m]].append(c)
+          
+            
+
       
-        # self.loglikelihood_dict = {"total": 0, "variant": 0, "bin": 0}
-        self.node_likelihood = {}
-        if attachment =="marginal":
+      
+        # self.print_verb(f"Log Likelihood: {self.likelihood}")
+        # if self.verbose:
+        #     for n in self.tree:
+
+        #         print(f"Node{n}: {len(cell_mapping[n])} cells assigned")
+
+        # cell_mapping = {n: np.array(cell_mapping[n], dtype=int) for n in self.tree}
+        # self.print_verb(self)
+        self.cell_mapping = cell_mapping
+        return  likelihood
+    
+    def compute_marginal_likelihood(self, data,seg, alpha):
+            seg_snvs = data.seg_to_snvs[seg]
             all_nodes = []
             total_cn = {}
             prob = {}
@@ -749,9 +860,67 @@ class ClonalTree:
             
                 all_nodes.append(node_like)
          
-            self.loglikelihood = logsumexp(all_nodes, axis=0).sum()
+            loglikelihood = logsumexp(all_nodes, axis=0).sum()
             
-            return self.loglikelihood
+            return loglikelihood
+    
+    def compute_likelihood(self, data, seg, alpha=0.001, attachment="marginal", use_existing=False):
+        if attachment =="marginal":
+            self.loglikelihood = self.compute_marginal_likelihood(data,seg, alpha)
+        elif attachment =="map" and not use_existing:
+            self.loglikelihood = self.compute_map_likelihood(data, seg, alpha)
+        else:
+            if len(self.cell_mapping) > 0:
+                raise NotImplementedError("not impletmented")
+                self.loglikelihood = sum([self.compute_likelihood_by_node(n) for n in self.cell_mapping])
+            else:
+                self.loglikelihood = np.NINF
+
+        # seg_snvs = data.seg_to_snvs[seg]
+      
+        # # self.loglikelihood_dict = {"total": 0, "variant": 0, "bin": 0}
+        # self.node_likelihood = {}
+        # if attachment =="marginal":
+            # all_nodes = []
+            # total_cn = {}
+            # prob = {}
+            # for n in self.tree:
+            #     x,y = self.tree.nodes[n]["genotype"]
+            #     total_cn[n] = x+y 
+            #     if x+y in prob:
+            #         prob[x+y] += 1
+            #     else:
+            #         prob[x+y] =1
+            # prob = {key: 1/val for key, val in prob.items()}
+            
+
+            # for n in self.tree:
+         
+            #     vaf = np.zeros(data.M)
+        
+            #     cn = total_cn[n]
+            #     snvs = self.get_ancestral_muts(n)
+            #     # for s in snvs:
+            #     vaf[snvs]= [self.mutated_copies[s] for s in snvs]
+            #     vaf= vaf/cn
+            #     # vaf[snvs] = self.mutated_copies[snvs]/cn
+
+            #     adj_vaf =vaf*(1- alpha) + (1-vaf)*(alpha/3)
+            #     adj_vaf = adj_vaf[seg_snvs].reshape(1,-1)
+          
+            #     #should have dim = cells x snvs
+            #     part1 = binom.pmf(data.var[:, seg_snvs], data.total[:,seg_snvs], adj_vaf)
+            #     part2 =(data.copy_numbers[:, seg] == cn)*prob[cn]
+            #     part2 = part2.reshape(-1,1)
+            #     node_like= np.log(part1*part2)
+            #     node_like = node_like.sum(axis=1)
+
+            
+            #     all_nodes.append(node_like)
+         
+            # self.loglikelihood = logsumexp(all_nodes, axis=0).sum()
+            
+            # return self.loglikelihood
 
          
 
@@ -763,25 +932,25 @@ class ClonalTree:
                 #  self.loglikelihood_dict[key] += self.node_likelihood[n][key]
 
     
-        elif attachment == 'map' and use_existing:
-            for n in self.cell_mapping:
-                if len(self.get_tip_cells(n)) > 0:
-                    self.node_likelihood[n] = self.compute_likelihood_by_node(n, data)
-        else:
-            #MAP assign cells to clone and compute likelihood 
-            return None
+        # elif attachment == 'map' and use_existing:
+        #     for n in self.cell_mapping:
+        #         if len(self.get_tip_cells(n)) > 0:
+        #             self.node_likelihood[n] = self.compute_likelihood_by_node(n, data)
+        # else:
+        #     #MAP assign cells to clone and compute likelihood 
+        #     return None
      
 
 
 
-        self.loglikelihood = self.loglikelihood_dict['total']
-        self.variant_likelihood = self.loglikelihood_dict['variant']
-        self.bin_count_likelihood = self.loglikelihood_dict['bin']
-        n= len(self.get_all_cells())
-        m= len(self.get_all_muts())
-        self.norm_loglikelihood = self.loglikelihood/(n*m)
+        # self.loglikelihood = self.loglikelihood_dict['total']
+        # self.variant_likelihood = self.loglikelihood_dict['variant']
+        # self.bin_count_likelihood = self.loglikelihood_dict['bin']
+        # n= len(self.get_all_cells())
+        # m= len(self.get_all_muts())
+        # self.norm_loglikelihood = self.loglikelihood/(n*m)
 
-        return self.loglikelihood
+        # return self.loglikelihood
 
     def compute_likelihood_by_node(self, node, data):
 
