@@ -1,0 +1,284 @@
+configfile: "config.yaml"
+seeds = [ i+12 for i in range(config["nseeds"])]
+
+
+# loss_loh = ["l" +str(l[0]) + "_loh" + str(l[1]) for l in config['cnloh_cna_loss']]
+
+rule all:
+    input:
+        expand("pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_metrics.csv",
+            seed = seeds,
+            cells =config['cells'],
+            mutations = config['mutations'],
+            clones = config['clones'],
+            prob = config['coverage'],
+            loss = config['loss']
+        ),
+        expand("phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.pickle",
+            seed = seeds,
+            cells =config['cells'],
+            mutations = config['mutations'],
+            clones = config['clones'],
+            prob = config['coverage'],
+            loss = config['loss']
+        )
+        # "pharming/s13_n1000_m15000_c5_p0.1_l0/segment_metrics.csv"
+
+       
+
+
+############################################# Simulator ########################################################################################         
+
+
+rule simulate:
+    output:
+        df_file = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/dataframe.tsv",
+        mut_clusters = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mutclust_gt.csv",
+        mut_loss_clusters = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mut_loss_clust_gt.csv",
+        cell_clusters ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+        tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
+        snv_bin_mapping = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/snv_bin_mapping.csv",
+        params_file = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/params.txt",
+        reads_per_bin_file = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/reads_per_bin.csv",
+        copy_number_profiles = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/copy_number_profiles.csv",
+        ref_copies = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/ref_copies.csv",
+        mut_copies ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mut_copies.csv",
+        node_types = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/node_types.csv",
+    params:
+        cp_thresh = config['cp_thresh'],
+        max_add_copies = config['max_add_copies'],
+        fp = config['fp'],
+        cna_chrom = config['cna_chrom'],
+        cna_arm = config['cna_arm'],
+        cna_bin = config['cna_bin'],
+        num_loss_events = lambda w: w['loss'],
+        num_cnloh_events = lambda w: w['loss'],
+        loss_rate = config['loss_rate'],
+        num_cna_nodes = lambda w: config["num_cna"][w.clones],
+        dp_snv = 2,
+        dp_cnv = 2,
+        dp_clones=2
+    log:
+        std ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/run.log", 
+        err ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/err.log" 
+    shell:
+        "/scratch/projects/scsim/build/ulc_sim -sparse {output.df_file}  -n {wildcards.clones} -t {wildcards.mutations} -exp {wildcards.cells} "
+        " -cell-labels {output.cell_clusters}  -reads-per-bin {output.reads_per_bin_file} -copy-number-profiles {output.copy_number_profiles} "
+        " -dp-clones {params.dp_clones} -dp-snv {params.dp_snv} -dp-cnv {params.dp_cnv} -loss-rate {params.loss_rate}  "
+        " -tree {output.tree}  -fp {params.fp} -params {output.params_file} -num-subclonal-loss-events {wildcards.loss} "
+        " -num-chrom-events {params.cna_chrom} -num-arm-events {params.cna_arm} -num-bin-events {params.cna_bin} -lost-mut-labels {output.mut_loss_clusters} "
+        " -num-cnloh-events {wildcards.loss} -loss-rate {params.loss_rate} -min-cna-nodes {params.num_cna_nodes} "
+        " -mut-labels {output.mut_clusters} -s {wildcards.seed} -depth {wildcards.prob} -cp-thresh {params.cp_thresh} -max-copies {params.max_add_copies} "
+        " -snv-bin-mapping {output.snv_bin_mapping} -mut-copies {output.mut_copies} -ref-copies {output.ref_copies} "
+        "-node-types {output.node_types} > {log.std} 2> {log.err}"
+
+
+rule segment:
+    input:         
+        copy_number_profiles = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/copy_number_profiles.csv",
+    output: "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segementation.csv",
+    params:
+        tol = 0.0,
+        pseudo=1e-6
+    shell:
+        "python ../src/segment_genome.py -c {input.copy_number_profiles} -t {params.tol} -p {params.pseudo} -o {output}"
+
+
+rule preprocess_data:
+    input:  
+        df_file = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/dataframe.tsv",
+        copy_number_profiles = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/copy_number_profiles.csv",
+        mut_clusters = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mutclust_gt.csv",
+        mut_loss_clusters = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mut_loss_clust_gt.csv",
+        cell_clusters ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+        tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
+        snv_bin_mapping = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/snv_bin_mapping.csv",
+        segments  ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segementation.csv",
+    output:
+        clonal_tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/clonal_tree.pickle",
+        likelihoods = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_likelihoods.csv",
+        draw_tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.png",
+        segments = directory("input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees"),
+        read_counts =  "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/read_counts.tsv",
+        cn_profiles = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cn_profiles.tsv",
+        data = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/data.pickle",
+    log:    
+        std ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/preprocess.log", 
+        err ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/preprocess.err.log" 
+    shell:
+        "python ../src/preprocess_sim_data.py "
+        "-c {input.copy_number_profiles} "
+        "-s {input.segments} "
+        "-f {input.df_file} "
+        "--bin-mapping {input.snv_bin_mapping} "
+        "--mut-mapping {input.mut_clusters} "
+        "--cell-mapping {input.cell_clusters} "
+        "-t {input.tree} "
+        "--loss-mapping {input.mut_loss_clusters} "
+        "-T {output.clonal_tree} "
+        "--segtrees {output.segments} "
+        "-F {output.read_counts} "
+        "-C {output.cn_profiles} "
+        "-D {output.data} "
+        "--draw {output.draw_tree} "
+        "-L {output.likelihoods} "
+        " > {log.std} 2> {log.err} "
+
+
+
+
+rule pharming:
+    input:  "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/data.pickle",
+    output: 
+        segtrees = directory("pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees"),
+        likelihoods =  "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_likelihoods.csv"
+    benchmark:"pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/benchmark.log", 
+    threads: 10
+    log:    
+        std ="pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_trees.log", 
+        err ="pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_trees.err.log" 
+    shell:
+        "python ../src/pharming.py "
+        "-d {input} "
+        "-s {wildcards.seed} "
+        "-L {output.likelihoods} "
+        "-o {output.segtrees} "
+        "-j {threads} "
+        " > {log.std} 2> {log.err} "
+
+
+
+# rule score_tree:
+#     input:
+#         gt_cell ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+#         gt_mut= "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/gt_mut_g{g}.csv",
+#         gt_tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
+#         pred_cell = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/pred_mut_g{g}.csv",
+#         pred_mut = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/pred_mut_g{g}.csv",
+#         pred_tree = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/tree__g{g}.txt",
+    
+#     output:"pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/metrics_g{g}.csv"
+#     shell:
+#         "/scratch/data/leah/phertilizer/simulation_study/scripts/cpp/metrics {input.gt_tree} {input.gt_cell} {input.gt_mut} {input.pred_tree} {input.pred_cell} {input.pred_mut} > {output} "
+
+rule score_segment_trees:
+    input:   "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_likelihoods.csv"
+    params: 
+        gt_path = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees",
+        inf_path ="pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees",
+    output:"pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/segment_metrics.csv"
+    run:
+        import sys, re
+        import pandas as pd 
+        
+        sys.path.append('../src')
+        from clonal_tree import ClonalTree, load
+
+        def get_score(g):
+            seg_gt_pth = f"{params.gt_path}/tree_g{g}.pickle"
+            seg_inf_pth = f"{params.inf_path}/tree_g{g}.pickle"
+            try:
+                gt = load(seg_gt_pth)
+                inf = load(seg_inf_pth)
+                df = gt.score(inf)
+                df["gt_likelihood"] = gt.loglikelihood
+                df["inf_likelihood"] = inf.loglikelihood
+                return df
+            except:
+                IOError("The segment trees could not be loading")
+                return pd.DataFrame()
+
+
+  
+        
+        likelihoods = pd.read_csv(input[0])
+
+        likelihoods = likelihoods.set_index("segment")
+
+        seg_scores = map(get_score, likelihoods.index) 
+        score_df = pd.concat(seg_scores)
+
+
+
+
+        # 's{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}
+        pattern = r's(\d+)_n(\d+)_m(\d+)_c(\d+)_p([\d.]+)_l([\d.]+)'
+
+        # Use re.findall to extract all occurrences of the pattern
+        matches = re.findall(pattern, params.gt_path)
+   
+        label_cols = ["seed", "cells", "snvs", "clones", "coverage", "loss"]
+        score_df[label_cols] = matches[0]
+        score_df = score_df.rename_axis('segment')
+        score_df.to_csv(output[0])
+         
+
+
+
+
+
+
+
+############### Phertilizer comparison #############################
+
+
+rule Phertilizer:
+    input:
+        dataframe = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/dataframe.tsv",
+        reads_per_bin_file =  "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/reads_per_bin.csv",
+
+    params:
+        copies = config["max_copies"],
+        radius = config["radius"],
+        fp = config['fp'],
+        low_cmb = config["low_cmb"],
+        high_cmb = config["high_cmb"],
+        nobs = config["nobs_per_cluster"],
+        iterations = config["max_iterations"],
+        starts = config["starts"],
+        min_obs = config["min_obs"]
+    output:
+        pred_cell = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_cell.csv",
+        pred_mut = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_mut.csv",
+        grow_pickle = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.pickle",
+        grow_png ="phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.png",
+        # cell_lookup = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cell_lookup.csv",
+        # mut_lookup = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mut_lookup.csv",    
+        tree_text =  "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.txt",
+        likelihood= "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/likelihood.csv"
+    log:
+        std = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/run.log",
+        err = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/err.log",
+    benchmark: "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/benchmark.log"
+    shell:
+        "phertilizer -f {input.dataframe} --bin_count_data {input.reads_per_bin_file} "
+         "--radius {params.radius} -a {params.fp} "
+        "--min_obs {params.min_obs} -c {params.copies}  --post_process "
+        "-d {wildcards.seed} -j {params.iterations}  -s {params.starts}  "
+        " -m {output.pred_mut} -n {output.pred_cell} --tree_text {output.tree_text} "
+        " --low_cmb {params.low_cmb} --high_cmb {params.high_cmb} --nobs_per_cluster {params.nobs} "
+        "--tree {output.grow_png} --tree_pickle {output.grow_pickle} --likelihood {output.likelihood} "
+        " > {log.std} 2> {log.err}" 
+
+rule score_tree:
+    input:
+        gt_cell="input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+        gt_mut="input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mutclust_gt.csv",
+        gt_tree = "input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/tree.txt",
+        pred_cell = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_cell.csv",
+        pred_mut = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_mut.csv",
+        pred_tree = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.txt",
+    
+    output:"{run_dir}/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}_c{c}_lcmb{lcmb}_fp{fp}/metrics.csv"
+    shell:
+        "/scratch/data/leah/phertilizer/simulation_study/scripts/cpp/metrics {input.gt_tree} {input.gt_cell} {input.gt_mut} {input.pred_tree} {input.pred_cell} {input.pred_mut} > {output} "
+
+
+
+    
+    
+
+
+
+
+
