@@ -534,7 +534,16 @@ class ClonalTree:
             ancestral = self.get_cell_incomparable_pairs()
             return self.recall(ancestral, obj.get_cell_incomparable_pairs())
 
-
+    def get_clone_proportions(self):
+        clone_prop = {}
+        ncells = sum([len(val) for key,  val in self.cell_mapping.items()])
+        for n in self.tree:
+            if n in self.cell_mapping:
+                clone_prop[n] = len(self.cell_mapping[n])/ncells
+            else:
+                clone_prop[n] = 0
+        return pd.Series(clone_prop).sort_index()
+        
     def get_incomparable_pairs(self, include_loss: bool=True) -> Counter:
         mut_mapping = self.update_mapping(self.tree,self.mut_mapping)
         pairs = Counter()
@@ -729,7 +738,7 @@ class ClonalTree:
             # return binom.pmf(a,d,adjusted_vaf)
         return val.sum(axis=1)
     
-    def compute_map_likelihood(self, data, seg):
+    def compute_map_likelihood(self, data, seg, alpha):
         # print(self.tree_to_string(self.tree))
         clone_order = list(nx.dfs_preorder_nodes(self.tree, source=self.root))
         # clone_order = [c for c in clone_order if c != self.root]
@@ -737,13 +746,14 @@ class ClonalTree:
         total_cn_states = {}
         like_list =[]
         seg_snvs = data.seg_to_snvs[seg]
+        m = len(seg_snvs)
         cell_mapping = {}
         cell_mapping[self.root] = []
         for n in clone_order:
             x,y = self.tree.nodes[n]["genotype"]
             total_cn = x+y 
             total_cn_states[n]= total_cn
-            cna_geno = np.full(self.m, total_cn, dtype=int).reshape(1,-1)
+            cna_geno = np.full(m, total_cn, dtype=int).reshape(1,-1)
             clone = nx.shortest_path(self.tree, source=self.root, target=n)
             # if self.tree[clone[-2]][clone[-1]]["event"]== "mutation":
             snvs = []
@@ -771,7 +781,7 @@ class ClonalTree:
             #             print(f"a:{a} d:{d} y:{y} c:{c}: prob: {out} logprob:{np.log(out)}")
             #         cell_by_snv_like[i,j] =out
             # print(cell_by_snv_like)
-            cell_like = self.likelihood_function(data.var[:, seg_snvs], data.total[:,seg_snvs], y_vec, cna_geno, 0.001)
+            cell_like = self.likelihood_function(data.var[:, seg_snvs], data.total[:,seg_snvs], y_vec, cna_geno, alpha)
          
             # assert(np.array_equal(cell_by_snv_like, cell_by_snv_like2))
             # print(cell_by_snv_like2)
@@ -875,6 +885,7 @@ class ClonalTree:
                 self.loglikelihood = sum([self.compute_likelihood_by_node(n) for n in self.cell_mapping])
             else:
                 self.loglikelihood = np.NINF
+        return self.loglikelihood
 
         # seg_snvs = data.seg_to_snvs[seg]
       

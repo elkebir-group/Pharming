@@ -81,14 +81,11 @@ max_copies: 9
 # radius: 0.975
 radius: 1
 fp: 0.001
-
 mode: "rd"
 starts: 16
 max_iterations: 50
-min_obs:
-  - 5
-  # - 7
-  # # - 10
+min_obs: 5
+
 low_cmb: 0.05
 high_cmb: 0.15
 nobs_per_cluster: 3
