@@ -9,6 +9,7 @@ import os
 import itertools
 import multiprocessing
 import cProfile
+from paction_segments import PactionSegments
 
 
        
@@ -77,15 +78,15 @@ class Pharming:
         best_like = np.NINF
 
         for T_CNA in T_CNAs:
-            seed = self.rng.integers(1e8, size=1)[0]
-            try:
+                seed = self.rng.integers(1e8, size=1)[0]
+            # try:
                 SegTree =BuildSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
 
                 if SegTree.loglikelihood > best_like:
                     best_like = SegTree.loglikelihood
                     BestSegTree= SegTree
-            except:
-                print(f"Warning: Segment {g} failed")
+            # except:
+                # print(f"Warning: Segment {g} failed")
                
         
         return BestSegTree
@@ -117,8 +118,8 @@ class Pharming:
         return T_CNAs, TCNA_to_TSNVs
             
 
-    def combine_trees(self):
-        pass 
+    def combine_segments(self):
+        combined_ct = PactionSegments().fit(self.SegTrees)
 
     def fit(self, data, segments= None):
         
@@ -139,7 +140,7 @@ class Pharming:
             #     self.SegTrees[g]= None
            
         
-        self.combine_trees()
+        self.combine_segments()
         return self.SegTrees
     
     def fit_parallel(self, data, segments= None, num_cores=4):
@@ -161,7 +162,7 @@ class Pharming:
         pool.join()
 
         self.SegTrees = {g: T_Seg for g,T_Seg in zip(segments,results)}
-        
+        # self.combine_segments()
         return self.SegTrees
 
 
@@ -215,21 +216,21 @@ if __name__ == "__main__":
     # parser.add_argument('-g', '--segment', type=int, required=False)
     # parser.add_argument("-d", "--data", type=str)
 
-    # instance = "s12_n1000_m15000_c5_p0.25_l0"
-    # tpath = f"/scratch/data/leah/pharming/sim_study/pharming/{instance}"
+    instance = "s12_n1000_m15000_c5_p0.05_l0"
+    tpath = f"/scratch/data/leah/pharming/sim_study/pharming/{instance}"
 
-    # args = parser.parse_args([
-    #     # "-f", f"{tpath}/input/read_counts.tsv",
-    #     # "-c", f"{tpath}/input/copy_numbers.tsv",
-    #     "-d", f"{tpath}/data.pickle",
-    #     "-s", "12",
-    #     # "--segment", "1",
-    #     "--out", f"{tpath}/SegTrees",
-    #     "-j", "10"
-    #     # "-L", f"{tpath}/like.csv"
-    #     # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
-    #     # "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
-    # ])
+    args = parser.parse_args([
+        # "-f", f"{tpath}/input/read_counts.tsv",
+        # "-c", f"{tpath}/input/copy_numbers.tsv",
+        "-d", f"{tpath}/data.pickle",
+        "-s", "12",
+        # "--segment", "0",
+        "--out", f"/scratch/data/leah/pharming/test/SegTrees",
+        "-j", "1"
+        # "-L", f"{tpath}/like.csv"
+        # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
+        # "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
+    ])
 
 
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
@@ -246,28 +247,31 @@ if __name__ == "__main__":
     
     else:
         segments = [args.segment]
+    segments = [1,9]
     # segments = segments[:4]
-    SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=args.num_cores)
-    # SegTrees = Pharming(args.seed).fit(dat, segments)
+    if args.num_cores > 1:
+        SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=args.num_cores)
+    else:
+        SegTrees = Pharming(args.seed).fit(dat, segments)
     # SegTrees ={}
     # cProfile.run("my_function()")
-
-    if not os.path.exists(args.out):
-        os.makedirs(args.out)
-        print(f"Directory '{args.out}' created successfully.")
-    else:
-        print(f"Directory '{args.out}' already exists.")
-    likelihoods = {}
-    for g, T_Seg in SegTrees.items():
-        print(T_Seg)
-        if T_Seg is not None:
-            pred_cell, pred_mut = T_Seg.generate_results(dat.cell_lookup, dat.mut_lookup)
-            likelihoods[g]= T_Seg.compute_likelihood(dat,g)
-            pred_cell.to_csv(f"{args.out}/pred_cell_g{g}.csv", index=False)
-            pred_mut.to_csv(f"{args.out}/pred_mut_g{g}.csv",index=False)
-            T_Seg.draw(f"{args.out}/tree_g{g}.png")
-            T_Seg.save(f"{args.out}/tree_g{g}.pickle")
-            T_Seg.save_text(f"{args.out}/tree_g{g}.txt")
+    if args.out is not None:
+        if not os.path.exists(args.out):
+            os.makedirs(args.out)
+            print(f"Directory '{args.out}' created successfully.")
+        else:
+            print(f"Directory '{args.out}' already exists.")
+        likelihoods = {}
+        for g, T_Seg in SegTrees.items():
+            print(T_Seg)
+            if T_Seg is not None:
+                pred_cell, pred_mut = T_Seg.generate_results(dat.cell_lookup, dat.mut_lookup)
+                likelihoods[g]= T_Seg.get_loglikelihood()
+                pred_cell.to_csv(f"{args.out}/pred_cell_g{g}.csv", index=False)
+                pred_mut.to_csv(f"{args.out}/pred_mut_g{g}.csv",index=False)
+                T_Seg.draw(f"{args.out}/tree_g{g}.png")
+                T_Seg.save(f"{args.out}/tree_g{g}.pickle")
+                T_Seg.save_text(f"{args.out}/tree_g{g}.txt")
 
 
     if args.likelihoods is not None:

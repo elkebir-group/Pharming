@@ -14,7 +14,7 @@ rule all:
             prob = config['coverage'],
             loss = config['loss']
         ),
-        expand("phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.pickle",
+        expand("phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/metrics.csv",
             seed = seeds,
             cells =config['cells'],
             mutations = config['mutations'],
@@ -262,14 +262,13 @@ rule Phertilizer:
 
 rule score_tree:
     input:
-        gt_cell="input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
-        gt_mut="input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mutclust_gt.csv",
-        gt_tree = "input/{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/tree.txt",
+        gt_cell="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+        gt_mut="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/mutclust_gt.csv",
+        gt_tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
         pred_cell = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_cell.csv",
         pred_mut = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/pred_mut.csv",
         pred_tree = "phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/best_tree.txt",
-    
-    output:"{run_dir}/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}_c{c}_lcmb{lcmb}_fp{fp}/metrics.csv"
+    output:"phertilizer/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/metrics.csv"
     shell:
         "/scratch/data/leah/phertilizer/simulation_study/scripts/cpp/metrics {input.gt_tree} {input.gt_cell} {input.gt_mut} {input.pred_tree} {input.pred_cell} {input.pred_mut} > {output} "
 
