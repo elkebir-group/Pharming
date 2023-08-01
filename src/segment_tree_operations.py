@@ -2,11 +2,17 @@ import networkx as nx
 import numpy as np
 import itertools
 # from copy import deepcopy
-from scipy.stats import binom
+from scipy.stats import binom, mode 
 from clonal_tree import ClonalTree
 from sklearn import metrics
 from sklearn.cluster import KMeans
 import time
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+DCF_THESHOLD=1e-9
+ANC = "ancestral"
+CLUST = "clustered"   
 
 def time_it(func):
     def wrapper(*args, **kwargs):
@@ -59,11 +65,12 @@ Output:
 
 
 
-class BuildSegmentTree:
+class FitSegmentTree:
     def __init__(self, T_CNA, seed=1026, max_clusters=4, silhouette_min=0.6, silhouette_improve=0.2, verbose=False):
         self.verbose =verbose 
         self.T_CNA = T_CNA
         self.max_clusters = max_clusters
+        # self.max_clusters = 10
         self.sil_min = silhouette_min
         self.sil_improve = silhouette_improve
         self.min_snv_cluster_size = 10
@@ -263,42 +270,86 @@ class BuildSegmentTree:
                 d = total[cn][snv_index[s]]
 
                 dcfs[i] = tree.v_to_dcf(a/d,cn)
+        zero_indices = np.where(dcfs <= DCF_THESHOLD)[0].tolist()
+        indices_to_cluster = np.where(dcfs > DCF_THESHOLD)[0]
+
+
+        dcfs = dcfs[indices_to_cluster]
         dcfs = dcfs.reshape(-1,1)
         clust_dcfs = np.mean(dcfs,axis=0)
   
 
-        snv_clusters =  np.full_like(clust_snvs, 0)
-        best_k = 1
-        if len(np.unique(dcfs)) > 1:
+        # snv_clusters =  np.full_like(clust_snvs, 0)
+        snv_clusters = []
+        best_k = 0
+        intertia_dict= {}
+        sil_score_dict = {}
+
+
+
+        if len(np.unique(dcfs)) > 1 or len(zero_indices) < len(clust_snvs):
         
         
             max_score = -1
-           
-            for k in range(2, self.max_clusters+1):
+        
+          
+            bin_width = 0.025  # Set your desired bin width here
+            sns.histplot(dcfs, bins=np.arange(min(dcfs), max(dcfs) + bin_width, bin_width), kde=True)
+
+            # sns.histplot(dcfs, kde=True)
+
+            plt.savefig("test/dcf_histogram.png", dpi=300)
+            plt.clf()
+            for k in range(1, self.max_clusters+1):
             
                 km = KMeans(k, random_state=self.rng)
+                
                 clusters = km.fit_predict(dcfs)
+                intertia_dict[k] =km.inertia_
                 unique_values, counts = np.unique(clusters, return_counts=True)
                 if np.any(counts < self.min_snv_cluster_size):
                     continue
                 # for c in np.unique(clusters):
                 #     print(f"{c}: {clusters[clusters==c].shape[0]}")
                 cluster_centers = km.cluster_centers_  #nclusters x nfeatures
-                sil_score = metrics.silhouette_score(dcfs, clusters)
+                try:
+                    sil_score = metrics.silhouette_score(dcfs, clusters)
+                  
+                except:
+                    sil_score=0.0
+                sil_score_dict[k]=sil_score
+
                 if max_score > 0:
                     sil_improve = 1-((1-sil_score)/(1-max_score))
                 else:
                     sil_improve = 1
                 
                 # print(f"{k}: {sil_score}")
-                if sil_score > self.sil_min and sil_score > max_score and sil_improve > self.sil_improve:
+                if k==1 or (sil_score > self.sil_min and sil_score > max_score and sil_improve > self.sil_improve):
+                    
                     max_score = sil_score
                     best_k = k
                     clust_dcfs =cluster_centers
                     snv_clusters = clusters
-        cluster_map = {j: [] for j in range(best_k)}
-        for s,j in zip(clust_snvs, snv_clusters):
-            cluster_map[j].append(s)
+            for key, val in intertia_dict.items():
+                print(f"k:{key} intertia: {val}")
+            for key, val in sil_score_dict.items():
+                print(f"k:{key} sil_score: {val}")
+            cluster_map = {j: [] for j in range(best_k)}
+            for i,j in zip(indices_to_cluster, snv_clusters):
+                # s = 
+                cluster_map[j].append(clust_snvs[i])
+            
+            clust_dcfs = clust_dcfs.reshape(-1)
+            clust_snvs = np.array(clust_snvs)
+            if len(zero_indices) > 0:
+                cluster_map[best_k] = clust_snvs[zero_indices].tolist()
+                best_k += 1
+                clust_dcfs = np.append(clust_dcfs, 0)
+        else:
+            best_k = 1
+            cluster_map = {0: clust_snvs}
+            clust_dcfs= np.array([0.0])
 
         
 
@@ -310,8 +361,9 @@ class BuildSegmentTree:
         for T_Seg in self.T_Seg_List:
             # print(self.tree_to_string(T_Seg))
             segtree = ClonalTree(g, T_Seg, self.mut_mapping, mutated_copies= self.mutated_copies)
-            cell_mapping, loglike= self.map_assign_cells(segtree.tree, data,g)
-            segtree.set_cell_mapping(cell_mapping) 
+            loglike = segtree.compute_likelihood(data, g, self.alpha,attachment="map")
+            # cell_mapping, loglike= self.map_assign_cells(segtree.tree, data,g)
+            # segtree.set_cell_mapping(cell_mapping) 
             # loglike = segtree.compute_likelihood(data, g)
             if loglike > best_like:
                 best_like = loglike
@@ -628,6 +680,7 @@ class BuildSegmentTree:
         self.m = len(self.snvs)
         
         cell_counts_by_snv, cells_by_snvs = self.data.count_cells_by_snv(segment)
+
         
         self.print_verb(f"Average cell count per SNV: {cell_counts_by_snv.mean()}")
         #construct overlap graph and check if it is fully connected
@@ -642,9 +695,12 @@ class BuildSegmentTree:
 
         for s in self.snvs:
             max_like= np.NINF
+            # if s in [1703, 3158, 3526]:
+            #     print("check")
             cells_by_cn = {cn: np.intersect1d(cells_by_snvs[s], self.cells_by_cn[cn]) for cn in self.cells_by_cn}
       
             for tree in self.T_SNVs:
+                # print(tree)
                 like, cell_assign =tree.likelihood(cells_by_cn, data.var[:,s], data.total[:,s],0.001)
                 if like > max_like:
                     max_like = like
@@ -664,8 +720,8 @@ class BuildSegmentTree:
             k, snv_clusters, dcfs = self.cluster_snvs(clust_snvs, snv_index, alt, total)
     
             self.print_verb(f"{tree_clust}: k={k}, dcfs={dcfs}")
-            dcfs = dcfs.reshape(-1)
-            sorted_clusters = np.argsort(dcfs)[::-1]
+            # dcfs = dcfs.reshape(-1)
+            # sorted_clusters = np.argsort(dcfs)[::-1]
             # sorted_dcfs = np.sort(dcfs)[::-1]
             # for c in np.unique(snv_clusters):
             #     self.print_verb(f"{c}: {snv_clusters[snv_clusters==c].shape[0]}")
@@ -682,7 +738,7 @@ class BuildSegmentTree:
             self.add_to_graph(tree_clust, k, snv_clusters, dcfs) 
             # subtrees_list.append(subtrees)
             starting_cluster += k
-        # self.draw_graph("test/ancestral_graph.png")
+        self.draw_graph("test/ancestral_graph.png")
         self.T_Seg_List = self.enumerate_segment_trees()
         print(f"Segment {segment}: Found {len(self.T_Seg_List)} candidate segment trees, using likelihood to prioritize....")
         # self.combine_subtrees(subtrees_list)
@@ -1061,14 +1117,357 @@ class BuildSegmentTree:
          
         
             
+    class TreeMerge:
+        def __init__(self, jaccard_threshold=0.05) -> None:
+            self.jaccard_threshold = jaccard_threshold 
+ 
+
+        def merge(self, tree1, tree2, data):
+            self.T1 = tree1
+            self.T2 = tree2
+            self.data = data 
+            self.trees = [self.T1, self.T2]
+            self.snvs1 = self.T1.get_all_muts()
+            self.snvs2 = self.T2.get_all_muts()
+
+            connected_components = self.constuct_bipartite_graph()
+   
+            '''
+            identify any singleton components
+            '''
+
+            
+
+
+            merge_graph = self.construct_merge_graph(connected_components)
+
+            clonal_trees = self.generate_candidate_trees(merge_graph)
+
+            opt_clonal_tree = self.find_optimal(clonal_trees)
+
+            return opt_clonal_tree
         
+        def generate_candidate_trees(self, G):
+             
+            cand_trees = []
+            iterator = nx.algorithms.tree.branchings.ArborescenceIterator(G)
+            for arbor in iterator:
+         
+                mut_mapping = {}
+                tree= nx.DiGraph()
+                node_mapping = {}
+                index = 0
+                #traverse the tree in preorder starting from the root
+                # root = -1
+                # index = 0 
+                # root_neighbors  = tree.neighbors(-1)
+                # if len(root_neighbors) ==1:
+                #     root = root_neighbors[0]
+
+                # node_mapping[root] = index 
+                # index +=1 
+                # tree.add_node(index )
+                # mut_mapping[index] = 
+
+                #we need to first add all clustered nodes
+                clust_nodes = []
+                for u,v, attr in arbor.edges(data=True):
+                
+                    
+                    if attr["etype"] == CLUST:
+                        '''
+                        We only neeed to add one node to the that has 
+                        '''
+                        snvs = []
+                        for gnode in [u,v]:
+                            clust_nodes.append(gnode)
+                            if gnode not in node_mapping:
+                                node_mapping[gnode] =index 
+                            t, n = gnode
+                            snvs += self.tree[t].mut_mapping[n]
+                        node_id = node_mapping[u]
+                        tree.add_node(node_id)
+                        mut_mapping[node_id] = snvs 
+                for u,v, attr in arbor.edges(data=True):
+                    if attr["etype"] == ANC:
+                        if u not in node_mapping:
+                                node_mapping[u] = index 
+                                index+=1
+                        if v not in clust_nodes:  #incoming mutations need to be added to the merged tree
+                            node_mapping[v] = index 
+                            index += 1
+                            t, n = v
+                            mut_mapping[node_mapping[v]]= self.tree[t].mut_mapping[n]
+                      
+                        tree.add_edge(node_mapping[u], node_mapping[v])
+                
+                cand_trees.append(ClonalTree(0, tree, mut_mapping = mut_mapping))
+            return cand_trees 
+
+                    
+
+
+        def find_optimal(self, clonal_trees):
+            likelihoods = [ct.compute_likelihood(self.data) for ct in clonal_trees]
+            opt_index = np.argmax(likelihoods)
+            return clonal_trees[opt_index]
+        
+        def ancestral_weight(self, t_parent, parent, t_child, child):
+
+            #what are the snvs that are introduced in the parent node
+            parent_snvs = t_parent.get_muts(parent)
+            if len(parent_snvs) ==0:
+                return np.Inf
+            
+            desc_cells = t_child.get_desc_cells(child)
+
+
+
+            #now compute the observed VAF for each parent snvs across pooled desc cells
+            obs_vafs = self.data.compute_vaf(parent_snvs, desc_cells)
+            exp_vaf = []
+            for i,s in enumerate(parent_snvs):
+                g = self.data.seg_by_snv[s]
+                mut_copies = [t_parent.get_mut_copies(g,s, c) for c in desc_cells]
+                mut_copy = mode(mut_copies)
+                tot_copies = self.data.copy_profiles[desc_cells,g]
+                exp_vaf.append(mut_copy/tot_copies)
+            
+            return np.mean(np.abs(exp_vaf- obs_vafs))
+        
+
+        def clustered_weight(self, t0, n0, t1, n1):
+            clusters = [(t0, n0), (t1, n1)]
+            #what are the snvs that are introduced in the parent node
+            snvs = []
+            cells = []
+            for i,c in enumerate(clusters):
+                t, n =c 
+                snvs[i] =t.get_muts(n)
+                cells[i] = t.get_desc_cells(n)
+            
+         
+            
+
+
+
+            if len(snvs[0] + snvs[1]) ==0:
+                return np.Inf
+            
+            
+            # cell_union = list(set(cells[0]).union(set(cells[1])))
+
+
+            obs_vafs, exp_vafs  = []
+         
+            #now compute the observed VAF for each parent snvs across pooled desc cells
+            rev_cells = cells[::-1]
+            for i,node_snvs in enumerate(snvs):
+                tree = clusters[i][0]
+                evaf = []
+                for dcells in rev_cells:
+
+
+                    obs_vafs.append(self.data.compute_vaf(node_snvs, dcells))
+              
+                    for i,s in enumerate(node_snvs):
+                        g = self.data.seg_by_snv[s]
+                        #TODO need to fix segment tree to properly store mut_copies in seg tree
+                        # mut_copies = [tree.get_mut_copies(g, s, c) for c in dcells]
+                        #for now, use 1 mutated copy but this is just a placehold for debugging
+                        mut_copies = [1 for c in dcells]
+                        mut_copy = mode(mut_copies)
+                        tot_copies = self.data.copy_profiles[dcells,g]
+                        evaf.append(mut_copy/tot_copies)
+                exp_vafs.append(evaf)
+            obs_vafs = np.concatenate(obs_vafs)
+            exp_vafs = np.concatenate(exp_vafs)
+            
+            return np.mean(np.abs(exp_vafs- obs_vafs))
+
+
+            
+        def compute_edge_weight(self, parent, child):
+            t_p, n_p = parent
+            t_c, n_c = child 
+
+            
+            snvs = self.trees[t_p].get_muts(n_p)
+            if len(snvs) ==0:
+                return 0, None
+
+            #if parent is ancestral to child
+            anc_weight = self.ancestral_weight(self.trees[t_p], n_p, self.trees[t_c], n_c)
+
+            #if parent and child snvs should be clustered togeter
+            clust_weight = self.clustered_weight(self.trees[t_p], n_p, self.trees[t_c], n_c)
+
+            if anc_weight < clust_weight:
+                return anc_weight, ANC
+            else:
+                return clust_weight, CLUST
+            
+
+
+
+        def construct_merge_graph(self, connected_components):
+            merge_graph = nx.DiGraph()
+        
+            #
+            
+            #first figure out what to do with the root
+     
+            merge_root =  np.all([len(self.trees[t].get_muts(self.trees[t].root)) ==0 for t in [0,1] ])
+            merge_graph.add_node(-1)
+            if not merge_root:
+              
+                for t in [0,1]:
+                    rt = self.trees[0].root
+                    self.add_edge(-1, (t,rt), weight=0, etype=ANC)
+            else:
+                r0 = self.trees[0].root
+                r1 = self.trees[1].root
+                self.add_edge(-1, (0,r0), weight=0, etype=ANC)
+                self.add_edge((0,r0), (1, r1), weight=0, etype=ANC)
+            
+
+         
+
+
+            #now add all ancestral edges within a tree
+            for t in [0,1]:
+                tree = self.trees[t]
+                for u,v in tree.tree.edges:
+                    child = (t,v)
+                    if u == tree.root and merge_root:
+                        merge_graph.add_edge((1,r1), child, weight=0, etype=ANC)
+                    else:
+                        par = (t,u)
+                        w, _ = self.compute_edge_weight((par, child))
+                        merge_graph.add_edge(par, child, weight=w, etype=ANC)
+
+            #now add cross edges 
+            for comp in connected_components:
+                merge_graph.add_nodes_from(comp)
+                t_nodes = { tree: [n for t,n in comp if t==tree] for tree in [0,1]}
+        
+
+                for n0  in t_nodes[0]:
+                    if n0 == self.trees[0].root and merge_root:
+                        node = (1,r1)
+                    else:
+                        node = (0,n0)
+                
+                 
+                    for n1 in t_nodes[1]:
+                        if n1 == self.trees[1].root  and n0 == self.trees[0].root and merge_root:
+                            continue
+                  
+        
+                        w01, type01 = self.compute_edge_weight(node, (1,n1))
+                        w10, type10 = self.compute_edge_weight((1,n1),node)
+                        if type01 is not None:
+                            merge_graph.add_edge((0,n0), (1,n1), weight=w01, etype=type01)
+                        if type10 is not None:
+                            merge_graph.add_edge((1,n1), (0,n0), weight=w10, etype=type10)
+            return merge_graph
+
+
+
+                
+
+
                         
+                           
+
+
+
+
+                      
+
+                #group nodes into tree 1 and tree2"
+                
+
+                   
+
+               
+
+
+
+
+
+        @staticmethod
+        def jaccard_similarity(set1, set2):
+            # Calculate the size of the intersection
+            intersection_size = len(set1.intersection(set2))
+            
+            # Calculate the size of the union
+            union_size = len(set1.union(set2))
+            
+            # Calculate the Jaccard similarity
+            jaccard_similarity = intersection_size / union_size
+            return jaccard_similarity
+
                         
                     
     
+        def constuct_bipartite_graph(self):
+            self.B = nx.Graph()
+            T_nodes = [[(i,n) for n in tree.cell_mapping] for i,tree in enumerate([self.T1, self.T2])]
+            for i, nodes in enumerate(T_nodes):
+                self.B.add_nodes_from(nodes, bipartite=i)  # Nodes in set1 have bipartite=0
+
+            for n0 in T_nodes[0]:
+                cells1 = self.T1.cell_mapping[n0]
+                for n1 in T_nodes[1]:
+                    cells2 = self.T2.cell_mapping[n1]
+                    
+                    if len(cells1) >0 or len(cells2) >0:
+                            jacc = self.jaccard_similarity(set(cells1), set(cells2))
+                            if jacc > self.jaccard_threshold:
+                                self.B.add_edge((0,n0), (1,n1), weight= jacc)
+            
+            singletons = {t: [] for t in [0,1]}
+            connected_components = list(nx.connected_components(self.B))
+            for comp in connected_components:
+                if len(comp) ==1:
+                    t,n = comp[0]
+                    singletons[t].append(n)
 
 
 
+            '''
+            preprocess the connected components, so that there are no singleton nodes
+            are any singletons descendents of subtree_parent?
+            if so, we are going to add them to be a member of that connected component
+            '''
+            for comp in connected_components:
+                
+                t_nodes = { tree: [n for t,n in comp if t==tree] for tree in [0,1]}
+                for t, nodes in t_nodes.items():
+                    tree = self.trees[t].tree
+                    subtree_parents =self.find_closest_nodes_to_root(tree, self.trees[t].root, nodes)
+
+
+                    singles = singletons[t]
+                    for par in subtree_parents:
+                        for s in singles:
+                            if nx.has_path(tree, par, s):
+                                comp.append((t,s))
+            return connected_components
+
+        @staticmethod    
+        def find_closest_nodes_to_root(tree, root, nodes_list):
+            # Perform BFS and get the shortest path lengths from the root
+            shortest_paths = nx.single_source_shortest_path_length(tree, root)
+
+            # Find the minimum distance from the root to the nodes in the input list
+            min_distance = min(shortest_paths[node] for node in nodes_list)
+
+            # Filter the nodes in the input list that are at the minimum distance from the root
+            closest_nodes = {node for node in nodes_list if shortest_paths[node] == min_distance}
+
+            return closest_nodes
 
 
             
