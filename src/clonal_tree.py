@@ -2,14 +2,11 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
-from collections import Counter
+from collections import Counter, defaultdict 
 from itertools import product, chain, combinations
-from scipy.stats import binom
-from scipy.special import logsumexp
-from itertools import chain
 import pickle 
 import pygraphviz as pgv
-# import matplotlib.pyplot as plt
+# import matplotlib.pyplot as pl
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
@@ -71,9 +68,6 @@ class ClonalTree:
 
 
 
-    
-   
-
     Methods
     -------
 
@@ -90,7 +84,7 @@ class ClonalTree:
 
     
     get_leaves()
-        returns the node ids of a all leaf nodes
+        returns a list with the node ids of all leaf nodes
     
 
     
@@ -113,21 +107,35 @@ class ClonalTree:
     Genotypes[v][s][m] = genotype
     """
 
-    def __init__(self, key, tree:nx:DiGraph, genotypes: dict, cell_mapping:dict=None ):
+    def __init__(self, tree:nx:DiGraph, genotypes: dict, cell_mapping:dict=None, key=0 ):
         self.tree: nx.DiGraph = tree
         self.genotypes = genotypes 
         
         self.root= self.find_root()
+        
+
         if cell_mapping is None:
             self.cell_mapping = {}
+            
         else:    
             self.cell_mapping = cell_mapping
 
         self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
-    
+        self.psi = self.get_psi()
+        self.phi = self.get_phi()
 
+        self.mut2seg = {m: s for s in self.genotypes[v] for v in self.genotypes}
+        
+        self.seg2muts = {}
+        for m,s in self.mut2seg.items():
+            if s in self.seg2muts:
+                self.seg2muts[s].append(m)
+            else:
+                self.seg2muts[s] = [m]
+
+    
         self.key = key
-        self.loglikelihood = None
+        self.cost = None 
 
     
     def __str__(self) -> str:
@@ -171,6 +179,7 @@ class ClonalTree:
         mystr += "\n"
         mystr += f"\nLog-likelihood: {self.loglikelihood}\n"
         return mystr
+    
     def find_root(self):
         for n in self.tree:
             if self.tree.in_degree(n) == 0:
@@ -178,12 +187,19 @@ class ClonalTree:
         def get_cost(self):
         return self.cost 
 
-
     def edges(self):
         return list(self.tree.edges)
     
     def clones(self):
         return list(self.tree.nodes)
+    
+    def get_phi(self):
+         self.phi = {i : j for i in cells for j, cells in self.cell_mapping.items()}
+         return self.phi
+    
+    def get_psi(self):
+         self.psi = {i : j for m in snvs for j, snvs in self.mut_mapping.items()}
+         return self.psi
 
     def get_muts(self,node):
         if node not in self.mut_mapping:
@@ -228,7 +244,6 @@ class ClonalTree:
         self.cell_mapping  = cell_mapping
 
 
-  
 
     def get_latent_vafs(v, s=None):
         vafs = {}
@@ -277,17 +292,61 @@ class ClonalTree:
     def get_ancestral_muts(self, node):
        
         path = list(nx.shortest_path(self.tree, self.root, node))
-
-     
         present_muts =list(chain.from_iterable([self.mut_mapping[p] for p in path if p in self.mut_mapping]))
-       
         lost_muts = list(chain.from_iterable([self.mut_loss_mapping[p]
                         for p in path if p in self.mut_loss_mapping]))
         present_muts = list(set(present_muts) - set(lost_muts))
 
-   
         return present_muts
-t
+    
+
+    def node_snv_cost(self, v, cells, data):
+
+ 
+            latent_vafs = self.get_latent_vafs(v)
+            lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
+            snvs = list(latent_vafs.keys())
+            #dims = cells by snvs
+            obs_vafs = data.get_vafs(cells, snvs)
+
+            cell_scores = np.abs(obs_vafs - lvafs).sum(axis=1)
+
+
+        return cell_scores
+
+    
+    def assign_cells(self, data):
+
+    
+        cell_scores = np.vstack([self.node_snv_cost(v, data.cells) for v in self.nodes ])
+        assignments = np.argmin(cell_scores, axis=1)
+        nodes = np.array(self.nodes)
+        self.phi = {i: v for i,v for zip(data.cells, nodes[assignments])}
+
+        self.cell_mapping = defaultdict(list)
+        for i, v in self.phi.items():
+            self.phi[v].append(i)
+        self.cell_mapping = dict(self.phi)
+
+
+
+    def compute_costs(self, data, lamb=0):
+        self.node_cost = {}
+        self.cost = 0
+            for v in self.tree:
+                cells = self.cell_mapping[v]
+                if len(cells) ==0:
+                    continue
+                cell_scores = self.node_snv_cost(v, cells)
+                self.node_cost[v] = cell_scores.sum()
+        
+        self.cost = sum([score for v, score in self.node_cost.items()])
+
+        return self.cost 
+
+
+
+
    #-------------------------- Save Methods ---------------------------------------#
     def draw(self, fname, cmap='Set3'):
 
