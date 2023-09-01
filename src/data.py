@@ -53,6 +53,18 @@ class Data:
         total = self.total[np.ix_(cells, snvs)]
         return var.sum(axis=0)/total.sum(axis=0)
     
+    def obs_vafs(self, cells=None, snvs=None):
+        if cells is None:
+            cells = self.cells 
+        if snvs is None:
+            snvs = self.muts 
+        
+        var =self.var[np.ix_(cells, snvs)]
+        total = self.total[np.ix_(cells, snvs)]
+        return var/total
+    
+
+    
     def count_marginals(self, seg):
         cell_map = self.cells_by_cn(seg)
         snvs = self.seg_to_snvs[seg]
