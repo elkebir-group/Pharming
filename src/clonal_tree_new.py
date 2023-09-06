@@ -388,14 +388,17 @@ class ClonalTreeNew:
 
 
    #-------------------------- Save Methods ---------------------------------------#
-    def draw(self, fname, cmap='Set3'):
+    def draw(self, fname, mapping=None, cmap='Set3'):
 
         mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
         cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
         labels = {}
         # color_values, colormap = self.create_color_map(cmap)
         for n in self.tree:
-                labels[n] = str(n)
+                if mapping is not None:
+                    labels[n] = str(mapping[n])
+                else:
+                    labels[n] = str(n)
                 if n in self.cell_mapping:
                     if cell_count[n] > 0:
                         labels[n] += "\nCells:" + str(cell_count[n])
