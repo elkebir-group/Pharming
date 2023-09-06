@@ -1,7 +1,7 @@
 from genotype_tree import CNATree
 import networkx as nx 
 import numpy as np
-from fit_segment_tree import BuildSegmentTree
+from segment_tree_operations import FitSegmentTree
 from data import load_from_files, load_from_pickle
 import argparse
 from clonal_tree import ClonalTree
@@ -80,7 +80,7 @@ class Pharming:
         for T_CNA in T_CNAs:
                 seed = self.rng.integers(1e8, size=1)[0]
             # try:
-                SegTree =BuildSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
+                SegTree =FitSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
 
                 if SegTree.loglikelihood > best_like:
                     best_like = SegTree.loglikelihood

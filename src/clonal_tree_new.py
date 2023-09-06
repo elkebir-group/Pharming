@@ -33,7 +33,7 @@ def load(fname):
         ct = pickle.load(file)
     return ct 
 
-class ClonalTree:
+class ClonalTreeNew:
     """
     A class to model a clonal tree with associated SNV/CNA genotypes and cell clustering
 
@@ -107,7 +107,7 @@ class ClonalTree:
     Genotypes[v][s][m] = genotype
     """
 
-    def __init__(self, tree:nx:DiGraph, genotypes: dict, cell_mapping:dict=None, key=0 ):
+    def __init__(self, tree, genotypes: dict, cell_mapping:dict=None, key=0, cost=np.Inf ):
         self.tree: nx.DiGraph = tree
         self.genotypes = genotypes 
         
@@ -120,11 +120,9 @@ class ClonalTree:
         else:    
             self.cell_mapping = cell_mapping
 
-        self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
-        self.psi = self.get_psi()
-        self.phi = self.get_phi()
+     
 
-        self.mut2seg = {m: s for s in self.genotypes[v] for v in self.genotypes}
+        self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
         
         self.seg2muts = {}
         for m,s in self.mut2seg.items():
@@ -133,9 +131,12 @@ class ClonalTree:
             else:
                 self.seg2muts[s] = [m]
 
-    
+
+        self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
+        self.psi = self.get_psi()
+        self.phi = self.get_phi()
         self.key = key
-        self.cost = None 
+        self.cost = cost 
 
     
     def __str__(self) -> str:
@@ -166,7 +167,8 @@ class ClonalTree:
         mystr += "\n\nNode\tSNVs\tCells\tGenotype"
         mystr += "\n--------------------------------"
         for n in  node_order:
-            genotype = self.tree.nodes[n]['genotype']
+            # genotype = self.tree.nodes[n]['genotype']
+            genotype = ""
             if n in self.cell_mapping:
                 ncells = len(self.cell_mapping[n])
             else:
@@ -177,28 +179,66 @@ class ClonalTree:
                 nmuts = 0
             mystr += f"\n{n}\t{nmuts}\t{ncells}\t{genotype}"
         mystr += "\n"
-        mystr += f"\nLog-likelihood: {self.loglikelihood}\n"
+        mystr += f"\nJ(T,G,phi): {self.cost}\n"
         return mystr
     
     def find_root(self):
         for n in self.tree:
             if self.tree.in_degree(n) == 0:
                 return n
-        def get_cost(self):
+    def get_cost(self):
         return self.cost 
 
     def edges(self):
         return list(self.tree.edges)
     
+    def parent(self, v):
+        if v ==self.root:
+            return None 
+        else:
+            return list(self.tree.predecessors(v))[0]
+    
+    def children(self, v):
+        return list(self.tree.neighbors[v])
+    
+    def get_ancestors(self, v):
+
+        def find_ancestors(tree, node, ancestors=None):
+            if ancestors is None:
+                ancestors = set()
+
+            predecessors = list(tree.predecessors(node))
+
+            for parent in predecessors:
+                ancestors.add(parent)
+                find_ancestors(tree, parent, ancestors)
+
+                return ancestors
+        return find_ancestors(self.tree, v)
+    
+    def get_descendants(self, v):
+        def find_descendants(tree, node, descendants=None):
+            if descendants is None:
+                descendants = set()
+
+            successors = list(tree.successors(node))
+
+            for child in successors:
+                descendants.add(child)
+                find_descendants(tree, child, descendants)
+
+            return descendants
+        return find_descendants(self.tree,v)
+    
     def clones(self):
         return list(self.tree.nodes)
     
     def get_phi(self):
-         self.phi = {i : j for i in cells for j, cells in self.cell_mapping.items()}
+         self.phi = {i : k  for k, cells in self.cell_mapping.items() for i in cells}
          return self.phi
     
     def get_psi(self):
-         self.psi = {i : j for m in snvs for j, snvs in self.mut_mapping.items()}
+         self.psi = {m : k  for k, snvs in self.mut_mapping.items()  for m in snvs}
          return self.psi
 
     def get_muts(self,node):
@@ -245,15 +285,15 @@ class ClonalTree:
 
 
 
-    def get_latent_vafs(v, s=None):
+    def get_latent_vafs(self, v, s=None):
         vafs = {}
         if s is None:
-            segs = self.segs 
+            segs = list(self.seg2muts.keys())
         else:
             segs  = [s]
-            for s in segs
-                for m in self.seg_to_snvs[s]:
-                    vafs[m] =self.genotypes[v][s][m].vaf
+        for s in segs:
+            for m in self.seg2muts[s]:
+                vafs[m] =self.genotypes[v][s][m].vaf
                 
         
         return vafs 
@@ -261,16 +301,16 @@ class ClonalTree:
     def get_mut_mapping(self):
         gained= []
         lost = []
-        mut_mapping = [v: [] for v in self.tree]
-        mut_loss_mapping = [v: [] for v in self.tree]
-        for v in self.T:
-            for s in self.segs:
-                for m, geno in self.genotypes[v][s]
-                    if geno.mut_copies > 0 and m not in added:
+        mut_mapping = {v: [] for v in self.tree}
+        mut_loss_mapping = {v: [] for v in self.tree}
+        for v in self.tree:
+            for s in self.seg2muts:
+                for m, geno in self.genotypes[v][s].items():
+                    if geno.z > 0 and m not in gained:
                         mut_mapping[v].append(m)
-                        added.append(m)
+                        gained.append(m)
                     if m in gained and geno.z ==0 and m not in lost:
-                        mut_loss_mapping[v].append()
+                        mut_loss_mapping[v].append(m)
                         lost.append(m)
         return mut_mapping, mut_loss_mapping 
    
@@ -303,13 +343,13 @@ class ClonalTree:
     def node_snv_cost(self, v, cells, data):
 
  
-            latent_vafs = self.get_latent_vafs(v)
-            lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
-            snvs = list(latent_vafs.keys())
-            #dims = cells by snvs
-            obs_vafs = data.get_vafs(cells, snvs)
+        latent_vafs = self.get_latent_vafs(v)
+        lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
+        snvs = list(latent_vafs.keys())
+        #dims = cells by snvs
+        obs_vafs = data.obs_vafs(cells, snvs)
 
-            cell_scores = np.abs(obs_vafs - lvafs).sum(axis=1)
+        cell_scores = np.nansum(np.abs(obs_vafs - lvafs), axis=1)
 
 
         return cell_scores
@@ -321,7 +361,7 @@ class ClonalTree:
         cell_scores = np.vstack([self.node_snv_cost(v, data.cells) for v in self.nodes ])
         assignments = np.argmin(cell_scores, axis=1)
         nodes = np.array(self.nodes)
-        self.phi = {i: v for i,v for zip(data.cells, nodes[assignments])}
+        self.phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
 
         self.cell_mapping = defaultdict(list)
         for i, v in self.phi.items():
@@ -333,7 +373,7 @@ class ClonalTree:
     def compute_costs(self, data, lamb=0):
         self.node_cost = {}
         self.cost = 0
-            for v in self.tree:
+        for v in self.tree:
                 cells = self.cell_mapping[v]
                 if len(cells) ==0:
                     continue
@@ -366,10 +406,10 @@ class ClonalTree:
         like_label = f"Segment {self.key}\n"
         tree = pgv.AGraph(strict=False, directed=False)
         tree.node_attr['style']='filled'
-        if self.cost is not None:
-            total_like = np.round(self.cost)
-            score_label += f"Objective: {total_like}"
-            tree.graph_attr["label"] = score_label
+        # if self.cost is not None:
+        #     total_like = np.round(self.cost)
+        #     score_label += f"Objective: {total_like}"
+        #     tree.graph_attr["label"] = score_label
  
         # colormap = cm.get_cmap(cmap)
         for n in self.tree:
@@ -416,7 +456,7 @@ class ClonalTree:
         with open(path, "wb") as file:
               pickle.dump(self, file)
     
-        @staticmethod
+    @staticmethod
     def mapping_to_dataframe(mapping, id_name):
   
         pred_list = []
