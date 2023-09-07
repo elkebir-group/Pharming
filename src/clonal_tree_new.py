@@ -189,6 +189,9 @@ class ClonalTreeNew:
     def get_cost(self):
         return self.cost 
 
+    def set_cost(self, cost):
+        self.cost  = cost 
+
     def edges(self):
         return list(self.tree.edges)
     
@@ -282,8 +285,29 @@ class ClonalTreeNew:
     
     def set_cell_mapping(self, cell_mapping):
         self.cell_mapping  = cell_mapping
+        self.psi = self.get_psi()
+        self.phi = self.get_phi()
+        print("Warning, cost is not automatically updated, ensure cost is manually set.")
 
 
+    def prune_tree(self, node_to_remove):
+        parent = next(self.tree.predecessors(node_to_remove))
+
+        # Get the children of the node to be removed
+        children = list(self.tree.successors(node_to_remove))
+
+        # Remove the node to be removed from the graph
+        self.tree.remove_node(node_to_remove)
+
+        # Reattach the children to the parent
+        for child in children:
+            self.tree.add_edge(parent, child)
+
+        if node_to_remove in self.cell_mapping:
+            del self.cell_mapping[node_to_remove]
+        
+        if node_to_remove in self.genotypes:
+            del self.genotypes[node_to_remove]
 
     def get_latent_vafs(self, v, s=None):
         vafs = {}
@@ -409,10 +433,9 @@ class ClonalTreeNew:
         like_label = f"Segment {self.key}\n"
         tree = pgv.AGraph(strict=False, directed=False)
         tree.node_attr['style']='filled'
-        # if self.cost is not None:
-        #     total_like = np.round(self.cost)
-        #     score_label += f"Objective: {total_like}"
-        #     tree.graph_attr["label"] = score_label
+        if self.cost is not None:
+            total_like = np.round(self.cost)
+            tree.graph_attr["label"] = f"Objective: {total_like}"
  
         # colormap = cm.get_cmap(cmap)
         for n in self.tree:
