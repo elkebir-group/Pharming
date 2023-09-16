@@ -21,6 +21,9 @@ class Superimposition:
         self.T1_edges = self.T1.edges()
         self.T2_edges = self.T2.edges()
 
+        self.T1_leafs = self.T1.get_leaves()
+        self.T2_leafs = self.T2.get_leaves()
+
         self.T = nx.DiGraph()
         self.mapping = {}
 
@@ -29,7 +32,7 @@ class Superimposition:
         self.PI = [ (u,v) for u in self.T1_clones for v in self.T2_clones]
       
 
-    def solve_refinement(self):
+    def solve_refinement(self, K):
         model = gp.Model('mergeTrees')
        
         
@@ -43,7 +46,7 @@ class Superimposition:
         z1 = model.addVars(self.T1_edges, self.T2_clones, vtype=GRB.CONTINUOUS, name='z1',lb=0, ub=1)
         z2 = model.addVars(self.T1_clones, self.T2_edges, vtype=GRB.CONTINUOUS, name='z2', lb=0, ub=1)
         phi = model.addVars(self.cells, self.T1_clones, self.T2_clones, vtype = GRB.CONTINUOUS, name='phi', lb=0, ub=1)
-        # y = model.addVars(self.T1_clones, self.T2_clones, vtype=GRB.BINARY, name='y')
+        y = model.addVars(self.T1_clones, self.T2_clones, vtype=GRB.BINARY, name='y')
 
         
         for i in self.cells: 
@@ -52,6 +55,16 @@ class Superimposition:
             
             #cells can only be assigned t o clones included in the refined tree
             model.addConstrs(phi[i,u,v] <= x[u,v] for u,v in self.PI)
+            model.addConstrs(phi[i,u,v] <= y[u,v] for u,v in self.PI)
+        
+        model.addConstrs(y[u,v] <= x[u,v] for u,v in self.PI)
+
+        model.addConstr(sum(y[u,v] for u,v in self.PI) ==K)
+
+        # every clone in each of the trees must appear at least once 
+        model.addConstrs(sum(phi[i,u,v] for i in self.cells for u in self.T1_clones) >=1 for v in self.T2_leafs)
+        model.addConstrs(sum(phi[i,u,v] for i in self.cells for v in self.T2_clones)  >=1 for u in self.T1_leafs)
+
 
         #tree refinement constraints
         for v in self.T2_clones:
@@ -112,8 +125,9 @@ class Superimposition:
         model.setObjective( sum(self.cst[i,u,v]* phi[i,u,v] for i in self.cells for u,v in self.PI), GRB.MINIMIZE)
 
         model.optimize()
-        
-        if model.Status == GRB.OPTIMAL:
+        # if True:
+        if model.SolCount > 0:
+        # model.Status in [GRB.OPTIMAL, GRB.TIME_LIMIT]:
             clones= model.getAttr('X', x)
             cell_assign = model.getAttr('X', phi)
 
@@ -125,17 +139,17 @@ class Superimposition:
             assigned_cells = 0
             for u,v in self.PI:  
                 if clones[u,v] > 0.5:
-                    cell_mapping[index] = []
+                    cell_mapping[(u,v)] = []
                     self.mapping[(u,v)] = index
                     orig_clones.append((u,v))
-                    self.T.add_node(index)
+                    self.T.add_node((u,v))
                     #TODO: fix seg ids 
-                    genotypes[index] = {self.T2.key: self.T2.genotypes[v][self.T2.key],self.T1.key: self.T1.genotypes[u][self.T1.key] }
                     for i in self.cells:
-                        
+                        # genotypes[(u,v)] = {self.T2.key: self.T2.genotypes[v][self.T2.key],self.T1.key: self.T1.genotypes[u][self.T1.key] }
+
                         if cell_assign[i,u,v] > 0.5:
                             assigned_cells += 1
-                            cell_mapping[index].append(i)
+                            cell_mapping[(u,v)].append(i)
                     index+=1
         
             for u,v in orig_clones:
@@ -145,16 +159,23 @@ class Superimposition:
                 u_prime = self.T1.parent(u)
                 v_prime = self.T2.parent(v)
                 if (u_prime, v) in orig_clones:
-                    self.T.add_edge(self.mapping[u_prime,v], self.mapping[u,v])
+                    self.T.add_edge((u_prime,v), (u,v))
                 elif (u, v_prime) in orig_clones:
-                    self.T.add_edge(self.mapping[u, v_prime], self.mapping[u,v])
+                    self.T.add_edge((u, v_prime), (u,v))
                 else:
+                    # if (u_prime, v_prime) not in orig_clones:
+
+
                     self.T.add_edge(self.mapping[u_prime, v_prime], self.mapping[u,v])
+            for u,v in self.T:
+                genotypes[(u,v)] = {self.T2.key: self.T2.genotypes[v][self.T2.key],self.T1.key: self.T1.genotypes[u][self.T1.key] }
 
             print(f"clones: {len(self.T)} assigned_cells: {assigned_cells} score: {score}")
             
         else:
-            raise ValueError("Model is Infeasible!")
+            print(f"Warning, model is infeasible for K={K}")
+            return ClonalTreeNew(nx.DiGraph(), {}, cost=np.Inf)
+            # raise ValueError("Model is Infeasible!")
         
         return ClonalTreeNew(self.T.copy(), genotypes, cell_mapping, cost=score)
            
@@ -195,8 +216,8 @@ class Superimposition:
                               + lamb*sum(x[u,v] for u,v in self.PI), GRB.MINIMIZE)
 
         pruning.optimize()
-
-        if pruning.Status == GRB.OPTIMAL:
+        if True:
+        # if pruning.Status == GRB.OPTIMAL:
             clones= pruning.getAttr('X', x)
             cell_assign = pruning.getAttr('X', phi)
             cell_mapping = {}
@@ -221,7 +242,7 @@ class Superimposition:
 
     
 
-    def solve(self, data, lamb=100, threshold=10, threads=1, timelimit=500):
+    def solve(self, data, K, lamb=0, threshold=10, threads=1, timelimit=100):
         self.threads = threads 
         self.timelimit =  timelimit
    
@@ -238,7 +259,7 @@ class Superimposition:
                 for i,c in enumerate(self.cells):
                     self.cst[c,u,v]  = tot[i] 
      
-        RT = self.solve_refinement()
+        RT = self.solve_refinement(K)
     
 
         self.rev_mapping = {val: key for key,val in self.mapping.items()}
@@ -249,5 +270,5 @@ class Superimposition:
             self.solve_pruning(RT, lamb, threshold)
             # RT.draw("test/refined_tree.png", self.rev_mapping)
 
-        return RT
+        return RT, self.rev_mapping
 
