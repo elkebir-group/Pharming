@@ -1,0 +1,3 @@
+[submodule "cnatrees"]
+	path = cnatrees
+	url = https://github.com/elkebir-group/cnatrees.git
