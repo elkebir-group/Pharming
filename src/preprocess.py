@@ -13,25 +13,25 @@ def data_prep(var_fname, copy_fname):
 
     # read_counts = pd.read_table(
     #     var_fname, sep="\t")
-    with open(var_fname, "r+") as file:
-        firstline =True
-        sparse = []
+    # with open(var_fname, "r+") as file:
+    #     firstline =True
+    #     sparse = []
    
-        for line in file:
-            if firstline:
-                firstline = False
-                continue   
-            else:
-               vals = line.strip().split("\t")
-               vals = [int(v) for v in vals]
-               sparse.append(vals)
+    #     for line in file:
+    #         if firstline:
+    #             firstline = False
+    #             continue   
+    #         else:
+    #            vals = line.strip().split("\t")
+    #            vals = [int(v) for v in vals]
+    #            sparse.append(vals)
         
-    read_counts  = pd.DataFrame(sparse, columns=col_names)
+    # read_counts  = pd.DataFrame(sparse, columns=col_names)
    
-    # read_counts = pd.read_table(
-    #     var_fname, header=None, names=col_names, skiprows=[0])
+    read_counts = pd.read_table(
+        var_fname, header=None, names=col_names, skiprows=[0])
     
-    # print(read_counts.head())
+    print(read_counts.head())
 
     copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
 
@@ -40,6 +40,7 @@ def data_prep(var_fname, copy_fname):
     # read_counts['chr_mutation'] = read_counts['mutation_label']
 
     cell_labels = np.sort(read_counts['cell_label'].unique())
+    print(cell_labels.shape)
     mut_labels = np.sort(read_counts['mutation_label'].unique())
 
 
@@ -47,10 +48,10 @@ def data_prep(var_fname, copy_fname):
     #create indexed series of mapping of cell index to label
     cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
     mut_lookup = pd.Series(data=mut_labels, name="mutation_label").rename_axis("mut")
-
+    
     read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
     read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='mutation_label', how='left')
-    print(read_counts.head())
+
     #in long format
     segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
     seg_labels = np.sort(segs['segment'].unique())
@@ -75,7 +76,7 @@ def data_prep(var_fname, copy_fname):
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
 
-def genotypes_prep(genotypes_fname, genotypes):
+def genotypes_prep(genotypes_fname, genotypes, mut_lookup):
     firstline = True
 
     with open(genotypes_fname, "r+") as file:
@@ -86,9 +87,11 @@ def genotypes_prep(genotypes_fname, genotypes):
             else:
                 row = line.strip().split("\t")
                 row = [int(r) for r in row]
-                m= row[4]
-                g= genotype(row[2], row[3], row[5], row[6])
-                genotypes[row[0]][row[1]][m] = g
+                if row[4] in mut_lookup.values:
+                    m = mut_lookup[mut_lookup == row[4]].index[0]
+       
+                    g= genotype(row[2], row[3], row[5], row[6])
+                    genotypes[row[0]][row[1]][m] = g
     
     
 
@@ -112,11 +115,11 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    # pth = "/scratch/data/leah/pharming/simulation_study/input/s10_n500_m1000_k50_c1_l5"
+    # pth = "/scratch/data/leah/pharming/simulation_study/input/s13_n1000_m5000_k25_c0.01_l7"
     # args = parser.parse_args(
     #     ["-f", f"{pth}/sparse.p0",
     #      "-c" ,f"{pth}/cells.p0",
-    #      "-g", f"{pth}/gentoypes.txt",
+    #      "-g", f"{pth}/genotypes.txt",
     #      "--phi", f"{pth}/cellAssignments.p0",
     #      "-t", f"{pth}/tree.txt",
     #      "-T", f"{pth}/ground_truth.pickle",
@@ -147,7 +150,7 @@ if __name__ == "__main__":
     for v in tree:
         for s in data.segments:
             genotypes[v][s] = {}
-    genotypes_prep(args.genotypes, genotypes)
+    genotypes_prep(args.genotypes, genotypes, data.mut_lookup)
     cell_mapping = {v: [] for v in tree}
     if args.phi is not None:
         cell_assignment = pd.read_csv(args.phi)
