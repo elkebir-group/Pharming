@@ -7,7 +7,7 @@ ruleorder:  simulate > preprocess
 
 rule all:
     input:
-        expand("obj_comp/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}_obj.csv",
+        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.txt",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -30,13 +30,13 @@ rule simulate:
         purity = 0.99,
         sample = 1,
         alpha= 0.001,
-        truncalSegs = 5,
+        truncalSegs = 2,
         out_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}"
     log:
         std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/run.log", 
         err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/err.log" 
     shell:
-        "nice clonesim/build/simulate -r -S {input} "
+        "clonesim/build/simulate -r -sc -S {input} "
         " -purity {params.purity} -minProp {params.cp_thresh} "
         "-alpha_fp {params.alpha} -kk {params.truncalSegs} "
         "-s {wildcards.s} -read_depth {wildcards.cov} -l {wildcards.mclust} "
@@ -60,7 +60,7 @@ rule preprocess:
         std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/preprocess.log", 
         err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/preprocess.err.log" 
     shell:
-        "nice python ../src/preprocess.py -f {input.sparse} -c {input.copy_profiles} "
+        "python ../src/preprocess.py -f {input.sparse} -c {input.copy_profiles} "
         "-t {input.tree} --phi {input.phi} -g {input.genotypes} "
         "-D {output.data} -T {output.ct} --draw {output.png} "
         " > {log.std} 2> {log.err} "

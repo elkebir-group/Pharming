@@ -75,6 +75,7 @@ class Pharming:
         cn_states =  self.data.cn_states_by_seg(g)
             # cn_states = [(1,1), (3,1), (4,1)]
         T_CNAs = self.get_cna_trees(cn_states)
+        
         best_like = np.NINF
 
         for T_CNA in T_CNAs:
@@ -150,8 +151,6 @@ class Pharming:
         if segments is None:
             segments = data.segments
       
-     
-    
         pool = multiprocessing.Pool(processes=num_cores)
 
         # Map the build_segment_tree function to the segments using the pool
@@ -165,25 +164,6 @@ class Pharming:
         # self.combine_segments()
         return self.SegTrees
 
-
-
-
-
-
-       
-
-
-
-
-
-
-
-
-
-
-# def my_function():
-#      _ = Pharming(args.seed).fit(dat, [0])
-#      return 
 
   
 
