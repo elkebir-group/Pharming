@@ -128,7 +128,7 @@ if __name__ == "__main__":
     res['clones'] = len(ct.clones())
     res['base_indiv'] = base1
     res['base_pooled'] = base2
-    print(res.head())
+    # print(res.head())
 
 
     if args.out_file is not None:
