@@ -1,0 +1,21 @@
+name: pharming
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - networkx
+  - pygraphviz
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-learn
+  - seaborn
+  - scipy
+  - jupyterlab
+  - snakemake
+  - pybind11
+  - python=3.9
+  - pip:
+    - gurobipy==10.0.2
+
+
