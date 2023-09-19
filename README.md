@@ -6,19 +6,21 @@ Recursively clone the repository to access submodules.
 git clone --recursive git@github.com:elkebir-group/Pharming.git
 ```
 
-Create environment: 
+### Create environment: 
 ```
 cd Pharming
 conda env create -f pharming.yml -n pharming
 conda activate pharming
 ```
 
-Install cnatrees submodule as a python package:
+### Install cnatrees submodule as a python package:
+modify the lemon and boost lib/include paths in `setup.py` as needed.
+*TODO: Fix harcoded paths for for lemon and boost*
 ```
 cd cnatrees
 python setup.py install
 ```
-*TODO: Fix harcoded paths for for lemon and boost*
+
 
 To test cnatrees:
 ```
