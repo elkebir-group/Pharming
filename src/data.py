@@ -9,6 +9,8 @@ N = number of cells
 M = number of SNVs
 G = number of segments
 '''
+#we expect observed VAFs to be np.NaN due to d_{ij} =0
+np.seterr(invalid='ignore')
 
 @dataclass
 class Data:
