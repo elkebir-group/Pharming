@@ -12,6 +12,7 @@ import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
 
 
+
 SET3_HEX = [
     '#8dd3c7',
     '#ffffb3',
@@ -33,7 +34,7 @@ def load(fname):
         ct = pickle.load(file)
     return ct 
 
-class ClonalTreeNew:
+class ClonalTree:
     """
     A class to model a clonal tree with associated SNV/CNA genotypes and cell clustering
 
@@ -386,7 +387,7 @@ class ClonalTreeNew:
 
     def node_snv_cost(self, v, cells, data):
 
- 
+        snvs = self.get_all_muts()
         latent_vafs = self.get_latent_vafs(v)
         lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
         snvs = list(latent_vafs.keys())
@@ -415,20 +416,23 @@ class ClonalTreeNew:
     
     def assign_cells(self, data):
 
-    
-        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in self.nodes ])
-        assignments = np.argmin(cell_scores, axis=1)
-        nodes = np.array(self.nodes)
+        nodes = np.array(self.tree)
+        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in nodes])
+        assignments = np.argmin(cell_scores, axis=0)
+        
         self.phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
-
-        self.cell_mapping = defaultdict(list)
-        for i, v in self.phi.items():
-            self.phi[v].append(i)
-        self.cell_mapping = dict(self.phi)
+        self.phi_to_cell_mapping(self.phi)
+        # self.cell_mapping = defaultdict(list)
+        # for i, v in self.phi.items():
+        #     self.cell_mapping[v].append(i)
+        # self.cell_mapping = dict(self.cell_mapping)
 
 
 
     def compute_costs(self, data, lamb=0):
+        if len(self.cell_mapping) ==0:
+            self.assign_cells(data)
+
         self.node_cost = {}
         self.cost = 0
         for v in self.tree:
@@ -443,6 +447,8 @@ class ClonalTreeNew:
         return self.cost 
     
     def compute_pooled_costs(self, data, lamb=0):
+        if len(self.cell_mapping) ==0:
+            self.assign_cells(data)
         self.node_cost = {}
         self.cost = 0
         for v in self.tree:
@@ -452,9 +458,9 @@ class ClonalTreeNew:
                 cell_scores = self.pooled_node_snv_cost(v, cells, data)
                 self.node_cost[v] = cell_scores.sum()
         
-        cost = sum([score for v, score in self.node_cost.items()])
+        self.cost = sum([score for v, score in self.node_cost.items()])
 
-        return cost 
+        return self.cost 
 
 
 
