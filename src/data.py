@@ -82,15 +82,6 @@ class Data:
         for i,j in filtered_series.index:
               cells_by_snvs[j].append(i)
 
-        # indices = np.argwhere(self.total > 0)
-
-
-        # for i,j in indices:
-        #     if j not in snvs:
-        #         continue 
-        #     print(f"cell{i}, snv: {j}  {self.total[i,j]}")
-          
-
         return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
     def compute_likelihood(self):
@@ -140,22 +131,19 @@ def load_from_files(read_counts_fname,copy_numbers_fname ):
 
 def load(read_counts,copy_numbers ):
 
-    # read_counts['chr_mutation'] = read_counts['chr'].astype('str') + "_" + \
-    #             read_counts['mutation_label'].astype(str)
-    read_counts['chr_mutation'] = read_counts['mutation_label']
 
     cell_labels = np.sort(read_counts['cell_label'].unique())
-    mut_labels = np.sort(read_counts['chr_mutation'].unique())
 
+    mut_labels = np.sort(read_counts['mutation_label'].unique())
 
 
     #create indexed series of mapping of cell index to label
     cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
-    mut_lookup = pd.Series(data=mut_labels, name="chr_mutation").rename_axis("mut")
+    mut_lookup = pd.Series(data=mut_labels, name="mutation_label").rename_axis("mut")
     
     read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
-    read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='chr_mutation', how='left')
-   
+    read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='mutation_label', how='left')
+
     #in long format
     segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
     seg_labels = np.sort(segs['segment'].unique())
@@ -175,12 +163,10 @@ def load(read_counts,copy_numbers ):
     var = read_counts["var"].unstack(level="mut", fill_value=0).to_numpy()
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
 
+
     dtype = np.dtype([('x', int), ('y', int)])
     copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
     copy_numbers= copy_numbers.unstack(level="seg_id").to_numpy(dtype)
-
-    # copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
-    # copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
 
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
