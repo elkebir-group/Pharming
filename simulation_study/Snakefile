@@ -7,7 +7,7 @@ ruleorder:  simulate > preprocess
 
 rule all:
     input:
-        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.txt",
+        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/data.pickle",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
