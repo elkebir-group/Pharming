@@ -9,18 +9,18 @@ N = number of cells
 M = number of SNVs
 G = number of segments
 '''
-#we expect observed VAFs to be np.NaN due to d_{ij} =0
+#we expect observed VAFs to be np.NaN due to d_{ij} =0 in ulc coverage data
 np.seterr(invalid='ignore')
 
 @dataclass
 class Data:
     var : np.array  # N x M matrix with the number of variant read counts
     total : np.array #  N x M matrix with the number of total read counts
-    copy_numbers: np.array# N x G matrix with the copy number profile of each cell in each segment
+    copy_numbers: np.array# N x G matrix with the copy number profile (x,y) of each cell in each segment
     snv_to_seg: dict  # a dictionary that maps each snv to seg
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
-    cell_lookup : pd.Series # an N length series mapping internal cell index to input cell label
-    mut_lookup : pd.Series #an M length series mapping interal SNV index to input SNV label
+    cell_lookup : pd.Series # an n length series mapping internal cell index to input cell label
+    mut_lookup : pd.Series #an m length series mapping interal SNV index to input SNV label
 
     def __post_init__(self):
         self.nseg = len(self.seg_to_snvs)
@@ -102,19 +102,22 @@ class Data:
         unique_values, inverse_indices, value_counts = np.unique(arr, return_inverse=True, return_counts=True)
         indices_per_value = [np.where(inverse_indices == i)[0] for i in range(len(unique_values))]
         for value,  indices in zip(unique_values, indices_per_value):
-            mapping[value] = list(indices)
+            state = tuple(value)
+            mapping[state] = list(indices)
         return mapping
     
     def cn_states_by_seg(self, seg):
-        cn_states = []
-        total_cn= np.unique(self.copy_numbers[:,seg])
-        for cn in total_cn:
-            cn_states.append((cn-1,1))
-        return cn_states
+        all_states = self.copy_numbers[:,seg]
+        all_states =[tuple(state) for state in all_states]
+    
+        # df = self.copy_numbers[self.copy_numbers["seg_id"]==seg]
+        # unique_rows =df.drop_duplicates(subset=['x', 'y'])
+        # cn_states = [(x, y) for x, y in zip(unique_rows['x'], unique_rows['y'])]
+
+        return set(all_states)
 
 
 
-            # print(f"{value}: count={count}, indices={list(indices)}")
 
 
 
@@ -171,8 +174,13 @@ def load(read_counts,copy_numbers ):
     read_counts= read_counts.set_index(["cell", "mut"])
     var = read_counts["var"].unstack(level="mut", fill_value=0).to_numpy()
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
+
+    dtype = np.dtype([('x', int), ('y', int)])
     copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
-    copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
+    copy_numbers= copy_numbers.unstack(level="seg_id").to_numpy(dtype)
+
+    # copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
+    # copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
 
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
@@ -186,9 +194,10 @@ def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
 
 
 def load_from_pickle(fname):
-    with open(fname, 'rb') as file:
-        data = pickle.load(file)
-    return data 
+    return pd.read_pickle(fname)
+    # with open(fname, 'rb') as file:
+    #     data = pickle.load(file)
+    # return data 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
