@@ -1,6 +1,6 @@
 import networkx as nx
 import numpy as np
-import itertools
+from itertools import chain, combinations
 # from copy import deepcopy
 from scipy.stats import binom, mode 
 from clonal_tree import ClonalTree
@@ -11,6 +11,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pygraphviz as pgv
 from superimposition import Superimposition
+from genotype import genotype, CNAgenotype
+
+#TODO: refactor genotype tree to be a clonal tree with 1 SNV,  cluster T_SNVs, change objective function
 
 DCF_THESHOLD=1e-9
 ANC = "ancestral"
@@ -68,7 +71,7 @@ Output:
 
 
 class FitSegmentTree:
-    def __init__(self, T_CNA, seed=1026, max_clusters=4, silhouette_min=0.6, silhouette_improve=0.2, verbose=False):
+    def __init__(self, T_CNA, seed=1026, max_clusters=4, silhouette_min=0.6, silhouette_improve=0.2, verbose=True):
         self.verbose =verbose 
         self.T_CNA = T_CNA
         self.max_clusters = max_clusters
@@ -99,7 +102,8 @@ class FitSegmentTree:
 
         self.T_Seg = T_Seg
         #dictionary with snv as keys and genotype trees as values
-        self.T_SNV_Clusters, self.T_SNVs = self.T_CNA.enumerate_snv_trees()  
+        self.T_SNVs = self.T_CNA.enumerate_genotype_trees()  
+        #TODO: self.T_SNV_Clusters
         if self.verbose:
             for tree in self.T_SNVs:
                     print(f"id:{tree.id}")
@@ -128,7 +132,7 @@ class FitSegmentTree:
         self.node_dcfs = {}
         self.genotypes = {n: self.T_CNA.tree.nodes[n]["genotype"] for n in self.T_CNA.tree}
 
-        # self.T_SNV_Clusters = self.group_snv_trees()
+        self.T_SNV_Clusters = self.group_snv_trees()
         # for s, tree in self.T_SNVs.items():
         #     if tree.id not in self.tree_to_snvs:
         #         self.tree_to_snvs[tree.id] = [s]
@@ -141,36 +145,83 @@ class FitSegmentTree:
         #     for s,k in zip(snvs, clusters):
         #         self.snvs_by_cluster[k].append(s)
    
- 
-        
+    def group_snv_trees(self):
+        tree_clusters = []
+        visited_trees = []
+
+  
+        clustered_trees = []
+        #traverse the copy number tree in preorder
+
+        #if check all unclustered trees to see if the split state is a descendant of the current cna state
+        # group the trees by desendant cna state of the split state
+        def powerset(iterable):
+            s = list(iterable)
+            return list(chain.from_iterable(combinations(s, r) for r in range(len(s)+1)))
+        for u in self.T_CNA.preorder():
+            added = 0
+            gparent = self.T_CNA.node_to_geno[u]
+            cna_geno = CNAgenotype(*gparent)
+            cna_desc_geno = powerset(self.T_CNA.node_desc_genotypes(u))
+            cna_desc_dict = {i: g for i,g in enumerate(cna_desc_geno)}
+            desc_lists = {i: [] for i in range(len(cna_desc_dict))}
+            for t in self.T_SNVs:
+                
+               
+
+                if t.id not in clustered_trees:
+                    par = genotype(*t.split_node_parent_geno).to_CNAgenotype()
+            
+
+                    if cna_geno == par:
+                        desc_geno_list = t.node_desc_genotypes(t.split_node)
+                        cna_desc_snv_geno = [(x,y) for x,y,_,_ in desc_geno_list]
+                        cna_desc_snv_geno.sort()
+                        for key,val in cna_desc_dict.items():
+                            val = list(val)
+                            val.sort()
+                            if val == cna_desc_snv_geno:
+                                added += 1
+                                desc_lists[key].append(t.id)
+                                clustered_trees.append(t.id)
+                                break
+            if added > 0:
+                for key, val in desc_lists.items():
+                    if len(val) > 0:
+                        tree_clusters.append(val)
+        return tree_clusters
+                    
+
+                    
+                            
+                            
+                        #look up descendent cna geno in t snv
 
 
 
-    
-        
+
+
+                  
 
 
 
 
+        #check if split state is a leaf, if it is check i
 
-
-    # def group_snv_trees(self):
-    #     tree_clusters = []
-    #     visited_trees = []
-    #     # leaves = [n for n in self.T_CNA if self.T_CNA.out_degree[n]==0]
-    #     # root = [n for n in self.T_CNA if self.T_CNA.in_degree[n]==0 ][0]
-    #     for u_geno,v_geno in self.T_CNA.get_edge_genotypes(cna=True):
-    #         trees = []
+        # leaves = [n for n in self.T_CNA if self.T_CNA.out_degree[n]==0]
+        # root = [n for n in self.T_CNA if self.T_CNA.in_degree[n]==0 ][0]
+        for u_geno,v_geno in self.T_CNA.edge_genotypes():
+            trees = []
          
-    #         for t in self.T_SNVs:
-    #             if t.occurs_within(u_geno, v_geno) and t.id not in visited_trees:
-    #                 trees.append(t.id)
-    #                 visited_trees.append(t.id)
-    #         tree_clusters.append(trees)
-    #     for t in self.T_SNVs:
-    #         if t.id not in visited_trees:
-    #             tree_clusters.append([t.id])
-    #     return tree_clusters
+            for t in self.T_SNVs:
+                if t.occurs_within(u_geno, v_geno) and t.id not in visited_trees:
+                    trees.append(t.id)
+                    visited_trees.append(t.id)
+            tree_clusters.append(trees)
+        for t in self.T_SNVs:
+            if t.id not in visited_trees:
+                tree_clusters.append([t.id])
+        return tree_clusters
             
 
 
@@ -246,7 +297,7 @@ class FitSegmentTree:
     def construct_overlap_graph(snvs, cells_by_snvs):
         G = nx.Graph()
         G.add_nodes_from(snvs)
-        for i,j in itertools.combinations(snvs, 2):
+        for i,j in combinations(snvs, 2):
             cell_overlap = np.intersect1d(cells_by_snvs[i], cells_by_snvs[j])
             if len(cell_overlap) > 0:
                 G.add_edge(i,j)
@@ -265,8 +316,8 @@ class FitSegmentTree:
     
                 n1, n2 =tree.find_split_pairs()
                 n, geno = n1 
-                x,y, _ = geno 
-                cn = x+y
+                g= genotype(*geno) 
+                cn = (g.x, g.y)
 
                 a = alt[cn][snv_index[s]]
                 d = total[cn][snv_index[s]]
@@ -295,16 +346,16 @@ class FitSegmentTree:
             max_score = -1
         
           
-            bin_width = 0.025  # Set your desired bin width here
-            sns.histplot(dcfs, bins=np.arange(min(dcfs), max(dcfs) + bin_width, bin_width), kde=True)
+            # bin_width = 0.025  # Set your desired bin width here
+            # sns.histplot(dcfs, bins=np.arange(min(dcfs), max(dcfs) + bin_width, bin_width), kde=True)
 
-            # sns.histplot(dcfs, kde=True)
+            # # sns.histplot(dcfs, kde=True)
 
-            plt.savefig("test/dcf_histogram.png", dpi=300)
-            plt.clf()
+            # plt.savefig("test/dcf_histogram.png", dpi=300)
+            # plt.clf()
             for k in range(1, self.max_clusters+1):
             
-                km = KMeans(k, random_state=self.rng)
+                km = KMeans(k, random_state=self.rng, n_init=50)
                 
                 clusters = km.fit_predict(dcfs)
                 intertia_dict[k] =km.inertia_
@@ -333,10 +384,10 @@ class FitSegmentTree:
                     best_k = k
                     clust_dcfs =cluster_centers
                     snv_clusters = clusters
-            for key, val in intertia_dict.items():
-                print(f"k:{key} intertia: {val}")
-            for key, val in sil_score_dict.items():
-                print(f"k:{key} sil_score: {val}")
+            # for key, val in intertia_dict.items():
+            #     print(f"k:{key} inertia: {val}")
+            # for key, val in sil_score_dict.items():
+            #     print(f"k:{key} sil_score: {val}")
             cluster_map = {j: [] for j in range(best_k)}
             for i,j in zip(indices_to_cluster, snv_clusters):
                 # s = 
@@ -357,33 +408,80 @@ class FitSegmentTree:
 
         return best_k, cluster_map, clust_dcfs
     
+    def get_genotypes(self, T,g):
+        '''
+        Given a segment tree, mut_mapping and corresponding genotype trees,
+        create the corresponding genotype dictionary
+        '''
+        Genotypes = {v: {g: {}} for v in T}
+
+        for v, snvs in self.mut_mapping.items():
+
+            desc_nodes = set(nx.dfs_preorder_nodes(T,v))
+            anc_incomp_nodes = set(T.nodes) - desc_nodes
+            for j in snvs:
+           
+                snv_tree = self.id_to_tree[self.T_SNV_dict[j]]
+                # print(snv_tree)
+                for a in anc_incomp_nodes:
+                    x,y = T.nodes[a]["genotype"]
+                    Genotypes[a][g][j] = genotype(x,y,0,0)
+                desc_genotypes = [genotype(*geno) for geno in snv_tree.desc_genotypes]
+                desc_genotypes.append(genotype(*snv_tree.split_geno))
+                for d in desc_nodes:
+                    x,y = T.nodes[d]["genotype"]
+                    if d == v:
+                        Genotypes[d][g][j] = genotype(*snv_tree.split_geno)
+                    else:
+                        # found = False
+                        for geno in desc_genotypes:
+                            if geno.x == x and geno.y == y:
+                                # found = True
+                                Genotypes[d][g][j] = geno
+                                break
+                        # if not found:
+                        #     Genotypes[d][g][j]= genotype(*snv_tree.split_geno)
+        return Genotypes
+
+
+
+                
+                
+
+
     def optimal_clonal_tree(self, data, g):
-        best_like = np.NINF
+        opt_cost = np.Inf
         # print(self)
-        for T_Seg in self.T_Seg_List:
+        for i, T_Seg in enumerate(self.T_Seg_List):
+            Genotypes = self.get_genotypes(T_Seg,g)
             # print(self.tree_to_string(T_Seg))
-            segtree = ClonalTree(g, T_Seg, self.mut_mapping, mutated_copies= self.mutated_copies)
-            loglike = segtree.compute_likelihood(data, g, self.alpha,attachment="map")
+            segtree = ClonalTree( T_Seg, Genotypes, key=g)
+            # print(segtree)
+            cost = segtree.compute_costs(data)
+            print(f"Candidate tree: {i} J={cost} J*={opt_cost}")
+            # loglike = segtree.compute_likelihood(data, g, self.alpha,attachment="map")
             # cell_mapping, loglike= self.map_assign_cells(segtree.tree, data,g)
             # segtree.set_cell_mapping(cell_mapping) 
             # loglike = segtree.compute_likelihood(data, g)
-            if loglike > best_like:
-                best_like = loglike
+            if cost < opt_cost:
+                opt_cost = cost
                 opt_segtree = segtree 
       
-        opt_segtree.loglikelihood = best_like
+    
         return opt_segtree
     
     def add_to_graph(self, tree_clust, k, snv_clusters, dcfs):
         tree = self.id_to_tree[tree_clust[0]]
         
         sorted_clusters = np.argsort(dcfs)[::-1]
+
+        #node labels in the graph correspond to snv clusters
         node_id = np.array(list(snv_clusters.keys()))
         node_id.sort()
         # node_id=node_id[::-1]
         node_order = node_id[sorted_clusters]
-        x,y, m = tree.split_node_parent_geno
-        u,v, m_start = tree.split_geno
+        x,y, _, _ = tree.split_node_parent_geno
+        u,v, _, _ = tree.split_geno
         root_id = self.T_CNA.node_mapping[(x,y)]
         if tree.is_leaf(tree.split_node):
             # x,y, m = tree.split_node_parent_geno
@@ -417,7 +515,7 @@ class FitSegmentTree:
                 self.G.add_edge(node_order[i-1], node_order[i])
             
             cna_node = list(tree.tree.neighbors(tree.split_node))[0]
-            c_x, c_y, c_m = tree.tree.nodes[cna_node]["genotype"]
+            c_x, c_y, _,_ = tree.tree.nodes[cna_node]["genotype"]
             for n,g in self.genotypes.items():
                 if g==(c_x, c_y):
                     end_node = n
@@ -445,42 +543,6 @@ class FitSegmentTree:
             #     self.G.
             #     self.add_mutation_edge(T_Seg, tree_clust[0], j, dcfs[j],n)
                 
-
-
-
-
-
-    
-    # def build_subtrees(self, tree_clust, k, snv_clusters,dcfs):
-    #     subtrees = []
-    #     tree = self.id_to_tree[tree_clust[0]]
-        
-    #     sorted_clusters = np.argsort(dcfs)[::-1]
-    #     node_id = np.array(list(snv_clusters.keys()))
-    #     node_id.sort()
-    #     # node_id=node_id[::-1]
-    #     node_order = node_id[sorted_clusters]
-    #     #if we only have one cluster or the mutation cluster on the path from the root to a 
-    #     #to a CNA event, we only have 1 possible subtree
-    #     if not tree.is_leaf(tree.split_node):
-            
-            
-    #         T_Seg = deepcopy(self.T_Seg)
-    #         for j,n in zip(sorted_clusters, node_order):
-    #             self.add_mutation_edge(T_Seg, tree_clust[0], j, dcfs[j],n)
-    #                         # self.print_verb(self)
-                        
-    #             # self.mut_mapping[n]= snv_clusters[n]
-    #         subtrees.append(T_Seg)
-        
-    #     #if mutation clusters between the root and a CNA event the ordering must be linear
-    #     else:
-    #             x,y, m = tree.split_node_parent_geno
-    #             root_id = self.T_CNA.node_mapping[(x,y)]
-    #             init_node_to_dcfs = {n: self.node_dcfs[n] for n in node_order }
-    #             subtrees = self.enumerate_subtrees(init_node_to_dcfs, root_id=root_id, geno=(x,y))
-    #     print(f"length of subtrees: {len(subtrees)}")
-    #     return subtrees
     
     def draw_graph(self, fname)-> None:
         G_pg = nx.nx_agraph.to_agraph(self.G)
@@ -713,7 +775,7 @@ class FitSegmentTree:
             self.mutated_copies[s]=tree.m_star
         # T_SNV_Clusters = [[0], [1,2], [3]]
         starting_cluster = max(self.T_CNA.tree.nodes) + 1
-        subtrees_list = []
+
         for tree_clust in self.T_SNV_Clusters:
             clust_snvs = [s for s in snvs if self.T_SNV_dict[s] in  tree_clust]
             if len(clust_snvs) ==0:
@@ -740,7 +802,7 @@ class FitSegmentTree:
             self.add_to_graph(tree_clust, k, snv_clusters, dcfs) 
             # subtrees_list.append(subtrees)
             starting_cluster += k
-        self.draw_graph(self.merge_graph, "test/ancestral_graph.png")
+        # self.draw_graph(self.merge_graph, "test/ancestral_graph.png")
         self.T_Seg_List = self.enumerate_segment_trees()
         print(f"Segment {segment}: Found {len(self.T_Seg_List)} candidate segment trees, using likelihood to prioritize....")
         # self.combine_subtrees(subtrees_list)
