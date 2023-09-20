@@ -1,4 +1,4 @@
-from clonal_tree_new import ClonalTreeNew
+from clonal_tree import ClonalTree
 from data import Data
 import argparse 
 import pandas as pd 
@@ -31,16 +31,18 @@ def data_prep(var_fname, copy_fname):
     read_counts = pd.read_table(
         var_fname, header=None, names=col_names, skiprows=[0])
     
-    print(read_counts.head())
+
 
     copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
 
- 
+
+    # unique_rows = copy_numbers.drop_duplicates(subset=['x', 'y'])
+    # print(unique_rows)
     
     # read_counts['chr_mutation'] = read_counts['mutation_label']
 
     cell_labels = np.sort(read_counts['cell_label'].unique())
-    print(cell_labels.shape)
+
     mut_labels = np.sort(read_counts['mutation_label'].unique())
 
 
@@ -70,8 +72,18 @@ def data_prep(var_fname, copy_fname):
     read_counts= read_counts.set_index(["cell", "mut"])
     var = read_counts["var"].unstack(level="mut", fill_value=0).to_numpy()
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
+
+
+# Convert the pivot table to a NumPy array with the specified dtype
+
+    # copy_number_array= np.array(pivot_table.to_records(index=True), dtype=dtype)
+    # print(copy_number_array)
+    # print(copy_numbers.head())
+
+    dtype = np.dtype([('x', int), ('y', int)])
     copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
-    copy_numbers= copy_numbers.unstack(level="seg_id", fill_value=0).to_numpy()
+    copy_numbers= copy_numbers.unstack(level="seg_id").to_numpy(dtype)
+
 
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
@@ -115,16 +127,17 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    # pth = "/scratch/data/leah/pharming/simulation_study/input/s13_n1000_m5000_k25_c0.01_l7"
+    # instance = "s12_n5000_m5000_k25_c0.1_l7"
+    # pth = f"/scratch/data/leah/pharming/simulation_study/input/{instance}"
     # args = parser.parse_args(
     #     ["-f", f"{pth}/sparse.p0",
     #      "-c" ,f"{pth}/cells.p0",
     #      "-g", f"{pth}/genotypes.txt",
     #      "--phi", f"{pth}/cellAssignments.p0",
     #      "-t", f"{pth}/tree.txt",
-    #      "-T", f"{pth}/ground_truth.pickle",
-    #      "-D", f"{pth}/pharming_data.pickle",
-    #      "--draw", f"{pth}/tree.png"
+    #      "-T", f"test/ground_truth.pickle",
+    #      "-D", f"{pth}/data.pickle",
+    #      "--draw", f"test/tree.png"
     #     ]
     # )
 
@@ -132,7 +145,12 @@ if __name__ == "__main__":
     print(data)
     if args.data is not None:
         data.save(args.data)
+    
 
+    # for s in data.segments:
+    #     print(f"{s}: {data.cn_states_by_seg(s)}")
+    #     cell_state_map = data.cells_by_cn(s)
+    
     tree = nx.DiGraph()
     with open(args.tree, "r+") as file:
         firstline =True
@@ -161,7 +179,7 @@ if __name__ == "__main__":
             cell_mapping[v].append(i)
 
 
-    ct = ClonalTreeNew(tree, genotypes, cell_mapping=cell_mapping )
+    ct = ClonalTree(tree, genotypes, cell_mapping=cell_mapping )
     missing_muts = set(data.muts) - set(ct.get_all_muts())
 
     if args.phi is not None:
