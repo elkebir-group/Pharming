@@ -5,6 +5,7 @@ from scipy.stats import binom
 from scipy.stats import beta
 from copy import deepcopy
 import itertools
+import cnatrees
 EPSILON = -10e10
 
 class BaseTree:
@@ -35,6 +36,14 @@ class BaseTree:
         
         return [self.tree.nodes[n]["genotype"] for n in self.tree]
     
+    def node_desc_genotypes(self, u):
+        geno_list = []
+        if self.tree.out_degree[u] > 0:
+   
+          
+            for v in self.tree.neighbors(u):
+                geno_list.append(self.node_to_geno[v])
+        return geno_list
 
     def edge_genotypes(self):
         edge_genos =[]
@@ -53,8 +62,13 @@ class BaseTree:
     
 
 class CNATree(BaseTree):
-    def __init__(self, tree, node_mapping, id):
+    '''
+    tree: nx.DiGraph
+    node_mapping: provides a mapping CNA gentoypes (key) and node ids 
+    '''
+    def __init__(self, tree, node_mapping, id=0):
         super().__init__(tree, node_mapping, id)
+    
     
     @staticmethod
     def assign_permutations(tree, node, current_genos):
@@ -85,7 +99,28 @@ class CNATree(BaseTree):
                 nm = {val: key for key,val in geno.items()}
                 node_mapping_list.append(nm)
             return node_mapping_list
-    
+    def enumerate_genotype_trees(self):
+        tcna = list(self.edge_genotypes())
+        T_SNVS = []
+        if len(tcna) > 0:
+            tsnvs = cnatrees.get_genotype_trees(tcna)
+         
+            for j,t in enumerate(tsnvs):
+                geno_tree = nx.DiGraph()
+                geno_tree.add_edges_from(t)
+                node_mapping = {}
+                for i,u in enumerate(geno_tree):
+                    node_mapping[u] = i
+                geno_tree = nx.relabel_nodes(geno_tree, node_mapping)
+                T_SNVS.append(SNVTree(geno_tree, node_mapping, id=j))
+        else:
+            geno_tree = nx.DiGraph()
+            geno_tree.add_edge(0, 1)
+            node_mapping = {}
+            node_mapping[(1,1,0,0)] = 0
+            node_mapping[(1,1,1,0)] = 1
+            T_SNVS.append(SNVTree(geno_tree, node_mapping,0))
+        return T_SNVS
 
     def enumerate_snv_trees(self):
         '''
@@ -103,9 +138,7 @@ class CNATree(BaseTree):
         genos = {val: key for key, val in node_mapping.items()}
         id = 0
         
-      
 
-                 
         num_nodes = len(self.tree)
         for node in self.tree:
             x,y,m = genos[node]
@@ -181,7 +214,8 @@ class SNVTree(BaseTree):
             u,v = split_pair
             self.split_node_parent, self.split_node_parent_geno = u
             self.split_node, self.split_geno = v
-            self.x_star,self.y_star,self.m_star  = self.split_geno
+            self.x_star,self.y_star,x_bar, y_bar = self.split_geno
+            self.m_star =x_bar + y_bar
             self.cn_star = self.x_star + self.y_star
             self.gamma = self.node_genotypes()
             self.desc_genotypes = self.get_desc_genotypes(self.split_node)
@@ -223,12 +257,13 @@ class SNVTree(BaseTree):
     def find_split_pairs(self):
         split_cand =[]
         for u, geno in self.tree.nodes("genotype"):
-            x, y, m = geno
+            x, y, x_bar, y_bar = geno
+            m = x_bar + y_bar
             if m==0 and geno not in split_cand:
                 split_cand.append((u,geno))
             else:
                 for v, v_geno in split_cand:
-                    v_x, v_y, v_m = v_geno
+                    v_x, v_y, v_x_bar, v_y_bar = v_geno
                     if x==v_x and y==v_y:
                         return (v,v_geno), (u, geno)
     
@@ -237,14 +272,14 @@ class SNVTree(BaseTree):
 
         visited = set()  # Set to keep track of visited nodes
         x,y = start_cna_geno
-        start_node = self.node_mapping[(x,y,0)]
+        start_node = self.node_mapping[(x,y,0,0)]
         stack = [start_node]  # Stack to store nodes to visit
         split_node_passed = False 
         while stack:
             node = stack.pop()  # Get the next node from the stack
             if node == self.split_node:
                 split_node_passed = True 
-            x,y,_ = self.tree.nodes[node]["genotype"]
+            x,y,_,_ = self.tree.nodes[node]["genotype"]
             if target_cna_geno == (x,y):
             
                 # Terminate the search when the target node is found
@@ -262,6 +297,8 @@ class SNVTree(BaseTree):
         return False 
 
 
+ 
+        
 
     def get_desc_genotypes(self, node=None, geno=None):
         if node is not None:
@@ -332,7 +369,7 @@ class SNVTree(BaseTree):
             return False 
     
     def get_nodes_by_cn(self, cn):
-        return [self.node_mapping[(x,y,m)] for x,y,m in self.node_mapping if x+y==cn]
+        return [self.node_mapping[(x,y,x_bar, y_bar)] for x,y,x_bar, y_bar in self.node_mapping if x==cn[0] and y==cn[1]]
 
 
     def likelihood(self, cells_by_cn, a,d, alpha):
@@ -361,8 +398,8 @@ class SNVTree(BaseTree):
             cand_nodes = self.get_nodes_by_cn(cn)
             like_list = []
             for n in cand_nodes:
-                x,y,m = self.tree.nodes[n]["genotype"]
-
+                x,y,x_bar, y_bar = self.tree.nodes[n]["genotype"]
+                m = x_bar + y_bar
                 vaf = m/(x+y)
                 adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
           
@@ -430,11 +467,11 @@ class SNVTree(BaseTree):
     
 
     def v_to_dcf(self,v,cn, trunc=True):
-        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+        cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,_,_ in self.gamma}
         if cn == self.cn_star:
             d = (1/self.m_star)*(v*cn -sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes]))
         else:
-            d = sum([cn_prop[x+y] for x,y,m in self.desc_genotypes if x+y==cn])
+            d = sum([cn_prop[x+y] for x,y,_, _ in self.desc_genotypes if x+y==cn])
         if trunc:
             if d < 0: return 0
             elif d > 1: return 1

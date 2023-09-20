@@ -1,12 +1,14 @@
 from genotype_tree import CNATree
 import networkx as nx 
 import numpy as np
+import ast
 from segment_tree_operations import FitSegmentTree
 from data import load_from_files, load_from_pickle
 import argparse
 from clonal_tree import ClonalTree
 import os 
 import itertools
+import cnatrees 
 import multiprocessing
 import cProfile
 from paction_segments import PactionSegments
@@ -15,8 +17,8 @@ from paction_segments import PactionSegments
        
         
 class Pharming:
-    def __init__(self,seed=1026, max_dcf_clusters=3, start_state=(1,1)) -> None:
-
+    def __init__(self,seed=1026, max_dcf_clusters=3, start_state=(1,1), verbose=True) -> None:
+        self.verbose =verbose 
         self.rng = np.random.default_rng(seed)
         self.max_clusters = max_dcf_clusters
        
@@ -51,72 +53,119 @@ class Pharming:
 
         return spanning_trees
     
-    def get_cna_trees(self, cn_states):
+    # def get_cna_trees(self, cn_states):
    
 
-        if self.start_state not in cn_states:
-                cn_states.append(self.start_state)
+    #     if self.start_state not in cn_states:
+    #             cn_states.append(self.start_state)
         
-        node_mapping = {self.start_state: 0}
+    #     node_mapping = {self.start_state: 0}
 
-        node_id =0
-        for cn in cn_states:
-            if cn != self.start_state:
-                node_id += 1
-                node_mapping[cn] = node_id
+    #     node_id =0
+    #     for cn in cn_states:
+    #         if cn != self.start_state:
+    #             node_id += 1
+    #             node_mapping[cn] = node_id
 
-        G = nx.complete_graph(len(cn_states))
-        cna_trees  =self.enumerate_cna_trees(G)
-        T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
-        return T_CNAs
+    #     G = nx.complete_graph(len(cn_states))
+    #     cna_trees  =self.enumerate_cna_trees(G)
+    #     T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
+    #     return T_CNAs
+
+    def enumerate_cna_trees(self, cn_states):
+   
+
+        trees = cnatrees.get_cna_trees(cn_states, *self.start_state )
+    
+        def convert_to_CNA_tree(tree):
+            node_mapping = {}
+            S = nx.DiGraph()
+            if len(tree) == 0:
+
+                S.add_node(self.start_state)
+            else:
+                S.add_edges_from(tree)
+            #TODO: remove node mapping from CNA tree and label nodes by CNA genotypes
+            for i,s in enumerate(S):
+                node_mapping[s] = i
+            S= nx.relabel_nodes(S, node_mapping)
+            return CNATree(S, node_mapping)
+
+        T_CNAS = [convert_to_CNA_tree(tree) for tree in trees]
+        if self.verbose:
+            for T in T_CNAS:
+                print(T)
+        return T_CNAS
+
+
+
+        # if self.start_state not in cn_states:
+        #         cn_states.append(self.start_state)
+        
+        # node_mapping = {self.start_state: 0}
+
+        # node_id =0
+        # for cn in cn_states:
+        #     if cn != self.start_state:
+        #         node_id += 1
+        #         node_mapping[cn] = node_id
+
+        # G = nx.complete_graph(len(cn_states))
+        # cna_trees  =self.enumerate_cna_trees(G)
+        # T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
+        # return T_CNAs
    
     def fit_segment(self,  g):
         BestSegTree = None
         cn_states =  self.data.cn_states_by_seg(g)
+        print(cn_states)
+        if (0,0) in cn_states:
+            return None
             # cn_states = [(1,1), (3,1), (4,1)]
-        T_CNAs = self.get_cna_trees(cn_states)
+        T_CNAs = self.enumerate_cna_trees(cn_states)
         
-        best_like = np.NINF
+        
+        J_star = np.NINF
 
         for T_CNA in T_CNAs:
                 seed = self.rng.integers(1e8, size=1)[0]
             # try:
                 SegTree =FitSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
 
-                if SegTree.loglikelihood > best_like:
-                    best_like = SegTree.loglikelihood
+                if SegTree.cost > J_star:
+                    J_star = SegTree.cost
                     BestSegTree= SegTree
             # except:
                 # print(f"Warning: Segment {g} failed")
                
-        
+        BestSegTree.draw(f"test/seg_tree{BestSegTree.key}.png")
         return BestSegTree
         
     
 
 
-    @staticmethod
-    def enumerate_T_CNA(T_SNVs):
-        id = 0    
-        T_CNAs = []
-        TCNA_to_TSNVs = {}
-        for t_snv in T_SNVs:
+    # @staticmethod
+    # def enumerate_T_CNA(T_SNVs):
+    #     id = 0    
+    #     T_CNAs = []
+    #     TCNA_to_TSNVs = {}
+    #     for t_snv in T_SNVs:
             
-            cand = t_snv.generate_CNA_tree()
-            inlist = False 
-            for ct in T_CNAs:
-                if ct.is_identical(cand):
+    #         cand = t_snv.generate_CNA_tree()
+    #         inlist = False 
+    #         for ct in T_CNAs:
+    #             if ct.is_identical(cand):
                 
-                    TCNA_to_TSNVs[ct.id].append(t_snv.id)
-                    inlist = True
-                    break
+    #                 TCNA_to_TSNVs[ct.id].append(t_snv.id)
+    #                 inlist = True
+    #                 break
                     
-            if not inlist:
-                cand.set_id(id)
-                T_CNAs.append(cand)
-                TCNA_to_TSNVs[id] = [t_snv.id]
-                id += 1
-        return T_CNAs, TCNA_to_TSNVs
+    #         if not inlist:
+    #             cand.set_id(id)
+    #             T_CNAs.append(cand)
+    #             TCNA_to_TSNVs[id] = [t_snv.id]
+    #             id += 1
+    #     return T_CNAs, TCNA_to_TSNVs
             
 
     def combine_segments(self):
@@ -141,7 +190,7 @@ class Pharming:
             #     self.SegTrees[g]= None
            
         
-        self.combine_segments()
+        # self.combine_segments()
         return self.SegTrees
     
     def fit_parallel(self, data, segments= None, num_cores=4):
@@ -180,7 +229,7 @@ if __name__ == "__main__":
                         help="input files of copy numbers by segment with unlabeled columns [segment cell totalCN]")
     parser.add_argument("-s" ,"--seed", required=False, type=int,
                         help="random number seed (default: 1026)")
-    parser.add_argument("-j" ,"--num-cores", required=False, type=int,
+    parser.add_argument("-j" ,"--num-cores", required=False, type=int,default=1,
                         help="Max number of cores to use for inferring segment trees")
 
     parser.add_argument("-g" ,"--segment", required=False, type=int,
@@ -196,8 +245,8 @@ if __name__ == "__main__":
     # parser.add_argument('-g', '--segment', type=int, required=False)
     # parser.add_argument("-d", "--data", type=str)
 
-    instance = "s12_n1000_m15000_c5_p0.05_l0"
-    tpath = f"/scratch/data/leah/pharming/sim_study/pharming/{instance}"
+    instance = "s12_n5000_m5000_k25_c0.1_l7"
+    tpath = f"/scratch/data/leah/pharming/simulation_study/input/{instance}"
 
     args = parser.parse_args([
         # "-f", f"{tpath}/input/read_counts.tsv",
@@ -205,8 +254,7 @@ if __name__ == "__main__":
         "-d", f"{tpath}/data.pickle",
         "-s", "12",
         # "--segment", "0",
-        "--out", f"/scratch/data/leah/pharming/test/SegTrees",
-        "-j", "1"
+        "--out", f"/scratch/data/leah/pharming/test",
         # "-L", f"{tpath}/like.csv"
         # "--state-trees", "/scratch/data/leah/pharming/src/test_state_trees.txt"
         # "--state-trees", "/scratch/data/leah/pharming/decifer/build/generatestatetrees"
@@ -227,8 +275,10 @@ if __name__ == "__main__":
     
     else:
         segments = [args.segment]
-    segments = [1,9]
+    # segments = [1,9,11]
     # segments = segments[:4]
+    for s in segments:
+        print(f"{s}: {dat.cn_states_by_seg(s)}")
     if args.num_cores > 1:
         SegTrees = Pharming(args.seed).fit_parallel(dat, segments,num_cores=args.num_cores)
     else:
