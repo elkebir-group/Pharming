@@ -1,7 +1,7 @@
 import gurobipy as gp 
 from gurobipy import GRB
 import numpy as np
-from clonal_tree_new import ClonalTreeNew
+from clonal_tree import ClonalTree
 import networkx as nx
 
 
@@ -174,10 +174,10 @@ class Superimposition:
             
         else:
             print(f"Warning, model is infeasible for K={K}")
-            return ClonalTreeNew(nx.DiGraph(), {}, cost=np.Inf)
+            return ClonalTree(nx.DiGraph(), {}, cost=np.Inf)
             # raise ValueError("Model is Infeasible!")
         
-        return ClonalTreeNew(self.T.copy(), genotypes, cell_mapping, cost=score)
+        return ClonalTree(self.T.copy(), genotypes, cell_mapping, cost=score)
            
 
     def solve_pruning(self, RT,lamb=100, threshold=10):

@@ -7,6 +7,7 @@ from copy import deepcopy
 import itertools
 import cnatrees
 EPSILON = -10e10
+from clonal_tree import ClonalTree
 
 class BaseTree:
     def __init__(self,  tree, node_mapping, id=0) -> None:

@@ -9,7 +9,7 @@ N = number of cells
 M = number of SNVs
 G = number of segments
 '''
-#we expect observed VAFs to be np.NaN due to d_{ij} =0 in ulc coverage data
+#we expect some observed VAFs to be np.NaN due to d_{ij} =0 in ulc coverage data
 np.seterr(invalid='ignore')
 
 @dataclass
@@ -181,9 +181,7 @@ def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
 
 def load_from_pickle(fname):
     return pd.read_pickle(fname)
-    # with open(fname, 'rb') as file:
-    #     data = pickle.load(file)
-    # return data 
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -205,15 +203,3 @@ if __name__ == "__main__":
     dat = load(args.file, args.profiles)
     if args.data is not None:
         dat.save(args.data)
-#     parser.add_argument("--segmentation_in",  type=str, 
-#         help="filename of segmentation  to output")
-#     args = parser.parse_args()
-
-#     cn_profile_df = pd.read_csv(args.profiles)
-# # fname = "/scratch/data/leah/phertilizer2.0/sim_study/input//s13_n1000_m15000_c5_p0.25_l0/copy_number_profiles.csv"
-# # fname ="/scratch/data/leah/phertilizer2.0/DLP/cn_profiles.csv"
-
-#     cn_profile_df = cn_profile_df.set_index(args.index)
-#     cn_prof = cn_profile_df.values
-#     segments = Segment().fit(cn_prof)
-#     segments.to_csv(args.segmentation)
