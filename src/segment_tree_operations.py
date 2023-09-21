@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import pygraphviz as pgv
 from superimposition import Superimposition
 from genotype import genotype, CNAgenotype
+from copy import deepcopy
 
-#TODO: refactor genotype tree to be a clonal tree with 1 SNV,  cluster T_SNVs, change objective function
 
 DCF_THESHOLD=1e-9
 ANC = "ancestral"
@@ -30,27 +30,14 @@ def time_it(func):
     return wrapper
 
 def likelihood_function( a,d,y,c, alpha):
-        
-        # if d ==0:
-        #     return 1e-10
-        
+                
         vaf = (1/c)*y
-        # elif y ==0:
-
-        #     val =  binom.pmf(a,d,alpha)
-        #     return val
-          
-        # else:
-            # vaf = np.arange(1, c)/c
-            # vaf  = 1/c
-            # vaf = 0.5
+  
         adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
         val = binom.logpmf(a,d,adjusted_vaf)
 
-        # val[np.isnan(val)] = np.log(1e-10)
-            # return binom.pmf(a,d,adjusted_vaf)
         return val.sum(axis=1)
-# like_func = np.vectorize(likelihood_function)
+
 
 
 
@@ -73,6 +60,7 @@ Output:
 class FitSegmentTree:
     def __init__(self, T_CNA, seed=1026, max_clusters=4, silhouette_min=0.6, silhouette_improve=0.2, verbose=True):
         self.verbose =verbose 
+    
         self.T_CNA = T_CNA
         self.max_clusters = max_clusters
         # self.max_clusters = 10
@@ -112,16 +100,10 @@ class FitSegmentTree:
         self.id_to_tree = {tree.id: tree for  tree in self.T_SNVs}
 
 
-        # for tree_clust in self.T_SNV_Clusters:
-        #     for id in tree_clust:
-        #         print(f"id:{id}")
-        #         print(self.id_to_tree[id])
-                    
-        self.likelihood= 0
 
         self.mut_mapping = {}
-        self.cell_mapping = None
-        self.mut_loss_mapping = {}
+
+
  
         self.alpha = 0.001
 
@@ -147,9 +129,7 @@ class FitSegmentTree:
    
     def group_snv_trees(self):
         tree_clusters = []
-        visited_trees = []
 
-  
         clustered_trees = []
         #traverse the copy number tree in preorder
 
@@ -167,15 +147,12 @@ class FitSegmentTree:
             desc_lists = {i: [] for i in range(len(cna_desc_dict))}
             for t in self.T_SNVs:
                 
-               
-
                 if t.id not in clustered_trees:
-                    par = genotype(*t.split_node_parent_geno).to_CNAgenotype()
-            
+                    par = t.split_node_parent_geno.to_CNAgenotype()
 
                     if cna_geno == par:
                         desc_geno_list = t.node_desc_genotypes(t.split_node)
-                        cna_desc_snv_geno = [(x,y) for x,y,_,_ in desc_geno_list]
+                        cna_desc_snv_geno = [g.to_CNAgenotype().to_tuple() for g in desc_geno_list]
                         cna_desc_snv_geno.sort()
                         for key,val in cna_desc_dict.items():
                             val = list(val)
@@ -198,31 +175,6 @@ class FitSegmentTree:
                         #look up descendent cna geno in t snv
 
 
-
-
-
-                  
-
-
-
-
-        #check if split state is a leaf, if it is check i
-
-        # leaves = [n for n in self.T_CNA if self.T_CNA.out_degree[n]==0]
-        # root = [n for n in self.T_CNA if self.T_CNA.in_degree[n]==0 ][0]
-        for u_geno,v_geno in self.T_CNA.edge_genotypes():
-            trees = []
-         
-            for t in self.T_SNVs:
-                if t.occurs_within(u_geno, v_geno) and t.id not in visited_trees:
-                    trees.append(t.id)
-                    visited_trees.append(t.id)
-            tree_clusters.append(trees)
-        for t in self.T_SNVs:
-            if t.id not in visited_trees:
-                tree_clusters.append([t.id])
-        return tree_clusters
-            
 
 
        
@@ -728,25 +680,47 @@ class FitSegmentTree:
     
 
                 
+    def assign_snvs_to_genotype_tree(self, lamb=1000):
+        snv_assignments = {}
+        snv_tree_cluster = {i: [] for i in range(len(self.T_SNV_Clusters))}
+        for s in self.snvs:
+            best_cost = np.inf
+            for k, tree_clust in enumerate(self.T_SNV_Clusters):
+                for tree_id in tree_clust:
+                    tree = self.id_to_tree[tree_id]
+                    cost = tree.compute_costs(self.data, lamb)
+                    if cost < best_cost:
+                        snv_tree =tree_id
+                        best_cost = cost 
+                        best_clust = k
+                    tree.clear_cell_mapping()
+            snv_assignments[s] = deepcopy(self.id_to_tree[snv_tree]).relabel_snv(s)
+            
+            snv_tree_cluster[best_clust].append(s)
+        return snv_assignments, snv_tree_cluster
+
 
       
     
-    def fit(self, data, segment):
+    def fit(self, data, segment, lamb=1e6):
 
         self.data = data
-        self.cells_by_cn = self.data.cells_by_cn(segment)
+
+
+        # self.cells_by_cn = self.data.cells_by_cn(segment)
         
         #not sure I need this, but let's keep it for now
-        snvs, alt, total = self.data.count_marginals(segment)
-        self.snvs = snvs 
-        snv_index = {s: i for i,s in enumerate(snvs)}
+        # snvs, alt, total = self.data.count_marginals(segment)
+        
+        self.snvs = self.data.seg_to_snvs(segment)
+        snv_index = {s: i for i,s in enumerate(self.snvs)}
              
         self.m = len(self.snvs)
         
-        cell_counts_by_snv, cells_by_snvs = self.data.count_cells_by_snv(segment)
+        # cell_counts_by_snv, cells_by_snvs = self.data.count_cells_by_snv(segment)
 
         
-        self.print_verb(f"Average cell count per SNV: {cell_counts_by_snv.mean()}")
+        # self.print_verb(f"Average cell count per SNV: {cell_counts_by_snv.mean()}")
         #construct overlap graph and check if it is fully connected
         # G = self.construct_overlap_graph(snvs, cells_by_snvs)
         # num_components = nx.number_connected_components(G)
@@ -755,41 +729,21 @@ class FitSegmentTree:
 
 
         #initialize T_SNV assignment 
-        self.T_SNV_dict = {}
+        self.T_SNV_dict, snv_tree_clust_assignments = self.assign_snvs_to_genotype_tree(lamb)
+     
 
-        for s in self.snvs:
-            max_like= np.NINF
-            # if s in [1703, 3158, 3526]:
-            #     print("check")
-            cells_by_cn = {cn: np.intersect1d(cells_by_snvs[s], self.cells_by_cn[cn]) for cn in self.cells_by_cn}
-      
-            for tree in self.T_SNVs:
-                # print(tree)
-                like, cell_assign =tree.likelihood(cells_by_cn, data.var[:,s], data.total[:,s],0.001)
-                if like > max_like:
-                    max_like = like
-                    self.T_SNV_dict[s] = tree.id
-        self.mutated_copies = {}
-        for s in self.snvs:
-            tree = self.id_to_tree[self.T_SNV_dict[s]]
-            self.mutated_copies[s]=tree.m_star
-        # T_SNV_Clusters = [[0], [1,2], [3]]
+  
         starting_cluster = max(self.T_CNA.tree.nodes) + 1
 
-        for tree_clust in self.T_SNV_Clusters:
-            clust_snvs = [s for s in snvs if self.T_SNV_dict[s] in  tree_clust]
+        for i,tree_clust in enumerate(self.T_SNV_Clusters):
+            clust_snvs = snv_tree_clust_assignments[i]
             if len(clust_snvs) ==0:
                 continue
        
             k, snv_clusters, dcfs = self.cluster_snvs(clust_snvs, snv_index, alt, total)
     
             self.print_verb(f"{tree_clust}: k={k}, dcfs={dcfs}")
-            # dcfs = dcfs.reshape(-1)
-            # sorted_clusters = np.argsort(dcfs)[::-1]
-            # sorted_dcfs = np.sort(dcfs)[::-1]
-            # for c in np.unique(snv_clusters):
-            #     self.print_verb(f"{c}: {snv_clusters[snv_clusters==c].shape[0]}")
-            #sort the 
+       
             tree = self.id_to_tree[tree_clust[0]] 
             # print(tree)
             
@@ -798,43 +752,12 @@ class FitSegmentTree:
             for j in range(k):
                 self.node_dcfs[j+ starting_cluster] = dcfs[j]
                 self.mut_mapping[j + starting_cluster]  = snv_clusters[j+starting_cluster]
-            # subtrees =self.build_subtrees(tree_clust, k, snv_clusters,dcfs) 
             self.add_to_graph(tree_clust, k, snv_clusters, dcfs) 
-            # subtrees_list.append(subtrees)
             starting_cluster += k
         # self.draw_graph(self.merge_graph, "test/ancestral_graph.png")
         self.T_Seg_List = self.enumerate_segment_trees()
         print(f"Segment {segment}: Found {len(self.T_Seg_List)} candidate segment trees, using likelihood to prioritize....")
-        # self.combine_subtrees(subtrees_list)
-             
 
-            # if k==1 or not tree.is_leaf(tree.split_node):
-            #     for j in sorted_clusters:
-            #         #modify in place
-            #         for T_Seg in self.T_Seg_List:
-                
-            #             node_id = self.add_mutation_edge(T_Seg, tree_clust[0], j, dcfs[j])
-            #             # self.print_verb(self)
-                    
-            #             self.mut_mapping[node_id]= snv_clusters[j]
-            # else:
-    
-               
-
-
-                    #
-
-                    
-
-                #we need to enumerate all possible subtrees
-                
-
-
-
-          
-                        
-
-        self.cell_mapping = {}
         self.total_cn_by_sample = {}
         for s in self.cells_by_cn:
         
@@ -1726,3 +1649,19 @@ class TreeMerge:
 
 
 
+  #check if split state is a leaf, if it is check i
+
+        # # leaves = [n for n in self.T_CNA if self.T_CNA.out_degree[n]==0]
+        # # root = [n for n in self.T_CNA if self.T_CNA.in_degree[n]==0 ][0]
+        # for u_geno,v_geno in self.T_CNA.edge_genotypes():
+        #     trees = []
+         
+        #     for t in self.T_SNVs:
+        #         if t.occurs_within(u_geno, v_geno) and t.id not in visited_trees:
+        #             trees.append(t.id)
+        #             visited_trees.append(t.id)
+        #     tree_clusters.append(trees)
+        # for t in self.T_SNVs:
+        #     if t.id not in visited_trees:
+        #         tree_clusters.append([t.id])
+        # return tree_clusters

@@ -1,91 +1,11 @@
 from clonal_tree import ClonalTree
-from data import Data
+from data import Data, load_from_files
 import argparse 
 import pandas as pd 
 import numpy as np 
 import networkx as nx
 from genotype import genotype
 
-def data_prep(var_fname, copy_fname):
-    col_names = ['segment', 'mutation_label', 'cell_label','var', 'total']
-
-
-
-    # read_counts = pd.read_table(
-    #     var_fname, sep="\t")
-    # with open(var_fname, "r+") as file:
-    #     firstline =True
-    #     sparse = []
-   
-    #     for line in file:
-    #         if firstline:
-    #             firstline = False
-    #             continue   
-    #         else:
-    #            vals = line.strip().split("\t")
-    #            vals = [int(v) for v in vals]
-    #            sparse.append(vals)
-        
-    # read_counts  = pd.DataFrame(sparse, columns=col_names)
-   
-    read_counts = pd.read_table(
-        var_fname, header=None, names=col_names, skiprows=[0])
-    
-
-
-    copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
-
-
-    # unique_rows = copy_numbers.drop_duplicates(subset=['x', 'y'])
-    # print(unique_rows)
-    
-    # read_counts['chr_mutation'] = read_counts['mutation_label']
-
-    cell_labels = np.sort(read_counts['cell_label'].unique())
-
-    mut_labels = np.sort(read_counts['mutation_label'].unique())
-
-
-
-    #create indexed series of mapping of cell index to label
-    cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
-    mut_lookup = pd.Series(data=mut_labels, name="mutation_label").rename_axis("mut")
-    
-    read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
-    read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='mutation_label', how='left')
-
-    #in long format
-    segs = copy_numbers.loc[:, ["segment"]].drop_duplicates()
-    seg_labels = np.sort(segs['segment'].unique())
-    seg_lookup = pd.Series(data=seg_labels, name="segment").rename_axis("seg_id")
-
-    copy_numbers = pd.merge(copy_numbers, cell_lookup.reset_index(), on='cell_label', how='left').drop("cell_label", axis=1)
-    copy_numbers= pd.merge(copy_numbers, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
-
-
-    read_counts = pd.merge(read_counts, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
-    seg_to_mut_mapping = read_counts.loc[:, ["seg_id", "mut"]].drop_duplicates()
-    snv_to_seg = seg_to_mut_mapping.set_index("mut")["seg_id"].to_dict()
-    seg_to_snvs =  {value: [k for k, v in snv_to_seg.items() if v == value] for value in set(snv_to_seg.values())}
-
-
-    read_counts= read_counts.set_index(["cell", "mut"])
-    var = read_counts["var"].unstack(level="mut", fill_value=0).to_numpy()
-    total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
-
-
-# Convert the pivot table to a NumPy array with the specified dtype
-
-    # copy_number_array= np.array(pivot_table.to_records(index=True), dtype=dtype)
-    # print(copy_number_array)
-    # print(copy_numbers.head())
-
-    dtype = np.dtype([('x', int), ('y', int)])
-    copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
-    copy_numbers= copy_numbers.unstack(level="seg_id").to_numpy(dtype)
-
-
-    return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
 
 def genotypes_prep(genotypes_fname, genotypes, mut_lookup):
@@ -126,22 +46,22 @@ if __name__ == "__main__":
         help="png or pdf of output tree")
 
 
-    args = parser.parse_args()
-    # instance = "s12_n5000_m5000_k25_c0.1_l7"
-    # pth = f"/scratch/data/leah/pharming/simulation_study/input/{instance}"
-    # args = parser.parse_args(
-    #     ["-f", f"{pth}/sparse.p0",
-    #      "-c" ,f"{pth}/cells.p0",
-    #      "-g", f"{pth}/genotypes.txt",
-    #      "--phi", f"{pth}/cellAssignments.p0",
-    #      "-t", f"{pth}/tree.txt",
-    #      "-T", f"test/ground_truth.pickle",
-    #      "-D", f"{pth}/data.pickle",
-    #      "--draw", f"test/tree.png"
-    #     ]
-    # )
+    # args = parser.parse_args()
+    instance = "s12_n5000_m5000_k25_c0.1_l7"
+    pth = f"/scratch/data/leah/pharming/simulation_study/input/{instance}"
+    args = parser.parse_args(
+        ["-f", f"{pth}/sparse.p0",
+         "-c" ,f"{pth}/cells.p0",
+         "-g", f"{pth}/genotypes.txt",
+         "--phi", f"{pth}/cellAssignments.p0",
+         "-t", f"{pth}/tree.txt",
+         "-T", f"test/ground_truth.pickle",
+         "-D", f"{pth}/data.pickle",
+         "--draw", f"test/tree.png"
+        ]
+    )
 
-    data = data_prep(args.file, args.profiles)
+    data = load_from_files(args.file, args.profiles)
     print(data)
     if args.data is not None:
         data.save(args.data)
@@ -184,8 +104,8 @@ if __name__ == "__main__":
     missing_muts = set(data.muts) - set(ct.get_all_muts())
 
     if args.phi is not None:
-        cost2 = ct.compute_pooled_costs(data)
-        costs = ct.compute_costs(data)
+        cost2 = ct.compute_pooled_costs(data, lamb=100)
+        costs = ct.compute_costs(data, lamb=100)
         print(f"cost 1: {costs} cost 2: {cost2}")
         
 

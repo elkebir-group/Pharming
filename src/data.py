@@ -16,7 +16,10 @@ np.seterr(invalid='ignore')
 class Data:
     var : np.array  # N x M matrix with the number of variant read counts
     total : np.array #  N x M matrix with the number of total read counts
-    copy_numbers: np.array# N x G matrix with the copy number profile (x,y) of each cell in each segment
+    copy_numbers: pd.DataFrame# N rows with columns x, y  and MultIndex (seg_id,cell)  where (x,y) is the copy number state of each cell in each segment
+    #use copy_numbers.loc[seg_id] to subset rows based on segment
+    #use copy_numbers.xs(cell, level='cell') to subset rows based on cell
+    #use copy_numbers.loc[(seg_id, cell)] to access tuple (x,y)
     snv_to_seg: dict  # a dictionary that maps each snv to seg
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
     cell_lookup : pd.Series # an n length series mapping internal cell index to input cell label
@@ -84,28 +87,33 @@ class Data:
 
         return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
-    def compute_likelihood(self):
-        pass 
+    def copy_profiles_by_seg(self, segment, cells=None):
+        '''
+        returns a pandas dataframe  with cols ['x','y' ]subsetted to specified segment and cell set
+        '''
+        
+        if cells is None:
+            return self.copy_numbers.loc[segment]
+        else:
+            return self.copy_numbers.loc[(segment, cells), :]
+    
 
-    def cells_by_cn(self, seg):
-        arr= self.copy_numbers[:,seg]
-        mapping = {}
-        unique_values, inverse_indices, value_counts = np.unique(arr, return_inverse=True, return_counts=True)
-        indices_per_value = [np.where(inverse_indices == i)[0] for i in range(len(unique_values))]
-        for value,  indices in zip(unique_values, indices_per_value):
-            state = tuple(value)
-            mapping[state] = list(indices)
-        return mapping
+    # def cells_by_cn(self, seg):
+    #     arr= self.copy_numbers[:,seg]
+    #     mapping = {}
+    #     unique_values, inverse_indices, value_counts = np.unique(arr, return_inverse=True, return_counts=True)
+    #     indices_per_value = [np.where(inverse_indices == i)[0] for i in range(len(unique_values))]
+    #     for value,  indices in zip(unique_values, indices_per_value):
+    #         state = tuple(value)
+    #         mapping[state] = list(indices)
+    #     return mapping
     
     def cn_states_by_seg(self, seg):
-        all_states = self.copy_numbers[:,seg]
-        all_states =[tuple(state) for state in all_states]
-    
-        # df = self.copy_numbers[self.copy_numbers["seg_id"]==seg]
-        # unique_rows =df.drop_duplicates(subset=['x', 'y'])
-        # cn_states = [(x, y) for x, y in zip(unique_rows['x'], unique_rows['y'])]
 
-        return set(all_states)
+        df = self.copy_numbers.loc[seg]
+        cn_states = set([(x, y) for x, y in zip(df['x'], df['y'])])
+
+        return cn_states 
 
 
 
@@ -116,18 +124,17 @@ class Data:
         with open(fname, 'wb') as file:
             pickle.dump(self, file)
 
-def load_from_files(read_counts_fname,copy_numbers_fname ):
-        col_names = ['chr', 'segment', 'mutation_label', 'cell_label','var', 'total']
+def load_from_files(var_fname, copy_fname ):
+    col_names = ['segment', 'mutation_label', 'cell_label','var', 'total']
 
-
-    
-        read_counts = pd.read_table(
-            read_counts_fname, sep="\t", header=None, names=col_names, skiprows=[0])
-        
+   
+    read_counts = pd.read_table(
+        var_fname, header=None, names=col_names, skiprows=[0])
     
 
-        copy_numbers = pd.read_table(copy_numbers_fname, names=["segment", "cell_label", "cn"])
-        return load(read_counts, copy_numbers)
+
+    copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
+    return load(read_counts, copy_numbers)
 
 def load(read_counts,copy_numbers ):
 
@@ -135,6 +142,7 @@ def load(read_counts,copy_numbers ):
     cell_labels = np.sort(read_counts['cell_label'].unique())
 
     mut_labels = np.sort(read_counts['mutation_label'].unique())
+
 
 
     #create indexed series of mapping of cell index to label
@@ -152,6 +160,7 @@ def load(read_counts,copy_numbers ):
     copy_numbers = pd.merge(copy_numbers, cell_lookup.reset_index(), on='cell_label', how='left').drop("cell_label", axis=1)
     copy_numbers= pd.merge(copy_numbers, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
 
+    copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
 
     read_counts = pd.merge(read_counts, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
     seg_to_mut_mapping = read_counts.loc[:, ["seg_id", "mut"]].drop_duplicates()
@@ -164,9 +173,7 @@ def load(read_counts,copy_numbers ):
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
 
 
-    dtype = np.dtype([('x', int), ('y', int)])
-    copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
-    copy_numbers= copy_numbers.unstack(level="seg_id").to_numpy(dtype)
+
 
     return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 

@@ -48,21 +48,23 @@ class ClonalTree:
     tree : networkx DiGraph
         the clonal tree graph
     
-    genotypes: dict of dict of dict of genotype datastructs
+    genotypes: dict (node ids as keys) of dict (snv index as keys) of genotype datastructs
         genotypes[v][s][m]
     
-    cell_mapping : dict
-        a dictionary with node ids as keys and np.arrays with the indices of cells attached to that node
+    cell_mapping : dict of lists
+        a dictionary with node ids as keys and np.arrays with lists of cells attached to that node
     
-    mut_mapping : dict
-        a dictionary with node ids as keys and np.arrays with the indices of gained SNVs on the incoming edge
+    mut_mapping : dict of lists
+        a dictionary with node ids as keys and lists with the indices of gained SNVs on the incoming edge
     
     
-    mut_loss_mapping : dict 
-        a dictionary with node ids as keys and np.arrays with the indices of lost SNVs assigned to the 
+    mut_loss_mapping : dict of lists 
+        a dictionary with node ids as keys and lists with the indices of lost SNVs assigned to the 
         incoming edge of that node
 
-    score : float
+    cost : float current cost of cell assignment
+    
+    root : int id of root node 
     
     
 
@@ -105,7 +107,6 @@ class ClonalTree:
 
 
 
-    Genotypes[v][s][m] = genotype
     """
 
     def __init__(self, tree, genotypes: dict, cell_mapping:dict=None, key=0, cost=np.Inf ):
@@ -121,27 +122,14 @@ class ClonalTree:
         else:    
             self.cell_mapping = cell_mapping
 
-     
-        self.mut2seg = {}
-        for v in self.genotypes:
-            for s in self.genotypes[v]:
-                for m in self.genotypes[v][s]:
-                    self.mut2seg[m]=s
-        # self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
-        
-        self.seg2muts = {}
-        for m,s in self.mut2seg.items():
-            if s in self.seg2muts:
-                self.seg2muts[s].append(m)
-            else:
-                self.seg2muts[s] = [m]
-
 
         self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
         self.psi = self.get_psi()
         self.phi = self.get_phi()
         self.key = key
         self.cost = cost
+
+        self.snv_cost_func = self.node_snv_cost
 
     
     def __str__(self) -> str:
@@ -186,6 +174,9 @@ class ClonalTree:
         mystr += "\n"
         mystr += f"\nJ(T,phi): {self.cost}\n"
         return mystr
+    
+    def preorder(self):
+        return list(nx.dfs_preorder_nodes(self.tree, source=self.root))
     
     def find_root(self):
         for n in self.tree:
@@ -241,6 +232,9 @@ class ClonalTree:
     def clones(self):
         return list(self.tree.nodes)
     
+    def is_leaf(self,node):
+        return self.tree.out_degree[node] ==0
+    
     def get_phi(self):
          self.phi = {i : k  for k, cells in self.cell_mapping.items() for i in cells}
          return self.phi
@@ -263,6 +257,7 @@ class ClonalTree:
             return self.mut_mapping[node]
     
 
+    
     def get_cells(self,node):
         if node not in self.cell_mapping:
             return []
@@ -301,6 +296,10 @@ class ClonalTree:
         self.phi = self.get_phi()
         # print("Warning, cost is not automatically updated, ensure cost is manually set.")
 
+    def clear_cell_mapping(self):
+        self.phi = {}
+        self.cell_mapping = {}
+        self.cost = np.Inf
 
     def prune_tree(self, node_to_remove):
         parent = next(self.tree.predecessors(node_to_remove))
@@ -321,17 +320,8 @@ class ClonalTree:
         if node_to_remove in self.genotypes:
             del self.genotypes[node_to_remove]
 
-    def get_latent_vafs(self, v, s=None):
-        vafs = {}
-        if s is None:
-            segs = list(self.seg2muts.keys())
-        else:
-            segs  = [s]
-        for s in segs:
-            for m in self.seg2muts[s]:
-                vafs[m] =self.genotypes[v][s][m].vaf
-                
-        
+    def get_latent_vafs(self, v):
+        vafs = {m: geno.vaf for m,geno in self.genotypes[v].items()}                
         return vafs 
 
     def get_mut_mapping(self):
@@ -341,8 +331,7 @@ class ClonalTree:
         mut_mapping = {v: [] for v in self.tree}
         mut_loss_mapping = {v: [] for v in self.tree}
         for v in self.tree:
-            for s in self.seg2muts:
-                for m, geno in self.genotypes[v][s].items():
+                for m, geno in self.genotypes[v].items():
                     if m not in muts:
                         muts.append(m)
                     # if m in [523, 792, 451,831]:
@@ -354,7 +343,8 @@ class ClonalTree:
                         mut_loss_mapping[v].append(m)
                         lost.append(m)
         missing= set(muts)- (set(gained).union(set(lost)))
-        # print(missing)
+        if len(missing) > 0:
+            print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
         for m in missing:
             mut_mapping[self.root].append(m)
         return mut_mapping, mut_loss_mapping 
@@ -384,6 +374,24 @@ class ClonalTree:
 
         return present_muts
     
+  
+    def node_cna_cost(self, v, cells, data):
+        
+        seg_scores = []
+        for s in data.segments:
+            snvs = data.seg_to_snvs[s]
+            cna_genos =[self.genotypes[v][j].to_CNAgenotype().to_tuple() for j in snvs]
+            assert all(t == cna_genos[0] for t in cna_genos)
+            x, y = cna_genos[0]
+            obs_cna_genotype = data.copy_profiles_by_seg(s, cells=cells)
+            x_diff = np.abs(obs_cna_genotype['x'].to_numpy() -x)
+            y_diff = np.abs(obs_cna_genotype['y'].to_numpy() -y)
+            cell_seg_scores =   x_diff + y_diff
+            if np.any(cell_seg_scores > 0):
+                print("error") 
+            seg_scores.append(cell_seg_scores)
+        cell_scores = np.vstack(seg_scores).sum(axis=0)
+        return cell_scores
 
     def node_snv_cost(self, v, cells, data):
 
@@ -414,11 +422,14 @@ class ClonalTree:
         return cell_scores
 
     
-    def assign_cells(self, data):
+    def assign_cells(self, data, lamb=0):
 
         nodes = np.array(self.tree)
-        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in nodes])
+        cell_snv_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in nodes])
+        cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data) for v in nodes])
+        cell_scores = cell_snv_scores + lamb*cell_cna_scores
         assignments = np.argmin(cell_scores, axis=0)
+        
         
         self.phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
         self.phi_to_cell_mapping(self.phi)
@@ -431,7 +442,7 @@ class ClonalTree:
 
     def compute_costs(self, data, lamb=0):
         if len(self.cell_mapping) ==0:
-            self.assign_cells(data)
+            self.assign_cells(data, lamb)
 
         self.node_cost = {}
         self.cost = 0
@@ -439,30 +450,22 @@ class ClonalTree:
                 cells = self.cell_mapping[v]
                 if len(cells) ==0:
                     continue
-                cell_scores = self.node_snv_cost(v, cells, data)
-                self.node_cost[v] = cell_scores.sum()
+                self.node_cost[v]= self.snv_cost_func(v, cells, data).sum() + \
+                               +  lamb*self.node_cna_cost(v, cells,data).sum()
+             
         
         self.cost = sum([score for _, score in self.node_cost.items()])
 
         return self.cost 
     
     def compute_pooled_costs(self, data, lamb=0):
-        if len(self.cell_mapping) ==0:
-            self.assign_cells(data)
-        self.node_cost = {}
-        self.cost = 0
-        for v in self.tree:
-                cells = self.cell_mapping[v]
-                if len(cells) ==0:
-                    continue
-                cell_scores = self.pooled_node_snv_cost(v, cells, data)
-                self.node_cost[v] = cell_scores.sum()
-        
-        self.cost = sum([score for v, score in self.node_cost.items()])
+        self.snv_cost_func = self.pooled_node_snv_cost
+        cost = self.compute_costs(data, lamb)
+        self.snv_cost_func = self.node_snv_cost
 
-        return self.cost 
+        return cost 
 
-
+    
 
 
    #-------------------------- Save Methods ---------------------------------------#
@@ -898,10 +901,19 @@ class ClonalTree:
 
 
 
-
-    
-
-    
+        # self.mut2seg = {}
+        # for v in self.genotypes:
+        #     for s in self.genotypes[v]:
+        #         for m in self.genotypes[v][s]:
+        #             self.mut2seg[m]=s
+        # self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
+        
+        # self.seg2muts = {}
+        # for m,s in self.mut2seg.items():
+        #     if s in self.seg2muts:
+        #         self.seg2muts[s].append(m)
+        #     else:
+        #         self.seg2muts[s] = [m]
 
     
 

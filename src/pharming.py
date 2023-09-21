@@ -1,4 +1,4 @@
-from genotype_tree import CNATree
+from cna_tree import CNATree
 import networkx as nx 
 import numpy as np
 import ast
@@ -26,58 +26,13 @@ class Pharming:
     
         self.start_state = start_state
 
-    @staticmethod
-    def enumerate_cna_trees(graph):
-        spanning_trees = []
-        nodes = graph.nodes()
-
-        if len(nodes) ==1:
-            G = nx.DiGraph()
-            G.add_nodes_from(graph.nodes)
-
-            return [G]
-
-        # Iterate over all possible subsets of edges
-        for edges in itertools.combinations(graph.edges(), len(nodes) - 1):
-            # Create a new graph with the selected edges
-            spanning_tree = nx.Graph(list(edges))
-
-            # Check if the new graph is a valid spanning tree
-            if nx.is_tree(spanning_tree):
-                spanning_tree.to_directed()
-                # if spanning_tree.in_deg
-                digraph = nx.DiGraph()
-                for e in spanning_tree.edges:
-                    digraph.add_edge(*e)
-                spanning_trees.append(digraph)
-
-        return spanning_trees
-    
-    # def get_cna_trees(self, cn_states):
-   
-
-    #     if self.start_state not in cn_states:
-    #             cn_states.append(self.start_state)
-        
-    #     node_mapping = {self.start_state: 0}
-
-    #     node_id =0
-    #     for cn in cn_states:
-    #         if cn != self.start_state:
-    #             node_id += 1
-    #             node_mapping[cn] = node_id
-
-    #     G = nx.complete_graph(len(cn_states))
-    #     cna_trees  =self.enumerate_cna_trees(G)
-    #     T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
-    #     return T_CNAs
 
     def enumerate_cna_trees(self, cn_states):
    
 
         trees = cnatrees.get_cna_trees(cn_states, *self.start_state )
     
-        def convert_to_CNA_tree(tree):
+        def convert_to_CNAtree(tree):
             node_mapping = {}
             S = nx.DiGraph()
             if len(tree) == 0:
@@ -91,29 +46,13 @@ class Pharming:
             S= nx.relabel_nodes(S, node_mapping)
             return CNATree(S, node_mapping)
 
-        T_CNAS = [convert_to_CNA_tree(tree) for tree in trees]
+        T_CNAS = [convert_to_CNAtree(tree) for tree in trees]
         if self.verbose:
             for T in T_CNAS:
                 print(T)
         return T_CNAS
 
 
-
-        # if self.start_state not in cn_states:
-        #         cn_states.append(self.start_state)
-        
-        # node_mapping = {self.start_state: 0}
-
-        # node_id =0
-        # for cn in cn_states:
-        #     if cn != self.start_state:
-        #         node_id += 1
-        #         node_mapping[cn] = node_id
-
-        # G = nx.complete_graph(len(cn_states))
-        # cna_trees  =self.enumerate_cna_trees(G)
-        # T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
-        # return T_CNAs
    
     def fit_segment(self,  g):
         BestSegTree = None
@@ -121,7 +60,7 @@ class Pharming:
         print(cn_states)
         if (0,0) in cn_states:
             return None
-            # cn_states = [(1,1), (3,1), (4,1)]
+
         T_CNAs = self.enumerate_cna_trees(cn_states)
         
         
@@ -130,7 +69,7 @@ class Pharming:
         for T_CNA in T_CNAs:
                 seed = self.rng.integers(1e8, size=1)[0]
             # try:
-                SegTree =FitSegmentTree(T_CNA,seed, max_clusters=self.max_clusters).fit(self.data, g)
+                SegTree =FitSegmentTree(T_CNA, seed, max_clusters=self.max_clusters).fit(self.data, g)
 
                 if SegTree.cost > J_star:
                     J_star = SegTree.cost
@@ -141,35 +80,11 @@ class Pharming:
         BestSegTree.draw(f"test/seg_tree{BestSegTree.key}.png")
         return BestSegTree
         
-    
-
-
-    # @staticmethod
-    # def enumerate_T_CNA(T_SNVs):
-    #     id = 0    
-    #     T_CNAs = []
-    #     TCNA_to_TSNVs = {}
-    #     for t_snv in T_SNVs:
-            
-    #         cand = t_snv.generate_CNA_tree()
-    #         inlist = False 
-    #         for ct in T_CNAs:
-    #             if ct.is_identical(cand):
-                
-    #                 TCNA_to_TSNVs[ct.id].append(t_snv.id)
-    #                 inlist = True
-    #                 break
-                    
-    #         if not inlist:
-    #             cand.set_id(id)
-    #             T_CNAs.append(cand)
-    #             TCNA_to_TSNVs[id] = [t_snv.id]
-    #             id += 1
-    #     return T_CNAs, TCNA_to_TSNVs
-            
+ 
 
     def combine_segments(self):
-        combined_ct = PactionSegments().fit(self.SegTrees)
+        pass 
+        # combined_ct = PactionSegments().fit(self.SegTrees)
 
     def fit(self, data, segments= None):
         
@@ -285,6 +200,7 @@ if __name__ == "__main__":
         SegTrees = Pharming(args.seed).fit(dat, segments)
     # SegTrees ={}
     # cProfile.run("my_function()")
+    segments = [1]
     if args.out is not None:
         if not os.path.exists(args.out):
             os.makedirs(args.out)
@@ -320,10 +236,76 @@ if __name__ == "__main__":
 
  
     
-
+  # @staticmethod
+    # def enumerate_T_CNA(T_SNVs):
+    #     id = 0    
+    #     T_CNAs = []
+    #     TCNA_to_TSNVs = {}
+    #     for t_snv in T_SNVs:
+            
+    #         cand = t_snv.generate_CNA_tree()
+    #         inlist = False 
+    #         for ct in T_CNAs:
+    #             if ct.is_identical(cand):
+                
+    #                 TCNA_to_TSNVs[ct.id].append(t_snv.id)
+    #                 inlist = True
+    #                 break
+                    
+    #         if not inlist:
+    #             cand.set_id(id)
+    #             T_CNAs.append(cand)
+    #             TCNA_to_TSNVs[id] = [t_snv.id]
+    #             id += 1
+    #     return T_CNAs, TCNA_to_TSNVs
        
         
 
+    # @staticmethod
+    # def enumerate_cna_trees(graph):
+    #     spanning_trees = []
+    #     nodes = graph.nodes()
+
+    #     if len(nodes) ==1:
+    #         G = nx.DiGraph()
+    #         G.add_nodes_from(graph.nodes)
+
+    #         return [G]
+
+    #     # Iterate over all possible subsets of edges
+    #     for edges in itertools.combinations(graph.edges(), len(nodes) - 1):
+    #         # Create a new graph with the selected edges
+    #         spanning_tree = nx.Graph(list(edges))
+
+    #         # Check if the new graph is a valid spanning tree
+    #         if nx.is_tree(spanning_tree):
+    #             spanning_tree.to_directed()
+    #             # if spanning_tree.in_deg
+    #             digraph = nx.DiGraph()
+    #             for e in spanning_tree.edges:
+    #                 digraph.add_edge(*e)
+    #             spanning_trees.append(digraph)
+
+    #     return spanning_trees
+    
+    # def get_cna_trees(self, cn_states):
+   
+
+    #     if self.start_state not in cn_states:
+    #             cn_states.append(self.start_state)
+        
+    #     node_mapping = {self.start_state: 0}
+
+    #     node_id =0
+    #     for cn in cn_states:
+    #         if cn != self.start_state:
+    #             node_id += 1
+    #             node_mapping[cn] = node_id
+
+    #     G = nx.complete_graph(len(cn_states))
+    #     cna_trees  =self.enumerate_cna_trees(G)
+    #     T_CNAs = [CNATree(t, node_mapping, id=i) for i,t in enumerate(cna_trees)]
+    #     return T_CNAs
        
   
 
