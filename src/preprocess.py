@@ -103,7 +103,7 @@ def genotypes_prep(genotypes_fname, genotypes, mut_lookup):
                     m = mut_lookup[mut_lookup == row[4]].index[0]
        
                     g= genotype(row[2], row[3], row[5], row[6])
-                    genotypes[row[0]][row[1]][m] = g
+                    genotypes[row[0]][m] = g
     
     
 
@@ -164,12 +164,13 @@ if __name__ == "__main__":
                vals = line.strip().split("\t")
                vals = [int(v) for v in vals]
                tree.add_edge(vals[0], vals[1])
+    
     genotypes = {v:  {} for v in tree}
-    for v in tree:
-        for s in data.segments:
-            genotypes[v][s] = {}
+
     genotypes_prep(args.genotypes, genotypes, data.mut_lookup)
+    
     cell_mapping = {v: [] for v in tree}
+    
     if args.phi is not None:
         cell_assignment = pd.read_csv(args.phi)
         # print(cell_assignment.head())
