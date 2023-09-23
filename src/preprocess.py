@@ -65,6 +65,9 @@ if __name__ == "__main__":
     print(data)
     if args.data is not None:
         data.save(args.data)
+
+    # for key,val in data.cells_by_cn(1).items():
+    #     print(f"State:{key} # of cells: {len(val)}")
     
 
     # for s in data.segments:
@@ -104,9 +107,9 @@ if __name__ == "__main__":
     missing_muts = set(data.muts) - set(ct.get_all_muts())
 
     if args.phi is not None:
-        cost2 = ct.compute_pooled_costs(data, lamb=100)
+        # cost2 = ct.compute_pooled_costs(data, lamb=100)
         costs = ct.compute_costs(data, lamb=100)
-        print(f"cost 1: {costs} cost 2: {cost2}")
+        # print(f"cost 1: {costs} cost 2: {cost2}")
         
 
 

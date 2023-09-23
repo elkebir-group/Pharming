@@ -114,6 +114,12 @@ class ClonalTree:
         self.genotypes = genotypes 
         
         self.root= self.find_root()
+
+        #double check that all snvs have the same CNA copy number profile for each node
+        # for v in self.tree:
+        #     cna_genos =[self.genotypes[v][j].to_CNAgenotype().to_tuple() for j in self.genotypes[v]]
+        #     assert all(t == cna_genos[0] for t in cna_genos)
+
         
 
         if cell_mapping is None:
@@ -320,9 +326,11 @@ class ClonalTree:
         if node_to_remove in self.genotypes:
             del self.genotypes[node_to_remove]
 
-    def get_latent_vafs(self, v):
-        vafs = {m: geno.vaf for m,geno in self.genotypes[v].items()}                
-        return vafs 
+             
+     
+    
+    
+
 
     def get_mut_mapping(self):
         gained= []
@@ -374,29 +382,59 @@ class ClonalTree:
 
         return present_muts
     
+    def get_latent_genotypes(self,v):
+        return {m: geno for m,geno in self.genotypes[v].items()} 
+    
+    def get_latent_vafs(self, latent_genos):
+        return  {m: geno.vaf for m, geno in latent_genos.items()}               
+     
+    
+    def get_latent_cna_genos(self, latent_genos):
+        return  {m: geno.to_CNAgenotype() for m, geno in latent_genos.items()}    
+
   
-    def node_cna_cost(self, v, cells, data):
+
+    def node_cna_cost(self, v, cells, data, latent_genos):
+        #dictionary is snvs as keys and cna_geno types as values
+        latent_cna_genos= self.get_latent_cna_genos(latent_genos)
+        snv_keys = list(latent_cna_genos.keys())
+        snv_to_seg = {s: data.snv_to_seg[s] for s in snv_keys}
+
+        seg_geno = {}
+        for key, seg in snv_to_seg.items():
+            if seg not in seg_geno:
+               seg_geno[seg] = latent_cna_genos[key]
+        latent_x, latent_y = [], []
+        for seg,cna_geno in seg_geno.items():
+            latent_x.append(cna_geno.x)
+            latent_y.append(cna_geno.y)
         
+        latent_x = np.array(latent_x).reshape(1,-1)
+        latent_y = np.array(latent_y).reshape(1,-1)
+
+
+        segs = list(seg_geno.keys())
+        obs_copy_x, obs_copy_y =  data.copy_profiles_by_seg(segs, cells)
+        x_diff = np.abs(obs_copy_x - latent_x).sum(axis=1)
+        y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
+        return x_diff + y_diff
         seg_scores = []
-        for s in data.segments:
-            snvs = data.seg_to_snvs[s]
-            cna_genos =[self.genotypes[v][j].to_CNAgenotype().to_tuple() for j in snvs]
-            assert all(t == cna_genos[0] for t in cna_genos)
-            x, y = cna_genos[0]
+        for s, cna_geno in seg_geno.items():
+
+            x, y = cna_geno.x, cna_geno.y
             obs_cna_genotype = data.copy_profiles_by_seg(s, cells=cells)
             x_diff = np.abs(obs_cna_genotype['x'].to_numpy() -x)
             y_diff = np.abs(obs_cna_genotype['y'].to_numpy() -y)
             cell_seg_scores =   x_diff + y_diff
-            if np.any(cell_seg_scores > 0):
-                print("error") 
+
             seg_scores.append(cell_seg_scores)
         cell_scores = np.vstack(seg_scores).sum(axis=0)
         return cell_scores
 
-    def node_snv_cost(self, v, cells, data):
+    def node_snv_cost(self, v, cells, data, latent_genos):
 
         snvs = self.get_all_muts()
-        latent_vafs = self.get_latent_vafs(v)
+        latent_vafs =self.get_latent_vafs(latent_genos)
         lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
         snvs = list(latent_vafs.keys())
         #dims = cells by snvs
@@ -425,9 +463,10 @@ class ClonalTree:
     def assign_cells(self, data, lamb=0):
 
         nodes = np.array(self.tree)
-        cell_snv_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in nodes])
-        cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data) for v in nodes])
-        cell_scores = cell_snv_scores + lamb*cell_cna_scores
+        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+        if lamb > 0:
+            cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+            cell_scores = cell_scores + lamb*cell_cna_scores
         assignments = np.argmin(cell_scores, axis=0)
         
         
@@ -448,10 +487,12 @@ class ClonalTree:
         self.cost = 0
         for v in self.tree:
                 cells = self.cell_mapping[v]
+                latent_genos = self.get_latent_genotypes(v)
                 if len(cells) ==0:
                     continue
-                self.node_cost[v]= self.snv_cost_func(v, cells, data).sum() + \
-                               +  lamb*self.node_cna_cost(v, cells,data).sum()
+                self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
+                if lamb >0:
+                    self.node_cost[v]+=lamb*self.node_cna_cost(v, cells,data, latent_genos).sum()
              
         
         self.cost = sum([score for _, score in self.node_cost.items()])

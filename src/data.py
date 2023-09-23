@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 from segment_genome import Segment
 import argparse
+from collections import defaultdict
 '''
 N = number of cells
 M = number of SNVs
@@ -16,7 +17,10 @@ np.seterr(invalid='ignore')
 class Data:
     var : np.array  # N x M matrix with the number of variant read counts
     total : np.array #  N x M matrix with the number of total read counts
-    copy_numbers: pd.DataFrame# N rows with columns x, y  and MultIndex (seg_id,cell)  where (x,y) is the copy number state of each cell in each segment
+    # copy_numbers: pd.DataFrame# N rows with columns x, y  and MultIndex (seg_id,cell)  where (x,y) is the copy number state of each cell in each segment
+    copy_x: np.array #n x k matrix with the copy number of the maternal allele
+    copy_y: np.array #n x k matrix with the copy number of the paternal allele
+
     #use copy_numbers.loc[seg_id] to subset rows based on segment
     #use copy_numbers.xs(cell, level='cell') to subset rows based on cell
     #use copy_numbers.loc[(seg_id, cell)] to access tuple (x,y)
@@ -71,6 +75,7 @@ class Data:
 
     
     def count_marginals(self, seg):
+
         cell_map = self.cells_by_cn(seg)
         snvs = self.seg_to_snvs[seg]
         alt = {cn: self.var[np.ix_(cells, snvs)].sum(axis=0) for cn,cells in cell_map.items()}
@@ -87,31 +92,57 @@ class Data:
 
         return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
-    def copy_profiles_by_seg(self, segment, cells=None):
+    def copy_profiles_by_seg(self, segments, cells=None):
         '''
         returns a pandas dataframe  with cols ['x','y' ]subsetted to specified segment and cell set
         '''
-        
         if cells is None:
-            return self.copy_numbers.loc[segment]
+            return self.copy_x[:,segments], self.copy_y[:,segments]
         else:
-            return self.copy_numbers.loc[(segment, cells), :]
+            return self.copy_x[np.ix_(cells,segments)], self.copy_y[np.ix_(cells,segments)]
+        # if cells is None:
+        #     return self.copy_numbers.loc[segment]
+        # else:
+        #     return self.copy_numbers.loc[(segment, cells), :]
     
 
-    # def cells_by_cn(self, seg):
-    #     arr= self.copy_numbers[:,seg]
-    #     mapping = {}
-    #     unique_values, inverse_indices, value_counts = np.unique(arr, return_inverse=True, return_counts=True)
-    #     indices_per_value = [np.where(inverse_indices == i)[0] for i in range(len(unique_values))]
-    #     for value,  indices in zip(unique_values, indices_per_value):
-    #         state = tuple(value)
-    #         mapping[state] = list(indices)
-    #     return mapping
+    def cells_by_cn(self, seg):
+        copy_x_segment = self.copy_x[:, seg]
+        copy_y_segment = self.copy_y[:, seg]
+        combined_copy = np.column_stack((copy_x_segment, copy_y_segment))
+        copy_states_dict = defaultdict(list)
+        unique_copy_states = set(map(tuple, combined_copy))
+
+        # Iterate through unique copy states
+        for state in unique_copy_states:
+            # Find the indices where the state occurs in combined_copy
+            indices = np.where(np.all(combined_copy == state, axis=1))
+            
+            # Append the indices to the dictionary
+            copy_states_dict[state] = list(indices[0])
+
+        # Convert the defaultdict to a regular dictionary
+        return dict(copy_states_dict)
+
+        # filtered_df = self.copy_numbers.loc[seg]
+        # mapping = {}
+        # # Iterate through the rows of the filtered DataFrame
+        # for cell, row in filtered_df.iterrows():
+        #     x_value, y_value = row['x'], row['y']
+        #     # cell = idx[1]  # Extract the 'cell' value from the MultiIndex
+        #     key = (x_value, y_value)
+
+        #     # Add the cell value to the corresponding key in the dictionary
+        #     if key not in mapping:
+        #         mapping[key] = []
+        #     mapping[key].append(cell)
+        # return mapping 
     
     def cn_states_by_seg(self, seg):
 
-        df = self.copy_numbers.loc[seg]
-        cn_states = set([(x, y) for x, y in zip(df['x'], df['y'])])
+        x = self.copy_x[:,seg]
+        y = self.copy_y[:,seg]
+        cn_states = set([(x, y) for x, y in zip(x,y)])
 
         return cn_states 
 
@@ -160,7 +191,7 @@ def load(read_counts,copy_numbers ):
     copy_numbers = pd.merge(copy_numbers, cell_lookup.reset_index(), on='cell_label', how='left').drop("cell_label", axis=1)
     copy_numbers= pd.merge(copy_numbers, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
 
-    copy_numbers = copy_numbers.set_index(["seg_id", "cell"])
+   
 
     read_counts = pd.merge(read_counts, seg_lookup.reset_index(), on='segment', how='left').drop("segment", axis=1)
     seg_to_mut_mapping = read_counts.loc[:, ["seg_id", "mut"]].drop_duplicates()
@@ -173,9 +204,12 @@ def load(read_counts,copy_numbers ):
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
 
 
+    copy_numbers = copy_numbers.set_index([ "cell", "seg_id"])
+    copy_x = copy_numbers["x"].unstack(level="seg_id", fill_value=0).to_numpy()
+    copy_y = copy_numbers["y"].unstack(level="seg_id", fill_value=0).to_numpy()
 
 
-    return Data(var, total, copy_numbers, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
+    return Data(var, total, copy_x, copy_y, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
 def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
     '''
