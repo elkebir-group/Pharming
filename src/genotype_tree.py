@@ -105,6 +105,16 @@ class GenotypeTree(ClonalTree):
             if old_key in self.genotypes[v]:
                 geno = self.genotypes[v].pop(old_key)  
                 self.set_node_genotype(v, geno)
+        for v, snvs in self.mut_mapping.items():
+            if old_key in snvs:
+                self.mut_mapping[v].remove(old_key)
+                self.mut_mapping[v].append(self.snv)
+                break
+        for v, snvs in self.mut_loss_mapping.items():
+            if old_key in snvs:
+                self.mut_loss_mapping[v].remove(old_key)
+                self.mut_loss_mapping[v].append(self.snv)
+                break
         self.key = new_snv_label
 
 
