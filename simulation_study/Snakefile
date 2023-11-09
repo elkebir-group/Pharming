@@ -3,11 +3,12 @@ configfile: "config.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
 
 #TODO: add rule generate cna trees 
-ruleorder:  simulate > preprocess
+ruleorder:  simulate > generatesinglecells
 
 rule all:
+    # noinspection PyInterpreter
     input:
-        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/data.pickle",
+        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -19,9 +20,36 @@ rule all:
 rule simulate:
     input: "cnatrees.txt"
     output:
-        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.txt",
-        prop=  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/prop.csv",
-        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/genotypes.txt",
+        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
+        prop=  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/proportions.tsv",
+        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
+
+    params:
+        cp_thresh = 0.05,
+        purity = 0.99,
+        sample = 1,
+        alpha= 0.001,
+        truncalSegs = 2,
+        simout_dir = "/Users/annahart/CLionProjects/pharming/simulation_study/input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
+        scout_dir = "/Users/annahart/CLionProjects/pharming/simulation_study/input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}"
+    log:
+        std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/run.log", 
+        err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/err.log" 
+    shell:
+        "clonesim3/build/simulate -r -S {input} "
+        " -purity {params.purity} -minProp {params.cp_thresh} "
+        " -kk {params.truncalSegs} -f "
+        "-s {wildcards.s}  -l {wildcards.mclust} "
+        "-k {wildcards.nsegs} -n {wildcards.snvs} -m {params.sample} "
+        "-output_file_dir {params.simout_dir}  > {log.std} 2> {log.err}  "
+
+
+rule generatesinglecells:
+    input:
+        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
+        prop=  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/proportions.tsv",
+        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
+    output:
         phi ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cellAssignments.p0",
         sparse ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/sparse.p0",
         copy_profiles ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
@@ -31,24 +59,24 @@ rule simulate:
         sample = 1,
         alpha= 0.001,
         truncalSegs = 2,
-        out_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}"
+        simout_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
+        scout_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
     log:
         std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/run.log", 
         err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/err.log" 
     shell:
-        "clonesim/build/simulate -r -sc -S {input} "
-        " -purity {params.purity} -minProp {params.cp_thresh} "
-        "-alpha_fp {params.alpha} -kk {params.truncalSegs} "
-        "-s {wildcards.s} -read_depth {wildcards.cov} -l {wildcards.mclust} "
-        "-k {wildcards.nsegs} -n {wildcards.snvs} -m {params.sample} -num_cells {wildcards.cells} "
-        " -SNode {output.genotypes} -SProportions {output.prop} -STree {output.tree} "
-        "-out_dir {params.out_dir}  > {log.std} 2> {log.err} "
+     "clonesim3/build/generatesinglecells -num_cells {wildcards.cells} -read_depth {wildcards.cov} "
+        "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} -k {wildcards.nsegs}"
+        " -m {params.sample} > {log.std} 2> {log.err} "
+    
+    
 
 
+"""
 rule preprocess:
     input: 
-        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.txt",
-        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/genotypes.txt",
+        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
+        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
         phi ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cellAssignments.p0",
         sparse ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/sparse.p0",
         copy_profiles ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
@@ -80,7 +108,7 @@ rule sens_analysis:
         "-T {input.ct} -c {params.cell_rates} -m {params.mut_rates} "
         "-s {wildcards.s} -r {params.nreps} "
         "-o {output} "
-
+"""
 
 
 
