@@ -10,6 +10,7 @@ import pygraphviz as pgv
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
+from genotype import genotype 
 
 
 
@@ -109,9 +110,13 @@ class ClonalTree:
 
     """
 
-    def __init__(self, tree, genotypes: dict, cell_mapping:dict=None, key=0, cost=np.Inf ):
+    def __init__(self, tree, genotypes: dict, seg_to_muts:dict=None, cell_mapping:dict=None, key=0, cost=np.Inf ):
         self.tree: nx.DiGraph = tree
         self.genotypes = genotypes 
+        if seg_to_muts is None:
+            self.seg_to_muts = {}
+        else:
+            self.seg_to_muts = seg_to_muts
         
         self.root= self.find_root()
 
@@ -205,6 +210,9 @@ class ClonalTree:
     
     def children(self, v):
         return list(self.tree.neighbors[v])
+    
+    def size(self):
+        return len(self.clones())
     
     def get_ancestors(self, v):
 
@@ -329,8 +337,7 @@ class ClonalTree:
              
      
     
-    
-
+  
 
     def get_mut_mapping(self):
         gained= []
@@ -382,6 +389,8 @@ class ClonalTree:
 
         return present_muts
     
+  
+    
     def get_latent_genotypes(self,v):
         return {m: geno for m,geno in self.genotypes[v].items()} 
     
@@ -418,19 +427,7 @@ class ClonalTree:
         x_diff = np.abs(obs_copy_x - latent_x).sum(axis=1)
         y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
         return x_diff + y_diff
-        seg_scores = []
-        for s, cna_geno in seg_geno.items():
-
-            x, y = cna_geno.x, cna_geno.y
-            obs_cna_genotype = data.copy_profiles_by_seg(s, cells=cells)
-            x_diff = np.abs(obs_cna_genotype['x'].to_numpy() -x)
-            y_diff = np.abs(obs_cna_genotype['y'].to_numpy() -y)
-            cell_seg_scores =   x_diff + y_diff
-
-            seg_scores.append(cell_seg_scores)
-        cell_scores = np.vstack(seg_scores).sum(axis=0)
-        return cell_scores
-
+ 
     def node_snv_cost(self, v, cells, data, latent_genos):
 
         snvs = self.get_all_muts()
@@ -477,7 +474,17 @@ class ClonalTree:
         #     self.cell_mapping[v].append(i)
         # self.cell_mapping = dict(self.cell_mapping)
 
+    def filter_snvs(self, snvs_to_keep):
+        snvs_to_remove = set(self.get_all_muts()) - set(snvs_to_keep)
+        for s in snvs_to_remove:
+            del self.psi[s]
+            for v in self.tree:
+                self.mut_mapping[v] = np.intersect1d(self.mut_mapping[v], snvs_to_keep).tolist()
+                self.mut_loss_mapping[v] = np.intersect1d(self.mut_loss_mapping[v], snvs_to_keep).tolist()
+                del self.genotypes[v][s]
 
+        
+        
 
     def compute_costs(self, data, lamb=0):
         if len(self.cell_mapping) ==0:
@@ -507,6 +514,7 @@ class ClonalTree:
         return cost 
 
     
+
 
 
    #-------------------------- Save Methods ---------------------------------------#
