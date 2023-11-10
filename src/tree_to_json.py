@@ -58,7 +58,7 @@ def convertToJson(clonal_tree, segment_csv, snv_csv):
             # TODO: Add segment id corresponding to this SNV using the SNV dictionary
             segment_id = 123    # Placeholder id
 
-            x, y, x_bar, y_bar = clonal_tree.genotypes[node_id][snv_id]
+            x, y, x_bar, y_bar = clonal_tree.genotypes[node_id][snv_id].to_tuple()
             segments.append({"segment_id": segment_id, "x": x, "y": y})
             snvs.append({"segment_id": segment_id, "snv_id": snv_id, "x_bar": x_bar, "y_bar": y_bar})
 
@@ -66,8 +66,8 @@ def convertToJson(clonal_tree, segment_csv, snv_csv):
 
     # Get the edges on the tree
     # TODO: Check if this method works
-    edge_tuples = clonal_tree.tree.edges()
-    edge_list = [list(edge) for edge in edge_tuples]
+    edge_list = list(clonal_tree.tree.edges())
+    # edge_list = [list(edge) for edge in edge_tuples]
     output["tree"]["edges"] = edge_list
 
     # Convert final output dictionary to JSON
