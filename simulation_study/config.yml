@@ -1,3 +1,6 @@
+  
+  simpath: "clonesim/build/simulate"
+  genpath: "clonesim/build/generatesinglecells"
   nseeds: 5
 
   cells:

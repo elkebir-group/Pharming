@@ -8,7 +8,7 @@ ruleorder:  simulate > generatesinglecells
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
+        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/cellAssignments.p0",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -20,23 +20,24 @@ rule all:
 rule simulate:
     input: "cnatrees.txt"
     output:
-        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
-        prop=  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/proportions.tsv",
-        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
+        tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
+        prop=  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/proportions.tsv",
+        genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
 
     params:
+        pth = config["simpath"],
         cp_thresh = 0.05,
         purity = 0.99,
         sample = 1,
         alpha= 0.001,
         truncalSegs = 2,
-        simout_dir = "/Users/annahart/CLionProjects/pharming/simulation_study/input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
-        scout_dir = "/Users/annahart/CLionProjects/pharming/simulation_study/input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}"
+        simout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}",
+        scout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}"
     log:
-        std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/run.log", 
-        err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/err.log" 
+        std ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/run.log", 
+        err ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/err.log" 
     shell:
-        "clonesim3/build/simulate -r -S {input} "
+        "{params.pth} -r -S {input} "
         " -purity {params.purity} -minProp {params.cp_thresh} "
         " -kk {params.truncalSegs} -f "
         "-s {wildcards.s}  -l {wildcards.mclust} "
@@ -46,28 +47,27 @@ rule simulate:
 
 rule generatesinglecells:
     input:
-        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
-        prop=  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/proportions.tsv",
-        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
+        tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
+        prop=  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/proportions.tsv",
+        genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
     output:
-        phi ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cellAssignments.p0",
-        sparse ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/sparse.p0",
-        copy_profiles ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
+        phi ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/cellAssignments.p0",
+        sparse ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/sparse.p0",
+        copy_profiles ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/cells.p0",
     params:
-        cp_thresh = 0.05,
+        pth = config["genpath"],
         purity = 0.99,
         sample = 1,
         alpha= 0.001,
-        truncalSegs = 2,
-        simout_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
-        scout_dir = "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}",
+        simout_dir = "input/s{s}__m{snvs}_k{nsegs}_l{mclust}",
+        scout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}",
     log:
-        std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/run.log", 
-        err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/err.log" 
+        std ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/run.log", 
+        err ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/err.log" 
     shell:
-     "clonesim3/build/generatesinglecells -num_cells {wildcards.cells} -read_depth {wildcards.cov} "
-        "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} -k {wildcards.nsegs}"
-        " -m {params.sample} > {log.std} 2> {log.err} "
+     "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} "
+     "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} "
+     " -m {params.sample} > {log.std} 2> {log.err} "
     
     
 
