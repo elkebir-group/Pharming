@@ -243,6 +243,28 @@ class ClonalTree:
             return descendants
         return find_descendants(self.tree,v)
     
+    def trim(self):
+        '''
+        remove nodes that only have cell assigns and push the cell assignments up the tree
+        '''
+        to_del = []
+        for k in self.cell_mapping:
+            if len(self.mut_mapping[k])==0 and len(self.mut_loss_mapping[k])==0:
+                if len(self.cell_mapping[k]) > 0 and self.is_leaf(k):
+                    path =nx.shortest_path(self.tree, source=self.root, target=k)
+                    path = path[::-1]
+                    for p in path:
+                        if len(self.mut_mapping[p]) >0 or len(self.mut_loss_mapping[p]) > 0:
+                            self.cell_mapping[p] += self.cell_mapping[k] 
+                            to_del.append(k)
+                            self.tree.remove_node(k)
+                            break
+        for k in  to_del:
+            del self.cell_mapping[k]
+
+
+        
+    
     def clones(self):
         return list(self.tree.nodes)
     
