@@ -1,29 +1,38 @@
 
 configfile: "config.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
+import sys 
+sys.path.append("../src")
 
-#TODO: add rule generate cna trees 
-ruleorder:  simulate > generatesinglecells
+# #TODO: add rule generate cna trees 
+# ruleorder:  simulate > generatesinglecells
 
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/cellAssignments.p0",
+        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/gt.pickle",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
             nsegs = config["nsegs"],
             cov = config["cov"],
             mclust = config['mclust']
-        ),
+        )
+        # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
+        #     s = seeds,
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     mclust = config['mclust']
+        # ),
+        
+
 
 rule simulate:
-    input: "cnatrees.txt"
+    input: "cnatrees_nocompleteloss.txt"
     output:
         tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
         prop=  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/proportions.tsv",
         genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
-
     params:
         pth = config["simpath"],
         cp_thresh = 0.05,
@@ -32,7 +41,6 @@ rule simulate:
         alpha= 0.001,
         truncalSegs = 2,
         simout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}",
-        scout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}"
     log:
         std ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/run.log", 
         err ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/err.log" 
@@ -59,56 +67,66 @@ rule generatesinglecells:
         purity = 0.99,
         sample = 1,
         alpha= 0.001,
-        simout_dir = "input/s{s}__m{snvs}_k{nsegs}_l{mclust}",
+        simout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}",
         scout_dir = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}",
     log:
         std ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/run.log", 
         err ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/err.log" 
     shell:
-     "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} "
+     "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} -k {wildcards.nsegs} "
      "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} "
      " -m {params.sample} > {log.std} 2> {log.err} "
     
     
 
-
-"""
-rule preprocess:
+rule make_data:
     input: 
-        tree =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.tsv",
-        genotypes ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/node.tsv",
-        phi ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cellAssignments.p0",
-        sparse ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/sparse.p0",
-        copy_profiles ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/cells.p0",
+        sparse ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/sparse.p0",
+        copy_profiles ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/cells.p0",
+    output: "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/data.pickle",
+    shell:
+        "python ../src/data.py -f {input.sparse} -c {input.copy_profiles} -D {output} " 
+
+rule make_gt:
+    input: 
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/data.pickle",
+        tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
+        genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
     output:
-        png =  "input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/tree.png",
-        data ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/data.pickle",
-        ct ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/clonal_tree.pickle",
-    log:
-        std ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/preprocess.log", 
-        err ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/preprocess.err.log" 
+        png = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/gt.png",
+        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}/gt.pickle",
     shell:
-        "python ../src/preprocess.py -f {input.sparse} -c {input.copy_profiles} "
-        "-t {input.tree} --phi {input.phi} -g {input.genotypes} "
-        "-D {output.data} -T {output.ct} --draw {output.png} "
-        " > {log.std} 2> {log.err} "
+        "python ../src/ground_truth_clonal_tree.py -d {input.data} -t {input.tree} "
+        "-g {input.genotypes} -T {output.gt} --draw {output.png} "
 
 
-rule sens_analysis: 
-    input:
-        data ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/data.pickle",
-        ct ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/clonal_tree.pickle",
-    params:
-        nreps = 10,
-        cell_rates = "10:110:10",
-        mut_rates = "10:110:10",
-    output: "obj_comp/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}_obj.csv"
-    shell:
-        "nice python ../src/sens_analysis.py -D {input.data}  "
-        "-T {input.ct} -c {params.cell_rates} -m {params.mut_rates} "
-        "-s {wildcards.s} -r {params.nreps} "
-        "-o {output} "
-"""
+    # parser.add_argument("-t", "--tree", type=str,
+    #     help="filename of input tree")
+    # parser.add_argument("--phi", type=str, help="ground truth cell assignments")
+    # parser.add_argument("-g" ,"--genotypes", type=str, help="ground truth genotypes")
+    # parser.add_argument("-d", "--data",  type=str, 
+    #     help="input filename of pickled data object")
+    # parser.add_argument("-T", "--clonal-tree",  type=str, 
+    #     help="output filename of pickled clonal tree object")
+    # parser.add_argument( "--draw",  type=str, 
+    #     help="png or pdf of output tree")
+
+
+# rule sens_analysis: 
+#     input:
+#         data ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/data.pickle",
+#         ct ="input/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}/clonal_tree.pickle",
+#     params:
+#         nreps = 10,
+#         cell_rates = "10:110:10",
+#         mut_rates = "10:110:10",
+#     output: "obj_comp/s{s}_n{cells}_m{snvs}_k{nsegs}_c{cov}_l{mclust}_obj.csv"
+#     shell:
+#         "nice python ../src/sens_analysis.py -D {input.data}  "
+#         "-T {input.ct} -c {params.cell_rates} -m {params.mut_rates} "
+#         "-s {wildcards.s} -r {params.nreps} "
+#         "-o {output} "
+
 
 
 

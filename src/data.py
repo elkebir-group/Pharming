@@ -73,6 +73,8 @@ class Data:
         return var/total
     
 
+
+
     
     def count_marginals(self, seg):
 
@@ -124,19 +126,6 @@ class Data:
         # Convert the defaultdict to a regular dictionary
         return dict(copy_states_dict)
 
-        # filtered_df = self.copy_numbers.loc[seg]
-        # mapping = {}
-        # # Iterate through the rows of the filtered DataFrame
-        # for cell, row in filtered_df.iterrows():
-        #     x_value, y_value = row['x'], row['y']
-        #     # cell = idx[1]  # Extract the 'cell' value from the MultiIndex
-        #     key = (x_value, y_value)
-
-        #     # Add the cell value to the corresponding key in the dictionary
-        #     if key not in mapping:
-        #         mapping[key] = []
-        #     mapping[key].append(cell)
-        # return mapping 
     
     def cn_states_by_seg(self, seg):
 
@@ -240,7 +229,13 @@ if __name__ == "__main__":
         help="filename of pickled data object")
     
     args = parser.parse_args()
+    # instance = "simulation_study/input/s10_n5000_m10000_k50_c0.1_l7"
+    # args = parser.parse_args([
+    #     "-f", f"{instance}/sparse.p0",
+    #     "-c",f"{instance}/cells.p0",
+    #     "-D", f"{instance}/data.pickle"
+    #     ])
 
-    dat = load(args.file, args.profiles)
+    dat = load_from_files(args.file, args.profiles)
     if args.data is not None:
         dat.save(args.data)

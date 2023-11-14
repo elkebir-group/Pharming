@@ -1,10 +1,12 @@
 from clonal_tree import ClonalTree
-from data import Data, load_from_files
+from data import Data 
+import pickle 
 import argparse 
 import pandas as pd 
 import numpy as np 
 import networkx as nx
 from genotype import genotype
+import pickle 
 
 
 
@@ -29,42 +31,38 @@ def genotypes_prep(genotypes_fname, genotypes, mut_lookup):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--file", required=True,
-                        help="input file for variant and total read counts with unlabled columns: [chr segment snv cell var total]")
-    parser.add_argument("-c", "--profiles", type=str,
-        help="filename of input copy number profiles")
     parser.add_argument("-t", "--tree", type=str,
         help="filename of input tree")
     parser.add_argument("--phi", type=str, help="ground truth cell assignments")
     parser.add_argument("-g" ,"--genotypes", type=str, help="ground truth genotypes")
-
-    parser.add_argument("-D", "--data",  type=str, 
-        help="output filename of pickled data object")
+    parser.add_argument("-d", "--data",  type=str, 
+        help="input filename of pickled data object")
     parser.add_argument("-T", "--clonal-tree",  type=str, 
         help="output filename of pickled clonal tree object")
     parser.add_argument( "--draw",  type=str, 
         help="png or pdf of output tree")
 
 
-    # args = parser.parse_args()
-    instance = "s12_n5000_m5000_k25_c0.1_l7"
-    pth = f"/scratch/data/leah/pharming/simulation_study/input/{instance}"
-    args = parser.parse_args(
-        ["-f", f"{pth}/sparse.p0",
-         "-c" ,f"{pth}/cells.p0",
-         "-g", f"{pth}/genotypes.txt",
-         "--phi", f"{pth}/cellAssignments.p0",
-         "-t", f"{pth}/tree.txt",
-         "-T", f"test/ground_truth.pickle",
-         "-D", f"{pth}/data.pickle",
-         "--draw", f"test/tree.png"
-        ]
-    )
+    args = parser.parse_args()
+    # instance = "s12_m5000_k25_l7"
+    # dpath = "n5000_c0.1"
+    # pth = f"simulation_study/input/{instance}"
+    # args = parser.parse_args([
 
-    data = load_from_files(args.file, args.profiles)
-    print(data)
+    #      "-g", f"{pth}/node.tsv",
+    #      "--phi", f"{pth}/{dpath}/cellAssignments.p0",
+    #      "-t", f"{pth}/tree.tsv",
+    #      "-T", f"test/ground_truth.pickle",
+    #      "-d", f"{pth}/{dpath}/data.pickle",
+    #      "--draw", f"test/tree.png"
+    #     ]
+    # )
+
+
+
     if args.data is not None:
-        data.save(args.data)
+        with open(args.data, "rb") as file:
+            dat = pickle.load(file)
 
     # for key,val in data.cells_by_cn(1).items():
     #     print(f"State:{key} # of cells: {len(val)}")
@@ -76,39 +74,41 @@ if __name__ == "__main__":
     
     tree = nx.DiGraph()
     with open(args.tree, "r+") as file:
-        firstline =True
-   
         for line in file:
-            if firstline:
-                firstline = False
-                continue
-                
-            else:
                vals = line.strip().split("\t")
                vals = [int(v) for v in vals]
                tree.add_edge(vals[0], vals[1])
-    
+
     genotypes = {v:  {} for v in tree}
 
-    genotypes_prep(args.genotypes, genotypes, data.mut_lookup)
+    genotypes_prep(args.genotypes, genotypes, dat.mut_lookup)
     
     cell_mapping = {v: [] for v in tree}
     
     if args.phi is not None:
         cell_assignment = pd.read_csv(args.phi)
+        series = dat.cell_lookup
         # print(cell_assignment.head())
         for index, row in cell_assignment.iterrows():
+
             i = row['Cell']
             v = row['Cluster']
+         
+            filtered_series = series[series == i]
+
+# Get the corresponding indices
+            indices = filtered_series.index.tolist()[0]
+
             cell_mapping[v].append(i)
 
 
-    ct = ClonalTree(tree, genotypes, cell_mapping=cell_mapping )
-    missing_muts = set(data.muts) - set(ct.get_all_muts())
+    ct = ClonalTree(tree, genotypes, seg_to_muts=dat.seg_to_snvs, cell_mapping=cell_mapping )
+    ct.trim()
+    missing_muts = set(dat.muts) - set(ct.get_all_muts())
 
     if args.phi is not None:
         # cost2 = ct.compute_pooled_costs(data, lamb=100)
-        costs = ct.compute_costs(data, lamb=100)
+        costs = ct.compute_costs(dat, lamb=100)
         # print(f"cost 1: {costs} cost 2: {cost2}")
         
 
