@@ -5,7 +5,7 @@ import networkx as nx
 from collections import Counter, defaultdict 
 from itertools import product, chain, combinations
 import pickle 
-import pygraphviz as pgv
+# import pygraphviz as pgv
 # import matplotlib.pyplot as pl
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -518,54 +518,54 @@ class ClonalTree:
 
 
    #-------------------------- Save Methods ---------------------------------------#
-    def draw(self, fname, mapping=None, cmap='Set3'):
+    # def draw(self, fname, mapping=None, cmap='Set3'):
 
-        mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
-        cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
-        labels = {}
-        # color_values, colormap = self.create_color_map(cmap)
-        for n in self.tree:
-                if mapping is not None:
-                    labels[n] = str(mapping[n])
-                else:
-                    labels[n] = str(n)
-                if n in self.cell_mapping:
-                    if cell_count[n] > 0:
-                        labels[n] += "\nCells:" + str(cell_count[n])
-                # SNV
-                if n in self.mut_mapping:
-                    if mut_count[n] > 0:
-                        labels[n] += "\nSNVs:" + str(mut_count[n])
-        like_label = f"Segment {self.key}\n"
-        tree = pgv.AGraph(strict=False, directed=False)
-        tree.node_attr['style']='filled'
-        if self.cost is not None:
-            total_like = np.round(self.cost)
-            tree.graph_attr["label"] = f"Objective: {total_like}"
+    #     mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
+    #     cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
+    #     labels = {}
+    #     # color_values, colormap = self.create_color_map(cmap)
+    #     for n in self.tree:
+    #             if mapping is not None:
+    #                 labels[n] = str(mapping[n])
+    #             else:
+    #                 labels[n] = str(n)
+    #             if n in self.cell_mapping:
+    #                 if cell_count[n] > 0:
+    #                     labels[n] += "\nCells:" + str(cell_count[n])
+    #             # SNV
+    #             if n in self.mut_mapping:
+    #                 if mut_count[n] > 0:
+    #                     labels[n] += "\nSNVs:" + str(mut_count[n])
+    #     like_label = f"Segment {self.key}\n"
+    #     tree = pgv.AGraph(strict=False, directed=False)
+    #     tree.node_attr['style']='filled'
+    #     if self.cost is not None:
+    #         total_like = np.round(self.cost)
+    #         tree.graph_attr["label"] = f"Objective: {total_like}"
  
-        # colormap = cm.get_cmap(cmap)
-        for n in self.tree:
+    #     # colormap = cm.get_cmap(cmap)
+    #     for n in self.tree:
 
-            tree.add_node(n, label=labels[n])
+    #         tree.add_node(n, label=labels[n])
       
-            node_attr = tree.get_node(n)
-            try:
-                x,y = self.tree.nodes[n]["genotype"]
-                color_value = x+y
-            except:
-                color_value = None
+    #         node_attr = tree.get_node(n)
+    #         try:
+    #             x,y = self.tree.nodes[n]["genotype"]
+    #             color_value = x+y
+    #         except:
+    #             color_value = None
         
-            if color_value is not None:
+    #         if color_value is not None:
                
                 
-                # color = colormap(color_value)
-                # hex_color = mcolors.rgb2hex(color)
-                node_attr.attr['fillcolor'] =SET3_HEX[color_value]
-                # node_attr['fillcolor'] = hex_color
+    #             # color = colormap(color_value)
+    #             # hex_color = mcolors.rgb2hex(color)
+    #             node_attr.attr['fillcolor'] =SET3_HEX[color_value]
+    #             # node_attr['fillcolor'] = hex_color
     
-        tree.add_edges_from(list(self.tree.edges))
-        tree.layout("dot")
-        tree.draw(fname)
+    #     tree.add_edges_from(list(self.tree.edges))
+    #     tree.layout("dot")
+    #     tree.draw(fname)
   
 
     def save_text(self, path):
