@@ -52,6 +52,7 @@ class Data:
         mystr= f"Input data contains: {self.N} cells, {self.M} SNVs and {self.nseg} segments"
         return mystr
 
+
     def compute_vafs(self, cells=None, snvs=None):
         if cells is None:
             cells = self.cells 

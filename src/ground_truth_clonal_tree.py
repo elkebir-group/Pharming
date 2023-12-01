@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # instance = "s12_m5000_k25_l7"
-    # dpath = "n5000_c0.1"
+    # dpath = "n500_c0.1"
     # pth = f"simulation_study/input/{instance}"
     # args = parser.parse_args([
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
          
             filtered_series = series[series == i]
 
-# Get the corresponding indices
+            # Get the corresponding indices
             indices = filtered_series.index.tolist()[0]
 
             cell_mapping[v].append(i)
