@@ -76,7 +76,7 @@ def get_costs(seg, m, c, dat, lamb=0):
 def assign_snvs(gt, dat):
     res = []
     for lamb in [0, 0.1, 1]:
-        print(f"lambda {lamb}")
+        # print(f"lambda {lamb}")
         for seg, snvs in dat.seg_to_snvs.items():
             segtree = deepcopy(gt)
             muts =segtree.seg_to_muts[seg]

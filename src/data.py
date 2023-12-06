@@ -75,7 +75,6 @@ class Data:
     
 
 
-
     
     def count_marginals(self, seg):
 
