@@ -209,7 +209,7 @@ class ClonalTree:
             return list(self.tree.predecessors(v))[0]
     
     def children(self, v):
-        return list(self.tree.neighbors[v])
+        return list(self.tree.neighbors(v))
     
     def size(self):
         return len(self.clones())
@@ -245,7 +245,7 @@ class ClonalTree:
     
     def trim(self):
         '''
-        remove nodes that only have cell assigns and push the cell assignments up the tree
+        remove nodes that only have cell assignments and pushees the cell assignments up the tree
         '''
         to_del = []
         for k in self.cell_mapping:
@@ -263,7 +263,20 @@ class ClonalTree:
             del self.cell_mapping[k]
 
 
-        
+    
+    def filter_snvs(self,  snvs):
+        snvs = set(snvs)
+        # snvs = set(self.seg_to_muts[seg])
+        keys = set(self.genotypes[self.root].keys())
+        to_del  = keys - snvs 
+ 
+
+        for v in self.genotypes:
+            self.mut_mapping[v] = [j for j in self.mut_mapping[v] if j in snvs]
+
+            for s in to_del:
+                del self.genotypes[v][s]
+            
     
     def clones(self):
         return list(self.tree.nodes)
@@ -450,7 +463,7 @@ class ClonalTree:
         y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
         return x_diff + y_diff
  
-    def node_snv_cost(self, v, cells, data, latent_genos):
+    def node_snv_cost(self,  v, cells, data, latent_genos):
 
         snvs = self.get_all_muts()
         latent_vafs =self.get_latent_vafs(latent_genos)
@@ -464,25 +477,35 @@ class ClonalTree:
 
         return cell_scores
     
-    def pooled_node_snv_cost(self, v, cells, data):
+    def pooled_node_snv_cost(self, v, cells, data, latent_genos):
 
  
-        latent_vafs = self.get_latent_vafs(v)
-        lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
+        latent_vafs = self.get_latent_vafs(latent_genos)
+        lvafs = np.array(list(latent_vafs.values()))
         snvs = list(latent_vafs.keys())
         #dims = cells by snvs
         obs_vafs = data.compute_vafs(cells, snvs)
 
+        comp_df =  pd.DataFrame({'obs_vafs': obs_vafs, 'latent_vafs': lvafs, 'snvs': snvs})
+        comp_df["node"] = v
+        comp_df["ncells"] = len(cells)
+        self.all_dfs[v]=comp_df
         cell_scores = np.nansum(np.abs(obs_vafs - lvafs))
 
 
         return cell_scores
 
     
-    def assign_cells(self, data, lamb=0):
+    
+    def assign_cells(self, data, lamb=0, cna_only=False):
 
         nodes = np.array(self.tree)
-        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+        if cna_only:
+            cell_scores =0
+            lamb=1
+        else:
+            cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+
         if lamb > 0:
             cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
             cell_scores = cell_scores + lamb*cell_cna_scores
@@ -491,6 +514,7 @@ class ClonalTree:
         
         self.phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
         self.phi_to_cell_mapping(self.phi)
+        return cell_scores, nodes
         # self.cell_mapping = defaultdict(list)
         # for i, v in self.phi.items():
         #     self.cell_mapping[v].append(i)
@@ -508,7 +532,9 @@ class ClonalTree:
         
         
 
-    def compute_costs(self, data, lamb=0):
+    def compute_costs(self, data, lamb=0, cna_only=False):
+        if cna_only:
+            lamb = 1
         if len(self.cell_mapping) ==0:
             self.assign_cells(data, lamb)
 
@@ -516,11 +542,16 @@ class ClonalTree:
         self.cost = 0
         for v in self.tree:
                 cells = self.cell_mapping[v]
-                latent_genos = self.get_latent_genotypes(v)
                 if len(cells) ==0:
                     continue
-                self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
+                latent_genos = self.get_latent_genotypes(v)
+            
+                if cna_only:
+                    self.node_cost[v] =0
+                else:
+                    self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
                 if lamb >0:
+                    
                     self.node_cost[v]+=lamb*self.node_cna_cost(v, cells,data, latent_genos).sum()
              
         
@@ -528,10 +559,13 @@ class ClonalTree:
 
         return self.cost 
     
-    def compute_pooled_costs(self, data, lamb=0):
+    def compute_pooled_costs(self, data, lamb=0, cna_only=False):
+        self.all_dfs = {}
         self.snv_cost_func = self.pooled_node_snv_cost
-        cost = self.compute_costs(data, lamb)
+        cost = self.compute_costs(data, lamb, cna_only)
         self.snv_cost_func = self.node_snv_cost
+        # self.comp_df = pd.concat([vals for v, vals in self.all_dfs.items()])
+        # print(self.comp_df.head())
 
         return cost 
 
@@ -721,8 +755,8 @@ class ClonalTree:
         return adjusted_rand_score(v1, v2)
     
     def compute_cell_ari(self, obj) -> float:
-        gt_cell = self.get_cell_clusters()
-        pred_cell = obj.get_cell_clusters()
+        gt_cell = pd.Series(self.phi).values
+        pred_cell = pd.Series(obj.phi).values
         return self.ari(gt_cell, pred_cell)
 
     

@@ -61,6 +61,9 @@ class Superimposition:
 
         model.addConstr(sum(y[u,v] for u,v in self.PI) ==K)
 
+        #add a constraint that if the descendants of u and v all have x_u,v=0, then 
+        # y[u,v]
+
         # every clone in each of the trees must appear at least once 
         model.addConstrs(sum(phi[i,u,v] for i in self.cells for u in self.T1_clones) >=1 for v in self.T2_leafs)
         model.addConstrs(sum(phi[i,u,v] for i in self.cells for v in self.T2_clones)  >=1 for u in self.T1_leafs)

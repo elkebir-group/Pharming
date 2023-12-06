@@ -20,7 +20,16 @@ rule all:
         #     lamb = config["lamb"],
         #     err = config["cerror"]
         # ),
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb0/cna_only_cell_accuracy.csv",
+        # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb0/cna_only_cell_accuracy.csv",
+        #     s =seeds,
+        #     cells = config["cells"],
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     cov = config["cov"],
+        #     mclust = config['mclust'],
+        #     err = config["cerror"]
+        # ),
+        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -29,6 +38,9 @@ rule all:
             mclust = config['mclust'],
             err = config["cerror"]
         ),
+        
+
+        
 
         # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
         #     s = seeds,
@@ -119,6 +131,14 @@ rule eval_obj1:
     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb{lamb}/obj1_cell_accuracy.csv"
     shell:
         "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l {wildcards.lamb}"
+
+rule eval_snv_assignment:
+    input:
+        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
+    output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv"
+    shell:
+        "python ../src/snv_assignment.py -d {input.data} -t {input.tree} -o {output} "
 
 
 rule eval_cna_only:

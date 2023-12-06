@@ -20,8 +20,7 @@ class genotype:
     
     def __eq__(self, _value: object) -> bool:
         if isinstance(_value, genotype):
-            return (self.x == _value.x) and (self.y == _value.y) \
-                (self.x_bar == _value.x_bar) and (self.y_bar == _value.y_bar)
+            return (self.x == _value.x) and (self.y == _value.y) and (self.x_bar == _value.x_bar) and (self.y_bar == _value.y_bar)
     
     def cna_eq(self, _value: object) -> bool:
         if isinstance(_value, genotype):
