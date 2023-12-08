@@ -74,8 +74,15 @@ class Data:
         return var/total
     
 
-
+    def export_mut_lookup(self, fname):
+        df = pd.DataFrame({"index": self.mut_lookup.index, "label": self.mut_lookup.values}).reset_index(drop=True)
+        df.to_csv(fname, index=False)
     
+    def export_cell_lookup(self, fname):
+        df = pd.DataFrame({"index": self.cell_lookup.index, "label": self.cell_lookup.values}).reset_index(drop=True)
+        df.to_csv(fname, index=False)
+
+
     def count_marginals(self, seg):
 
         cell_map = self.cells_by_cn(seg)
@@ -154,6 +161,16 @@ def load_from_files(var_fname, copy_fname ):
 
 
     copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
+
+    cell_labels_not_in_df1 = copy_numbers.loc[~copy_numbers['cell_label'].isin(read_counts['cell_label']), 'cell_label']
+    excluded_labels = cell_labels_not_in_df1.unique()
+    print(f"Excluding {len(excluded_labels)} cells due to lack of read counts:")
+    for c in excluded_labels:
+        print(c)
+
+    #exclude any cells that have no read counts at any position
+    copy_numbers = copy_numbers[copy_numbers['cell_label'].isin(read_counts['cell_label'])]
+  
     return load(read_counts, copy_numbers)
 
 def load(read_counts,copy_numbers ):
@@ -168,6 +185,7 @@ def load(read_counts,copy_numbers ):
     #create indexed series of mapping of cell index to label
     cell_lookup = pd.Series(data=cell_labels, name="cell_label").rename_axis("cell")     
     mut_lookup = pd.Series(data=mut_labels, name="mutation_label").rename_axis("mut")
+
     
     read_counts = pd.merge(read_counts, cell_lookup.reset_index(), on='cell_label', how='left')
     read_counts = pd.merge(read_counts, mut_lookup.reset_index(), on='mutation_label', how='left')
@@ -193,9 +211,17 @@ def load(read_counts,copy_numbers ):
     total = read_counts["total"].unstack(level="mut", fill_value=0).to_numpy()
 
 
+
+    copy_numbers["cell"] = copy_numbers["cell"].astype(int)
     copy_numbers = copy_numbers.set_index([ "cell", "seg_id"])
-    copy_x = copy_numbers["x"].unstack(level="seg_id", fill_value=0).to_numpy()
-    copy_y = copy_numbers["y"].unstack(level="seg_id", fill_value=0).to_numpy()
+
+    # copy_numbers.to_csv("test/copy_numbers.csv")
+    # row_counts =copy_numbers.groupby(level=copy_numbers.index.names).size()
+    # print(row_counts[row_counts > 1])
+    # print(copy_numbers.index.get_level_values(0).duplicated().any())
+    # print(copy_numbers.index.get_level_values(1).duplicated().any())
+    copy_x = copy_numbers["x"].unstack(level="seg_id").to_numpy()
+    copy_y = copy_numbers["y"].unstack(level="seg_id").to_numpy()
 
 
     return Data(var, total, copy_x, copy_y, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
@@ -213,12 +239,17 @@ def load_from_pickle(fname):
     return pd.read_pickle(fname)
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", required=True,
                         help="input file for variant and total read counts with unlabled columns: [chr segment snv cell var total]")
     parser.add_argument("-c", "--profiles", type=str,
         help="filename of input copy number profiles")
+    parser.add_argument("-m", "--mut-lookup", type=str,
+        help="filename of mutation label to export")
+    parser.add_argument("-l", "--cell-lookup", type=str,
+        help="filename of cell label to export")
     # parser.add_argument("-i", "--index", type=str, default="cell",
     #     help="index of copy number profiles")
     # parser.add_argument("-t", "--tolerance",  type=float, default=0.0,
@@ -229,13 +260,21 @@ if __name__ == "__main__":
         help="filename of pickled data object")
     
     args = parser.parse_args()
-    # instance = "simulation_study/input/s10_n5000_m10000_k50_c0.1_l7"
+    # folder = "s12_m1000_k25_l7"
+    # cell_folder= "n5000_c0.01_e0.15"
+    # pth = f"simulation_study/input/{folder}/{cell_folder}"
     # args = parser.parse_args([
-    #     "-f", f"{instance}/sparse.p0",
-    #     "-c",f"{instance}/cells.p0",
-    #     "-D", f"{instance}/data.pickle"
+    #     "-f", f"{pth}/sparse.p0",
+    #     "-c",f"{pth}/cells.p0",
+    #     "-D", f"{pth}/data.pickle"
     #     ])
 
     dat = load_from_files(args.file, args.profiles)
     if args.data is not None:
         dat.save(args.data)
+    
+    if args.mut_lookup is not None:
+        dat.export_mut_lookup(args.mut_lookup)
+    
+    if args.cell_lookup is not None:
+        dat.export_cell_lookup(args.cell_lookup)
