@@ -10,6 +10,24 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
+        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            err = config["cerror"]
+        ),
+        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv",
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            err = config["cerror"]
+        ),
         # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb{lamb}/obj1_cell_accuracy.csv",
         #     s =seeds,
         #     cells = config["cells"],
@@ -29,15 +47,7 @@ rule all:
         #     mclust = config['mclust'],
         #     err = config["cerror"]
         # ),
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv",
-            s =seeds,
-            cells = config["cells"],
-            snvs = config["snvs"],
-            nsegs = config["nsegs"],
-            cov = config["cov"],
-            mclust = config['mclust'],
-            err = config["cerror"]
-        ),
+
         
 
         
@@ -100,54 +110,63 @@ rule generatesinglecells:
      "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} -k {wildcards.nsegs} "
      "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} -e {wildcards.err} "
      " -m {params.sample} > {log.std} 2> {log.err} "
-    
-    
 
+rule make_gt:
+    input: 
+        tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
+        genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
+    output:
+        png = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.png",
+        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+    shell:
+        "python ../src/ground_truth_clonal_tree.py  -t {input.tree} "
+        "-g {input.genotypes} -T {output.gt} --draw {output.png} "
+
+rule make_phi:
+    input:
+        phi ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssignments.p0",
+        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+    output:
+        cellassign = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl"
+    shell:
+        "python ../src/cell_mapping.py -p {input.phi} -t {input.gt} -P {output.cellassign} "
+    
 rule make_data:
     input: 
         sparse ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/sparse.p0",
         copy_profiles ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cells.p0",
-    output: "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
+    output: "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
     shell:
         "python ../src/data.py -f {input.sparse} -c {input.copy_profiles} -D {output} " 
 
-rule make_gt:
-    input: 
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
-        tree =  "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/tree.tsv",
-        genotypes ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
-        phi ="input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssignments.p0",
-    output:
-        png = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.png",
-        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-    shell:
-        "python ../src/ground_truth_clonal_tree.py -d {input.data} -t {input.tree} "
-        "-g {input.genotypes} -T {output.gt} --draw {output.png} --phi {input.phi} "
 
-rule eval_obj1:
-    input:
-        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
-    output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb{lamb}/obj1_cell_accuracy.csv"
-    shell:
-        "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l {wildcards.lamb}"
 
 rule eval_snv_assignment:
     input:
-        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
+        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv"
     shell:
         "python ../src/snv_assignment.py -d {input.data} -t {input.tree} -o {output} "
 
+# rule eval_obj1:
+#     input:
+#         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
+#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
+#     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb{lamb}/obj1_cell_accuracy.csv"
+#     shell:
+#         "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l {wildcards.lamb}"
 
-rule eval_cna_only:
-    input:
-        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
-    output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb0/cna_only_cell_accuracy.csv"
-    shell:
-        "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l 0 --cna-only"
+
+
+
+# rule eval_cna_only:
+#     input:
+#         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
+#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
+#     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb0/cna_only_cell_accuracy.csv"
+#     shell:
+#         "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l 0 --cna-only"
 
 
 
