@@ -13,6 +13,8 @@ import clonelib
 from cell_mapping import CellAssign
 from constrained_cell_assignment import ConstrainedCellAssign
 from dataclasses import dataclass
+import gurobipy as gp
+from gurobipy import GRB
 
 
 
@@ -43,7 +45,7 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, S, k=4, r=3,seed=1026, max_iter=1, nrestarts=1, tolerance=1.5) -> None:
+    def __init__(self, S, k=4, r=3,seed=1026, max_iter=1, nrestarts=1, tolerance=1.5, lamb1 =5, lamb2=5) -> None:
         self.k = k 
         self.r = r
 
@@ -57,6 +59,8 @@ class STI:
         self.nrestarts = nrestarts
         self.tolerance = tolerance
         self.rng = np.random.default_rng(seed)
+        self.lamb1 = lamb1 
+        self.lamb2  =lamb2
 
         if len(list(self.S)) > 0:
             snv_tree_edgelists = clonelib.get_genotype_trees(list(self.S))
@@ -164,7 +168,7 @@ class STI:
                 beta_inv, current_cost = self.update_cell_clusters(ct, beta_inv, psi)
 
                 if np.abs(current_cost - prev_cost) <= self.tolerance or i == self.max_iter-1:
-                    sol_list.append(STISol(current_cost, ct.deepcopy, phi, psi, 
+                    sol_list.append(STISol(current_cost, ct.deepcopy(), phi, psi, 
                                            self.to_mapping_dict(alpha_inv), 
                                            self.to_mapping_dict(beta_inv), delta))
                     break 
@@ -172,12 +176,155 @@ class STI:
                     prev_cost = current_cost
 
 
-        #    alpha_inv, omega = self.update_SNVclusters(delta, beta_inv)
-    #             delta = self.upate_dcfs(alpha_inv, beta_inv)
-    #             ct, phi, psi = self.update_segment_tree(alpha_inv,  beta_inv, delta)
-    #             beta_inv, current_cost = self.update_cell_clusters(ct, beta_inv, psi)
+   
+    
+    
+    def convert_to_clonal_tree(self, t, j):
+        geno_dict = {}
+        relabel = {}
+        for i, v in enumerate(t):
+            geno_dict[i] = {j : genotype(*v) }
+            relabel[v] = i
+
+        t_seg_to_muts = {self.seg: [j]}
+        t_copy = nx.relabel_nodes(t, relabel)
+        ct = ClonalTree(t_copy, geno_dict, t_seg_to_muts)
+        return ct, {n: v for v,n in relabel.items()}
+    
+
+    @staticmethod
+    def solve(model,vars =[x], threads=1, timelimit=60):
+        model.Params.Threads = threads
+        model.Params.TimeLimit = timelimit
+     
+        model.optimize()
+        solutions = []
+        if model.Status == GRB.OPTIMAL or (model.Status==GRB.TIME_LIMIT and model.SolCount>0):
+            score = model.objVal
+            for v in vars:
+                solutions.append(model.getAttr('X', v))
+ 
+     
+            return score, solutions
+        
+        else:
+             print("warning: model infeasible!")
+             return np.Inf, solutions 
+        
+        
+        
+
+
+    
+
+
+    def compute_snv_tree_cost(self, dcf, j, tree, beta_inv):
+        clust_cost = {}
+          
+        ct, mapping = self.convert_to_clonal_tree(tree,j)
+
+        #TODO: identify split node id in clonal tree and identify descednant
+        split_node =  1
+        descendants = 2
+
+        _, _, cell_scores, nodes = ct.assign_cells(self.data, self.lamb1)
+        nodes = nodes.tolist()
+        for q, cell_clust in beta_inv.items():
+            clust = cell_scores[:, cell_clust].sum(axis=1)
+            for i, u in enumerate(nodes):
+                clust_cost[q, u] = clust[i]
+        
+        model = gp.Model("MIP")
+        clone_assign = [(i,u) for q in beta_inv for u in nodes]
+        x = self.model.addVars(self.clone_assign, vtype = GRB.BINARY )
+        x_pos = self.model.addVar( vtype = GRB.BINARY )
+        x_neg =self.model.addVar(vtype = GRB.BINARY )
+
+        model.setObjective(gp.quicksum(clust_cost[q,u]*self.x[q,u] for q,u in clone_assign) + 
+                           self.lamb2*(x_pos) + self.lamb2*x_neg,
+                             gp.GRB.MINIMIZE)
+        
+        #every cluster is assigned to exactly 1 node
+        model.addConstrs(gp.quicksum(x[q,u] for q in beta_inv)==1 for u in nodes)
+
+        #TODO: set up constraints for absolute values
+
+        objval, sol = self.solve(model, x)
+
+        tree_phi ={}
+        for q,u in clone_assign:
+    
+                if sol[q,u] > 0.5:
+                   tree_phi[q] = u 
+        return objval, tree_phi
+
+
+
+        
+
+    
     def update_SNVclusters(self, delta, beta_inv ):
-        pass 
+        
+        cst = {}
+        tree_assign = {}
+        num_groups = len(self.T_SNV_groups)
+        '''
+        Enumerate costs for each SNV cluster and each tree/group
+        '''
+        for j in self.snvs:
+            tree_assign[j] = {}
+            for q, dcf in delta.items():
+                for g, trees in enumerate(self.T_SNV_groups):
+                    g_cost = np.Inf
+                    for t in trees:
+                        
+                        cost, ct, tree_phi = self.compute_snv_tree_cost(j, dcf, t, beta_inv)
+                        if cost < g_cost:
+                            cst[(j,q,g)] = cost 
+                            tree_assign[j][g] = (t, ct,tree_phi)
+        
+        model = gp.Model("MIP")
+        clust_group_assign = [(j,q,g) for j in self.snvs for q in range(self.k) for g in range(num_groups)]
+        clust_assign = [(j,g) for j in self.snvs for q in range(self.k)]
+        group_assign =  [(q,g) for q in range(self.k) for g in range(num_groups)]
+        snv_clust = [(j,q) for j in self.snvs for q in range(self.k)]
+        x = self.model.addVars(clust_group_assign, vtype = GRB.BINARY )
+        y =self.model.addVars(group_assign, vtype=GRB.BINARY)
+        z = self.model.addVars(clust_assign, vtype = GRB.BINARY )
+        w = self.model.addVars(snv_clust, vtype= GRB.BINARY)
+       
+        #minimize cost
+        model.setObjective(gp.quicksum(cst[j,q,g]*x[j,q,g] for j,q,g in clust_group_assign), gp.GRB.MINIMIZE)
+        
+        #every snv cluster q has at least 1 SNV assigned (clusters are non-empty)
+        model.addConstrs(gp.quicksum(z[j,q] for j in self.snvs) > 0 for q in range(self.k))
+
+        #every snv is assinged to exactly 1 cluster
+        model.addConstrs(gp.quicksum(z[j,q] for q in range(self.k)) ==1 for j in range(self.snvs))
+
+        #every snv cluster is assigned to one group
+        model.addConstrs(gp.quicksum(y[q,g] for g in range(num_groups)) ==1 for q in range(self.k))
+
+        #TODO: add pairwise compatible of selected groups 
+
+        for j,q,g in clust_group_assign:
+            
+            #linking variables
+            model.addConstr(x[j,q,g] >= y[j,g])
+            model.addConstr(x[j,q,g] >= z[q,g])
+            model.addConstr(x[j,q,g] >= w[j,q])
+            #every snv assigned to snv cluster q must all have the same group assignment z[j,g
+            model.addConstr(w[j, q] == z[q, g])
+
+
+        objval, sols = self.solve(model, [x,y,z,w])
+
+        
+
+        
+
+
+            
 
     def update_dcfs(self,beta_inv, omega):
         pass 
