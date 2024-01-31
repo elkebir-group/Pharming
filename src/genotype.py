@@ -39,6 +39,8 @@ class CNAgenotype:
     def __post_init__(self):
         self.total = self.x + self.y
  
+    def __str__(self) -> str:
+        return f"{self.x}|{self.y}"
 
     def __eq__(self, _value: object) -> bool:
         if isinstance(_value, CNAgenotype):
@@ -50,6 +52,9 @@ class CNAgenotype:
     
     def to_tuple(self):
         return (self.x, self.y)
+    
+    def to_genotype(self, x_bar, y_bar):
+        return genotype(self.x, self.y, x_bar, y_bar)
 
 
 # class genotype_list:

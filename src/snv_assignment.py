@@ -69,14 +69,14 @@ def get_costs(seg, m, c, dat, lamb=0):
         t_seg_to_muts = {seg: [m]}
         t_copy = nx.relabel_nodes(t, relabel)
         ct = ClonalTree(t_copy, geno_dict, t_seg_to_muts)
-        ct.assign_cells(dat, lamb=lamb)
-        return ct.compute_costs(dat, lamb=lamb), t, ct
+        ca, cost, _, _ = ct.assign_cells(dat, lamb=lamb)
+        return cost, t, ct
  
 # print(gt.seg_to_muts)
 def assign_snvs(gt, dat):
     res = []
-    for lamb in [0, 0.1, 1]:
-        # print(f"lambda {lamb}")
+    for lamb in [0, 0.1, 1,3]:
+        print(f"lambda {lamb}")
         for seg, snvs in dat.seg_to_snvs.items():
             segtree = deepcopy(gt)
             muts =segtree.seg_to_muts[seg]
@@ -105,6 +105,8 @@ if __name__ == '__main__':
                         help="pharming data object")
     parser.add_argument("-t", "--tree", type=str, required=True,
         help="simulated gt tree")
+    # parser.add_argument("-c", "--cells", type=str, required=True,
+    #     help="simulated gt tree")
     parser.add_argument("-o", "--out", type=str, 
         help="outfile name")
     # parser.add_argument("-l", "--lamb", type=float, 
@@ -114,16 +116,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # instance = "s10_m1000_k25_l7"
     # folder = "n1000_c1_e0.15" 
-    # pth = f"/scratch/data/leah/pharming/simulation_study/input"
+    # pth = f"simulation_study/input"
 
     # args = parser.parse_args([
-    #     "-d", f"{pth}/{instance}/{folder}/data.pickle",
-    #     "-t", f"{pth}/{instance}/{folder}/gt.pickle",
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-t", f"{pth}/{instance}/gt.pkl",
     #     "-o", f"test/snv_assignments.csv"
 
     # ])
     gt = load(args.tree)
     dat = load_from_pickle(args.data)
+    gt.reindex_snvs(dat.mut_lookup)
+
     df = assign_snvs(gt, dat)
     if args.out is not None:
         df.to_csv(args.out, index=False)

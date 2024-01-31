@@ -5,34 +5,6 @@ spath <- "../simulation_study"
 config <- yaml.load_file(file.path(spath, "config.yml"))
 seeds <- 10:14
 
-cov_vals <- c("0.01", "0.05", "0.1", "0.25", "1")
-lamb_vals <- c(0, 0.1, 1, 5)
-all_sims <- expand.grid(seed = seeds, m=config$snvs, k=config$nsegs, mclust = config$mclust,
-                         n=config$cells,
-                        cov = cov_vals, lamb= lamb_vals, e=c("0", "0.15") ) %>%
-  mutate(inst_folder =glue("s{seed}_m{m}_k{k}_l{mclust}"),
-         cell_folder =glue("n{n}_c{cov}_e{e}"),
-         lamb_folder = glue("lamb{lamb}"),
-         pth = file.path(spath, "input", inst_folder, cell_folder,lamb_folder)) %>%
-  mutate(n=factor(n), m=factor(m), cov = factor(cov, levels=cov_vals, ordered=T),
-         lamb = factor(lamb, levels=lamb_vals, ordered=T)
-         )
-
-head(all_sims)
-snv_sims <- all_sims %>% select(-lamb, -lamb_folder, -pth, ) %>% distinct() %>%
-  mutate(n=factor(n), m=factor(m), cov = factor(cov, levels=cov_vals, ordered=T),
-  pth = file.path(spath, "input", inst_folder, cell_folder))
-  
-snv_dat <- bind_rows(lapply(snv_sims$pth, read_csv_wrapper, "snv_assignment.csv")) %>%
-  inner_join(snv_sims) %>% filter(!is.na(cost))
-
-snv_acc <- snv_dat %>% group_by(pth, lamb, k, m,n,mclust, cov, e) %>% summarize( accuracy = sum(best_tree)/n(), total=n())
-
-ggplot(snv_acc, aes(x=factor(n), y=accuracy, fill=factor(lamb))) + 
-  geom_boxplot() + facet_grid(cov ~e, labeller = "label_both") + 
-  xlab("number of cells") +ylab("snv assignment accuracy") +
-   scale_fill_brewer(name="lamb", palette = "Set1")
-  
 read_csv_wrapper <- function(path, fname){
   file <- file.path(path, fname)
   if(file.exists(file)){
@@ -41,6 +13,59 @@ read_csv_wrapper <- function(path, fname){
     return(data.frame(pth=path))
   }
 }
+
+cov_vals <- c("0.01", "0.05", "0.1", "0.25", "1")
+lamb_vals <- c(0, 0.1, 1, 5)
+all_sims <- expand.grid(seed = seeds, m=config$snvs, k=config$nsegs, mclust = config$mclust,
+                         n=config$cells,
+                        cov = cov_vals, e=c("0") ) %>%
+  mutate(inst_folder =glue("s{seed}_m{m}_k{k}_l{mclust}"),
+         cell_folder =glue("n{n}_c{cov}_e{e}"),
+         pth = file.path(spath, "input", inst_folder, cell_folder)) %>%
+  mutate(n=factor(n), m=factor(m), cov = factor(cov, levels=cov_vals, ordered=T))
+         
+
+head(all_sims)
+# snv_sims <- all_sims %>% 
+#   mutate(n=factor(n), m=factor(m), cov = factor(cov, levels=cov_vals, ordered=T),
+#   pth = file.path(spath, "input", inst_folder, cell_folder))
+  
+snv_dat <- bind_rows(lapply(all_sims$pth, read_csv_wrapper, "snv_assignment.csv")) %>%
+  inner_join(all_sims) #%>% filter(!is.na(cost))
+
+snv_dat <- snv_dat %>% filter(!is.na(approach))
+
+
+
+snv_dat <- mutate(snv_dat, opt_tree = best_tree & (num_best_trees <= 2))
+
+snv_sum <- snv_dat  %>% group_by(seed, n,m,k, approach, cov) %>%
+  summarize(acc = sum(best_tree)/n(), acc2 = sum(opt_tree)/n(), mean=mean(num_best_trees), median=median(num_best_trees))
+
+
+
+ggplot(snv_sum, aes(x=n, y=acc, fill=approach)) + 
+  geom_boxplot() + facet_wrap(~cov, labeller="label_both") + ylab("accuracy")
+
+ggplot(snv_sum, aes(x=n, y=acc2, fill=approach)) + 
+  geom_boxplot() +  facet_wrap(~cov, labeller="label_both") +ylab("accuracy2 (# of best fitting trees <= 2)")
+
+ggplot(snv_dat, aes(x=n, y=num_best_trees, fill=approach)) + 
+  geom_boxplot() + facet_wrap(~cov, labell="label_both")
+
+
+ggplot(snv_dat %>% filter(num_best_trees <= 2), aes(x=n, y=num_best_trees, fill=approach)) + 
+  geom_boxplot() + facet_wrap(~cov, labeller="label_both")
+
+
+snv_acc <- snv_dat %>% group_by( lamb, k, m,n,mclust, cov, e) %>% summarize( accuracy = sum(best_tree)/n(), total=n())
+
+ggplot(snv_acc, aes(x=factor(n), y=accuracy, fill=factor(lamb))) + 
+  geom_boxplot() + facet_grid(cov ~e, labeller = "label_both") + 
+  xlab("number of cells") +ylab("snv assignment accuracy") +
+   scale_fill_brewer(name="lamb", palette = "Set1")
+  
+
 
 
 all_sims %>% group_by(pth) %>% count() %>% filter(n > 1)

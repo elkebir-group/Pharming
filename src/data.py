@@ -4,7 +4,9 @@ import pandas as pd
 import pickle
 from segment_genome import Segment
 import argparse
-from collections import defaultdict
+from collections import defaultdict, Counter
+
+
 '''
 N = number of cells
 M = number of SNVs
@@ -61,7 +63,7 @@ class Data:
         
         var =self.var[np.ix_(cells, snvs)]
         total = self.total[np.ix_(cells, snvs)]
-        return var.sum(axis=0)/total.sum(axis=0)
+        return np.sum(var, axis=0)/np.sum(total, axis=0)
     
     def obs_vafs(self, cells=None, snvs=None):
         if cells is None:
@@ -138,9 +140,11 @@ class Data:
 
         x = self.copy_x[:,seg]
         y = self.copy_y[:,seg]
-        cn_states = set([(x, y) for x, y in zip(x,y)])
+        # cn_states = set([(x, y) for x, y in zip(x,y)])
+        cn_states = [(x, y) for x, y in zip(x,y)]
+        item_counts = Counter(cn_states)
 
-        return cn_states 
+        return set(cn_states), item_counts 
 
 
 
@@ -215,11 +219,6 @@ def load(read_counts,copy_numbers ):
     copy_numbers["cell"] = copy_numbers["cell"].astype(int)
     copy_numbers = copy_numbers.set_index([ "cell", "seg_id"])
 
-    # copy_numbers.to_csv("test/copy_numbers.csv")
-    # row_counts =copy_numbers.groupby(level=copy_numbers.index.names).size()
-    # print(row_counts[row_counts > 1])
-    # print(copy_numbers.index.get_level_values(0).duplicated().any())
-    # print(copy_numbers.index.get_level_values(1).duplicated().any())
     copy_x = copy_numbers["x"].unstack(level="seg_id").to_numpy()
     copy_y = copy_numbers["y"].unstack(level="seg_id").to_numpy()
 
