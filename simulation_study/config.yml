@@ -4,30 +4,30 @@ genpath: "clonesim/build/generatesinglecells"
 nseeds: 5
 
 cells:
-  - 500
+  # - 500
   - 1000
-  - 5000
+  # - 5000
 
 snvs:
-  - 1000
+  # - 1000
   - 5000
   # - 10000
 # - 25000
 
 cov:
-  - 0.01
+  # - 0.01
   # - 0.05
-  - 0.1
-  - 0.25
+  # - 0.1
+  # - 0.25
   - 1
 
 cerror:
   - 0
-  - 0.15
+  # - 0.15
 
 nsegs:
   - 25
-  - 50
+  # - 50
   # - 100
 
 mclust:

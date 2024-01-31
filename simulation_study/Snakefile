@@ -10,16 +10,25 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
-            s =seeds,
-            cells = config["cells"],
-            snvs = config["snvs"],
-            nsegs = config["nsegs"],
-            cov = config["cov"],
-            mclust = config['mclust'],
-            err = config["cerror"]
-        ),
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv",
+        # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+        #     s =seeds,
+        #     cells = config["cells"],
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     cov = config["cov"],
+        #     mclust = config['mclust'],
+        #     err = config["cerror"]
+        # ),
+        # expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv",
+        #     s =seeds,
+        #     cells = config["cells"],
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     cov = config["cov"],
+        #     mclust = config['mclust'],
+        #     err = config["cerror"]
+        # ),
+        expand("scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -141,13 +150,30 @@ rule make_data:
 
 
 
-rule eval_snv_assignment:
+# rule eval_snv_assignment:
+#     input:
+#         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+#     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv"
+#     shell:
+#         "python ../src/snv_assignment2.py -d {input.data} -t {input.tree} -o {output} "
+
+rule seg_tree_inference:
     input:
         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
-    output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/snv_assignment.csv"
+        phi = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+    params:
+        cores = 4,
+        lamb = 3
+    output:"scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv"
+    benchmark:"scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/benchmark.log"
+    log:
+        std= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inference.log",
+        err= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inference.err.log"
     shell:
-        "python ../src/snv_assignment.py -d {input.data} -t {input.tree} -o {output} "
+        "python ../src/segment_main.py -d {input.data} -t {input.tree}  -c {input.phi} "
+        "-j {params.cores} -S {output} > {log.std} 2> {log.err} "
 
 # rule eval_obj1:
 #     input:
