@@ -86,6 +86,9 @@ def convertToJson(clonal_tree, segment_csv=None, snv_csv=None):
             segment_id = mut_to_seg[snv_id]
 
             x, y, x_bar, y_bar = clonal_tree.genotypes[node_id][snv_id].to_tuple()
+            genotype = clonal_tree.genotypes[node_id][snv_id]
+            # if genotype.x_bar == 1:
+            #     print("found a 1")
 
             segments.append({"segment_id": int(segment_id), "x": int(x), "y": int(y)})
             snvs.append({"segment_id": int(segment_id), "snv_id": int(snv_id), "x_bar": int(x_bar), "y_bar": int(y_bar)})
@@ -99,12 +102,13 @@ def convertToJson(clonal_tree, segment_csv=None, snv_csv=None):
 
     # Convert final output dictionary to JSON
     json_output = json.dumps(output)
-    print(json_output)
+    with open("test.json", "w") as f:
+        f.write(str(json_output))
 
 
 # Testing on a tree
-with open('/Users/divya/Pharming/example/gt.pickle', 'rb') as f:
+with open('/Users/divya/Pharming/example/gt2.pickle', 'rb') as f:
     data = pickle.load(f)
-    print(type(data))
+    # print(type(data))
     convertToJson(data, "/Users/divya/Pharming/example/segment_csv.csv", "/Users/divya/Pharming/example/snv_csv.csv")
-    print(data)
+    # print(data)
