@@ -1,8 +1,8 @@
 import csv
 import json
-import networkx as nx
-import pickle
-from clonal_tree import ClonalTree
+# import networkx as nx
+# import pickle
+# from clonal_tree import ClonalTree
 
 def map_mut_to_seg(seg_to_muts):
     mut_to_seg = {}
@@ -102,13 +102,14 @@ def convertToJson(clonal_tree, segment_csv=None, snv_csv=None):
 
     # Convert final output dictionary to JSON
     json_output = json.dumps(output)
-    with open("test.json", "w") as f:
-        f.write(str(json_output))
+    return json_output
+    # with open("test.json", "w") as f:
+    #     f.write(str(json_output))
 
 
 # Testing on a tree
-with open('/Users/divya/Pharming/example/gt2.pickle', 'rb') as f:
-    data = pickle.load(f)
-    # print(type(data))
-    convertToJson(data, "/Users/divya/Pharming/example/segment_csv.csv", "/Users/divya/Pharming/example/snv_csv.csv")
+# with open('/Users/divya/Pharming/example/gt2.pickle', 'rb') as f:
+#     data = pickle.load(f)
+#     # print(type(data))
+#     convertToJson(data, "/Users/divya/Pharming/example/segment_csv.csv", "/Users/divya/Pharming/example/snv_csv.csv")
     # print(data)
