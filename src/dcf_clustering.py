@@ -2,8 +2,8 @@ from genotype_tree import GenotypeTree
 import numpy as np
 from dataclasses import dataclass
 from scipy.optimize import minimize_scalar
-
-
+import clonelib
+import networkx as nx 
 
 TOLERANCE = 1e-03
 EPSILON = -1e40
@@ -248,60 +248,101 @@ class DCF_Clustering:
         
         
 
-    # def decifer(self, T_CNA, tree_id_to_indices,cand_T_SNVs, dcfs,  alt, total, ):
+
+
 
     def decifer(self, data, k=5):
+        '''
+        See data.py for the data object 
+        k = # of SNV clusters 
+        '''
+        prev_likelihood = np.NINF
         self.k = k
         dcfs = self.init_cluster_centers()
         self.data = data 
+        self.segments = list(self.data.seg_to_snvs.keys())
         #enumerat valid CNA trees for each segment
+        S = {}
+        cn_props ={}
+        for ell in self.segments:
+             cn_props[ell] = self.data.cn_proportions(ell)
+
+             #find all copy number states (x,y) and proportions in segment ell
+             states = set(cn_props[ell].keys())
+             #enumerate CNA trees 
+             S[ell] = clonelib.get_cna_trees(states, 1, 1)
+             
         #S = {\ell: [CNA trees]}
-    
+       
         for j in range(self.max_iterations):
+            OMEGA = {}
+            ALPHA = {}
+            CNA_tree ={}
+            for ell in self.segments:
+                snvs = self.data.seg_to_snvs[ell]
+                seg_like = np.Inf
+                for S in S[ell]:
+                    scriptT = clonelib.get_genotype_trees(S)
+                    T_SNVs = []
+                    for snv_edges in scriptT:
 
-            #for ell in segments:
-                #for S in S[\ell]:
-                    #enumerate SNV trees T (use clonelib)
-                    #for each SNV in segment ell
-                        #assign SNV to cluster and SNV tree that maximizes the likelihood
-                            assignments, likelihood = self.optimize_cluster_assignments(tree_id_to_indices, dcfs)
-                            assignments, likelihood = self.optimize_snv_assignments(cand_T_SNVs)
-                 #set the CNA tree assignment, SNV tree assignment and SNV clustering with overall max likelihod for each segment
+                        T = nx.DiGraph(snv_edges)
+                        #recode the tree so the nodes are labeled by integers
+                        node_mapping ={u: i for i,u in enumerate(T)}
+                        T= nx.relabel_nodes(T, node_mapping)
 
-            #optimize cluster centers
-                            
+                        T_SNVs.append(GenotypeTree(T, node_mapping))
+                    
+                    #find an SNV tree assignment and DCF cluster assignment
+                        
+                    '''
+                    Optimize cluster assignments needs to be updated.
+                    You will need to compute the posterior probability of each dcf q and T pair in T_SNVs for each SNV
+                    Set omega equal to the tree with max posterior prob
+                    Set alpha equal cluster id q with max posterior prob
+                    the likelihood is the sum of the  log posterior probabilities for all optimal assignments
+                    '''   
+                    omega, alpha, likelihood  = self.optimize_cluster_assignments(T_SNVs, dcfs, snvs)
+        
+                    if likelihood > seg_like:
+                        CNA_tree[ell] = S 
+                        OMEGA[ell] = omega 
+                        ALPHA[ell] = alpha 
+                        seg_like = likelihood
+                
+                                    
+        
+            
+            '''
+            Optimize cluster centers need to be updated to account the assignments (omega, alpha) 
+            being a dictionary of dictionaries
+            
+
+
+            '''  
             old_dcfs = dcfs.copy()
-            dcfs = self.optimize_cluster_centers(assignments)
-            new_likelihood = self.compute_likelihood(dcfs, assignments)
+            dcfs, new_likelihood = self.optimize_cluster_centers(dcfs, OMEGA, ALPHA)
+            dcfs[dcfs > 0.99] =1.0
+            dcfs[dcfs < 1e-3] =0
+
+            '''
+            The likelihood computation needs to be updated as well 
+            '''
+            new_likelihood = self.compute_likelihood(dcfs,OMEGA, ALPHA)
             #check for covergence:
-            diff = new_likelihood -likelihood
+            diff = new_likelihood -prev_likelihood
             if self.verbose:
-                print(f"Previous likelihood: {likelihood} New likelihood: {new_likelihood} Diff: {diff}")
+                print(f"Previous likelihood: {prev_likelihood} New likelihood: {new_likelihood} Diff: {diff}")
             if diff < 0 or abs(diff) <  TOLERANCE:
                  dcfs = old_dcfs 
                  break
+            
+                            
 
-           
 
-        #     if j <= self.max_iterations:
-        #         assignments, likelihood = self.optimize_cluster_assignments(tree_id_to_indices, dcfs, alt, total)
-        #     else:
-        #          assignments, likelihood = self.optimize_snv_assignments(cand_T_SNVs, dcfs, alt, total)
-        #     old_dcfs = dcfs.copy()
-        #     dcfs = self.optimize_cluster_centers(assignments, alt, total)
-        #     dcfs[dcfs > 0.99] =1.0
-        #     dcfs[dcfs < 1e-3] =0
 
-        #     diff = new_likelihood -likelihood
-        #     if self.verbose:
-        #         print(f"Previous likelihood: {likelihood} New likelihood: {new_likelihood} Diff: {diff}")
-        #     if diff < 0 or abs(diff) <  TOLERANCE:
-        #          dcfs = old_dcfs 
-        #          break
-        #     # if likelihood > best_likelihood:
-        #     #     best_likelihood = likelihood
-      
-        # return DCF_Data(likelihood, assignments, T_CNA, dcfs)
+                 
+
 
     def fit(self, tree_id_to_indices, snvs, alt, total):
         self.snv_lookup= {i: snvs[i] for i in range(len(snvs))}

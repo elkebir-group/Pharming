@@ -231,24 +231,33 @@ class GenotypeTree(ClonalTree):
         
 
 
-    def posterior_dcf(self, dcf,a,d,cn ):
-
+    def posterior_dcf(self, dcf,a,d,cn_prop ):
+        '''
+        dcf: float dcf cluster center
+        a: int  total variant reads for a single SNV
+        d: int  total reads for a single SNV
+        cn_prop: dict   cn states with cn proportions 
+        '''
         if d==0:
             posterior = self.EPSILON
         else:
             
-            cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
-            #v = self.dcf(dcf, cn)
-            #copy code so that posterior 
-            v = (dcf*self.m_star)/cn \
-                + (1/cn)*sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
+
+            #compute fractional copy number 
+            F = sum([(cn[0] + cn[1])*cn_prop[cn]] for cn in cn_prop)
+            v = (dcf*self.m_star)/F\
+                + (1/F)*sum([(m-self.m_star)*cn_prop[(x,y)] for x,y,m in self.desc_genotypes])
     
             posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
         return posterior
+  
         
 
 
     def vectorized_posterior(self, dcf_vec, a_vec, d_vec, cn):
+         raise NotImplemented
+         ######## USE non-vectorized version above####
+         ### Needs to be udpated#####
          alpha =0.001
          cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
          const_part = sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
@@ -267,11 +276,11 @@ class GenotypeTree(ClonalTree):
         # Call the non-static function for a single element
 
 
-    def dcf_to_v(self,dcf,cn):
-       
-        cn_prop = {g.x+g.y: 1.0 if g.x+g.y==cn else 0.0 for g in self.gamma}
-        v = (dcf*self.m_star)/cn \
-            + (1/cn)*sum([(g.z-self.m_star)*cn_prop[g.x+g.y] for g in self.desc_genotypes])
+    def dcf_to_v(self,dcf,cn_prop):
+        F = sum([(cn[0] + cn[1])*cn_prop[cn]] for cn in cn_prop)
+
+        v = (dcf*self.m_star)/F \
+            + (1/F)*sum([(g.z-self.m_star)*cn_prop[g.x+g.y] for g in self.desc_genotypes])
     
         if v < 0:
             return 0
@@ -283,6 +292,8 @@ class GenotypeTree(ClonalTree):
     
 
     def v_to_dcf(self,v,cn, trunc=True):
+        ###### needs to be updated ###
+        raise NotImplemented
         cn_prop = {g.w: 1.0 if g.w==cn else 0.0 for g in self.gamma}
         if cn == self.cn_star:
             d = (1/self.m_star)*(v*cn -sum([(g.m-self.m_star)*cn_prop[g.w] for g in self.desc_genotypes]))
