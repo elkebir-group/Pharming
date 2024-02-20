@@ -28,7 +28,7 @@ def unpack_assignments(cluster, assignments):
                     tree_id_to_indices[tree_id] = [index]
     return tree_id_to_indices
 class DCF_Clustering:
-    def __init__(self, T_CNAs, T_SNVs,T_SNV_clusters, clusters= 3, nrestarts=25, rng=None, verbose=False):
+    def __init__(self, nrestarts=25, rng=None, verbose=False):
         self.nrestarts =nrestarts 
         if rng is None:
             self.rng = rng 
@@ -36,27 +36,27 @@ class DCF_Clustering:
             self.rng = np.random.default_rng(1026)
         # self.clusters= [i+1 for i in range(max_clusters)]
         
-        self.k = clusters
-        self.T_CNAs = T_CNAs
+        # self.k = clusters
+        # self.T_CNAs = T_CNAs
 
-        self.T_SNVs = T_SNVs
-        self.id_to_tree = {tree.id: tree for tree in T_SNVs}
-        self.max_iterations=100
-        self.combos = []
+        # self.T_SNVs = T_SNVs
+        # self.id_to_tree = {tree.id: tree for tree in T_SNVs}
+        # self.max_iterations=100
+        # self.combos = []
    
-        self.T_SNV_clusters = T_SNV_clusters
-        for k in range(self.k):
-            for t,tree in enumerate(self.T_SNVs):
-                    self.combos.append((k,t))
+        # self.T_SNV_clusters = T_SNV_clusters
+        # for k in range(self.k):
+        #     for t,tree in enumerate(self.T_SNVs):
+        #             self.combos.append((k,t))
         
-        self.verbose = False
+        # self.verbose = False
     
 
     def init_cluster_centers(self):
         ''' 
         randomly initialize cluster centers 
         '''
-        return self.rng.uniform(low=0.0, high=1.0, size=(self.nsamples, self.k))
+        return self.rng.uniform(low=0.0, high=1.0, size=self.k)
 
 
     def optimize_snv_assignments(self, T_SNVs, dcfs, alt, total):
@@ -248,30 +248,60 @@ class DCF_Clustering:
         
         
 
-    def fit_cna_tree(self, T_CNA, tree_id_to_indices,cand_T_SNVs, dcfs,  alt, total, ):
+    # def decifer(self, T_CNA, tree_id_to_indices,cand_T_SNVs, dcfs,  alt, total, ):
 
-
+    def decifer(self, data, k=5):
+        self.k = k
+        dcfs = self.init_cluster_centers()
+        self.data = data 
+        #enumerat valid CNA trees for each segment
+        #S = {\ell: [CNA trees]}
     
         for j in range(self.max_iterations):
-            if j <= self.max_iterations:
-                assignments, likelihood = self.optimize_cluster_assignments(tree_id_to_indices, dcfs, alt, total)
-            else:
-                 assignments, likelihood = self.optimize_snv_assignments(cand_T_SNVs, dcfs, alt, total)
+
+            #for ell in segments:
+                #for S in S[\ell]:
+                    #enumerate SNV trees T (use clonelib)
+                    #for each SNV in segment ell
+                        #assign SNV to cluster and SNV tree that maximizes the likelihood
+                            assignments, likelihood = self.optimize_cluster_assignments(tree_id_to_indices, dcfs)
+                            assignments, likelihood = self.optimize_snv_assignments(cand_T_SNVs)
+                 #set the CNA tree assignment, SNV tree assignment and SNV clustering with overall max likelihod for each segment
+
+            #optimize cluster centers
+                            
             old_dcfs = dcfs.copy()
-            dcfs = self.optimize_cluster_centers(assignments, alt, total)
-            dcfs[dcfs > 0.99] =1.0
-            dcfs[dcfs < 1e-3] =0
-            new_likelihood = self.compute_likelihood(dcfs, assignments, alt, total)
+            dcfs = self.optimize_cluster_centers(assignments)
+            new_likelihood = self.compute_likelihood(dcfs, assignments)
+            #check for covergence:
             diff = new_likelihood -likelihood
             if self.verbose:
                 print(f"Previous likelihood: {likelihood} New likelihood: {new_likelihood} Diff: {diff}")
             if diff < 0 or abs(diff) <  TOLERANCE:
                  dcfs = old_dcfs 
                  break
-            # if likelihood > best_likelihood:
-            #     best_likelihood = likelihood
+
+           
+
+        #     if j <= self.max_iterations:
+        #         assignments, likelihood = self.optimize_cluster_assignments(tree_id_to_indices, dcfs, alt, total)
+        #     else:
+        #          assignments, likelihood = self.optimize_snv_assignments(cand_T_SNVs, dcfs, alt, total)
+        #     old_dcfs = dcfs.copy()
+        #     dcfs = self.optimize_cluster_centers(assignments, alt, total)
+        #     dcfs[dcfs > 0.99] =1.0
+        #     dcfs[dcfs < 1e-3] =0
+
+        #     diff = new_likelihood -likelihood
+        #     if self.verbose:
+        #         print(f"Previous likelihood: {likelihood} New likelihood: {new_likelihood} Diff: {diff}")
+        #     if diff < 0 or abs(diff) <  TOLERANCE:
+        #          dcfs = old_dcfs 
+        #          break
+        #     # if likelihood > best_likelihood:
+        #     #     best_likelihood = likelihood
       
-        return DCF_Data(likelihood, assignments, T_CNA, dcfs)
+        # return DCF_Data(likelihood, assignments, T_CNA, dcfs)
 
     def fit(self, tree_id_to_indices, snvs, alt, total):
         self.snv_lookup= {i: snvs[i] for i in range(len(snvs))}
