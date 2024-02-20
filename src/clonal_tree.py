@@ -11,6 +11,7 @@ import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
 from genotype import genotype 
 from cell_mapping import CellAssign
+from tree_to_json import convertToJson
 
 
 
@@ -386,7 +387,10 @@ class ClonalTree:
     
 
 
-
+    def toJson(self, fname, segment_csv=None, snv_csv=None):
+        json = convertToJson(self, segment_csv, snv_csv)
+        with open(fname, "w") as f:
+            f.write(str(json))
     
     def filter_snvs(self,  snvs):
         snvs = set(snvs)
