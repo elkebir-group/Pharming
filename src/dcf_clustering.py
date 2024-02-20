@@ -34,6 +34,8 @@ class DCF_Clustering:
             self.rng = rng 
         else:
             self.rng = np.random.default_rng(1026)
+
+
         # self.clusters= [i+1 for i in range(max_clusters)]
         
         # self.k = clusters
@@ -336,72 +338,98 @@ class DCF_Clustering:
             if diff < 0 or abs(diff) <  TOLERANCE:
                  dcfs = old_dcfs 
                  break
+            else:
+                 prev_likelihood = new_likelihood
+            
+
+            return new_likelihood, dcfs, CNA_tree, ALPHA, OMEGA,
             
                             
 
+    def run(self, data, k_vals= [5,6]):
+       
+        results = {}
+        for k in k_vals:
+            for i in self.nrestarts:
+               results[k,i] = self.decifer(data, k)
 
 
-                 
+        #add model selection 
+               
+        return #best 
+        
 
 
-    def fit(self, tree_id_to_indices, snvs, alt, total):
-        self.snv_lookup= {i: snvs[i] for i in range(len(snvs))}
-        self.snv_index_to_tree_id = {}
-        self.tree_id_to_indices = tree_id_to_indices
-        for id, indices in tree_id_to_indices.items():
-             for i in indices:
-                  self.snv_index_to_tree_id[i] = id
+
+if __name__ == "__main__":
+     
+     #load in pickled data object 
+
+     from data import Data, load_from_pickle
+     dat = load_from_pickle("pth/to_pickled_object.pkl")
+     dec = DCF_Clustering(nrestarts=50)
+     all_results = dec.run()
+
+     
+
+#     def fit(self, tree_id_to_indices, snvs, alt, total):
+#         self.snv_lookup= {i: snvs[i] for i in range(len(snvs))}
+#         self.snv_index_to_tree_id = {}
+#         self.tree_id_to_indices = tree_id_to_indices
+#         for id, indices in tree_id_to_indices.items():
+#              for i in indices:
+#                   self.snv_index_to_tree_id[i] = id
                   
             
 
-        self.nsamples = len(alt)
+#         self.nsamples = len(alt)
 
-        for i in range(self.nrestarts):
-            print(f"Restart: {i}")
+#         for i in range(self.nrestarts):
+#             print(f"Restart: {i}")
             
-            dcfs = self.init_cluster_centers()
-            best_likelihood = np.NINF
+#             dcfs = self.init_cluster_centers()
+#             best_likelihood = np.NINF
     
-            cna_tree_likes = []
-            res = []
-            for cna_tree in self.T_CNAs:
-                cand_T_SNVs = [tree for tree in self.T_SNVs if tree.is_refinement(cna_tree)]
-                # tree_id_to_indices
-                tree_results= self.fit_cna_tree(cna_tree, tree_id_to_indices, cand_T_SNVs, dcfs, alt, total)
-                cna_tree_likes.append(tree_results.likelihood)
-                res.append(tree_results)
-            max_index = cna_tree_likes.index(max(cna_tree_likes))
+#             cna_tree_likes = []
+#             res = []
+#             for cna_tree in self.T_CNAs:
+#                 cand_T_SNVs = [tree for tree in self.T_SNVs if tree.is_refinement(cna_tree)]
+#                 # tree_id_to_indices
+#                 tree_results= self.fit_cna_tree(cna_tree, tree_id_to_indices, cand_T_SNVs, dcfs, alt, total)
+#                 cna_tree_likes.append(tree_results.likelihood)
+#                 res.append(tree_results)
+#             max_index = cna_tree_likes.index(max(cna_tree_likes))
 
-        if best_likelihood < max(cna_tree_likes):
-            best_likelihood = max(cna_tree_likes)
-            best_res = res[max_index]
-        return best_res
+#         if best_likelihood < max(cna_tree_likes):
+#             best_likelihood = max(cna_tree_likes)
+#             best_res = res[max_index]
+#         return best_res
             
                 
 
             
-@dataclass 
-class DCF_Data:
-    likelihood: float 
-    assignments: list
-    T_CNA: GenotypeTree 
-    DCFs: np.array
+# @dataclass 
+# class DCF_Data:
+#     likelihood: float 
+#     assignments: list
+#     T_CNA: GenotypeTree 
+#     DCFs: np.array
 
 
 
-    def get_clusters(self):
-         return np.array([k for k, _ in self.assignments],dtype=int)
+#     def get_clusters(self):
+#          return np.array([k for k, _ in self.assignments],dtype=int)
     
-    def snv_to_tree(self, snvs, T_SNVs):
-         mydict = {}
-         index = 0
-         for _, tree_id in self.assignments:
-              for t in T_SNVs:
-                   if t.id == tree_id:
-                        mydict[snvs[index]] = t
-                        index +=1
-                        break
-         return mydict
+#     def snv_to_tree(self, snvs, T_SNVs):
+#          mydict = {}
+#          index = 0
+#          for _, tree_id in self.assignments:
+#               for t in T_SNVs:
+#                    if t.id == tree_id:
+#                         mydict[snvs[index]] = t
+#                         index +=1
+#                         break
+#          return mydict
 
         
 #equation 28
