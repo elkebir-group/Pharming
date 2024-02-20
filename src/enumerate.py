@@ -17,13 +17,31 @@ import itertools
 # minimum correction tree parsimonious clone reconciliation problem
 class Enumerate:
 
-    def __init__(self, snv_edges, cna_edges, threads = 1, timelimit = None, verbose = True):
+    def __init__(self, T, S, threads = 1, timelimit = None, verbose = True):  
         # self.snv_mat = snv_mat
         # self.cna_mat = cna_mat
-        T= nx.DiGraph(snv_edges)
+ 
+        self.cna_clones = {}
+        for n in nx.dfs_preorder_nodes(T):
+            if T.in_degree[n] ==0:
+                T.add_edge(-1, n)
+                break
+        sorted_nodes = list(T.nodes)
+        sorted_nodes.sort()
+        snv_mapping= {n: i for i,n in enumerate(sorted_nodes)}
+        T= nx.relabel_nodes(T, snv_mapping)
+     
+        
+        self.snv_clones = {val: key for key,val in snv_mapping.items()}
         self.nsnv = len(list(T.nodes))#self.snv_mat.shape[0]
-        S = nx.DiGraph(cna_edges)
+        snv_edges = list(T.edges)
+
+        cna_mapping= {n: i for i,n in enumerate(S.nodes) }
+        S= nx.relabel_nodes(S, cna_mapping)
+        self.cna_clones = {val: key for key,val in cna_mapping.items()}
         self.ncna = (len(list(S.nodes)))
+        cna_edges = list(S.edges)
+
         G = nx.DiGraph()
         G.add_edges_from(snv_edges)
         self.snv_dag = nx.algorithms.transitive_closure_dag(G)
@@ -73,7 +91,7 @@ class Enumerate:
 
         print(f'snv root is {self.snv_root} and cna root is {self.cna_root}')
 
-    def solve(self, snv_clones=None, cna_clones=None, max_sol=1000):
+    def solve(self, max_sol=1000):
         model = gp.Model('solveMCTPCR')
         model.Params.PoolSearchMode = 2
         model.Params.PoolSolutions = max_sol
@@ -196,7 +214,7 @@ class Enumerate:
 
 
         num_solutions = model.SolCount
-        trees = []
+        self.trees = []
         labels = [(i,j) for i in range(nsnv) for j in range(ncna)]
         for i in range(num_solutions):
             # model.setParam(gp.GRB.Param.SolutionNumber, i)
@@ -214,9 +232,9 @@ class Enumerate:
 # Retrieve the solution values for the filtered decision variables
 # solution_values_for_x = model.getAttr('Xn', x_variables)
             # print(self.sol_clones)
-            trees.append(self.getCloneTree(snv_clones, cna_clones))
+            self.trees.append(self.getCloneTree())
 
-        return trees 
+        return self.trees 
         # if model.status == gp.GRB.OPTIMAL:
         #     solx = model.getAttr('x', x)
 
@@ -248,7 +266,7 @@ class Enumerate:
             for clone_edge in clone_edges:
                 output.write(f'{clone_edge[0]}\t{clone_edge[1]}\n')
     
-    def getCloneTree(self, snv_clones = None, cna_clones = None):
+    def getCloneTree(self):
         clone_edges = []
         for clone1, clone2 in itertools.permutations(self.sol_clones, 2):
             snv_clone1 = clone1[0]
@@ -266,28 +284,26 @@ class Enumerate:
             if clone1[0] == clone2[0]:
                 if clone1[1] in self.cna_parent_dict.keys():
                     if clone2[1] in self.cna_parent_dict[clone1[1]]:
-                        if snv_clones:
-                            snv_clone1 = snv_clones[clone1[0]]
-                            snv_clone2 = snv_clones[clone2[0]]
-                        if cna_clones:
-                            cna_clone1 = cna_clones[clone1[1]]
-                            cna_clone2 = cna_clones[clone2[1]]
+         
+                        snv_clone1 = self.snv_clones[clone1[0]]
+                        snv_clone2 = self.snv_clones[clone2[0]]
+                        cna_clone1 = self.cna_clones[clone1[1]]
+                        cna_clone2 = self.cna_clones[clone2[1]]
                         clone_edges.append(((snv_clone2, cna_clone2), (snv_clone1, cna_clone1)))
 
             if clone1[1] == clone2[1]:
                 if clone1[0] in self.snv_parent_dict.keys():
                     if clone2[0] in self.snv_parent_dict[clone1[0]]:
-                        if snv_clones:
-                            snv_clone1 = snv_clones[clone1[0]]
-                            snv_clone2 = snv_clones[clone2[0]]
-                        if cna_clones:
-                            cna_clone1 = cna_clones[clone1[1]]
-                            cna_clone2 = cna_clones[clone2[1]]
-                        clone_edges.append(((snv_clone2, cna_clone2), (snv_clone1, cna_clone1)))
             
-        T= nx.DiGraph(clone_edges)
+                        snv_clone1 = self.snv_clones[clone1[0]]
+                        snv_clone2 = self.snv_clones[clone2[0]]
+      
+                        cna_clone1 = self.cna_clones[clone1[1]]
+                        cna_clone2 = self.cna_clones[clone2[1]]
+                        clone_edges.append(((snv_clone2, cna_clone2), (snv_clone1, cna_clone1)))
+        
 
-        return T
+        return nx.DiGraph(clone_edges)
 
         # with open(clone_tree_file, 'w') as output:
         #     for clone_edge in clone_edges:
@@ -352,12 +368,16 @@ class Enumerate:
 #         ptree.add_edges_from(list(tree.edges))
 #         ptree.layout("dot")
 #         ptree.draw(fname)
-S_edge  = [(0,1), (0,2)]
-cna_clones = {0: (1,1), 1: (1,3), 2: (2,0)}
-T_edges = [(0, 1), (1,2), (2,3), (1, 4) ]
-snv_clones = {0: -1, 1: 0, 2: 1, 3: 2, 4:3}
-obj = Enumerate(T_edges, S_edge)
-trees = obj.solve(cna_clones=cna_clones, snv_clones=snv_clones)
+# # S_edge  = [(0,1), (0,2)]
+# S = nx.DiGraph([((1,1), (1,3)), ((1,1), (2,0)) ])
+# T = nx.DiGraph([ (0,1), (0,3), (1,2)])
+# trees = Enumerate(T,S).solve()
 # [draw(trees[i], f"test/refinement{i}.png") for i in range(len(trees))]
+# cna_clones = {0: (1,1), 1: (1,3), 2: (2,0)}
+# T_edges = [(0, 1), (1,2), (2,3), (1, 4) ]
+# snv_clones = {0: -1, 1: 0, 2: 1, 3: 2, 4:3}
+
+# trees = obj.solve(cna_clones=cna_clones, snv_clones=snv_clones)
+
 # obj.writeCloneTree("test/clone_tree.txt")
 

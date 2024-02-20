@@ -24,6 +24,15 @@ class CellAssign:
     def update_phi(self):
         self.phi ={i : v  for v in self.clones for i in self.cell_mapping[v] if v in self.cell_mapping}
 
+
+    def move(self, cell, node):
+        if node in self.clones:
+            cur_node = self.phi[cell]
+            self.phi[cell] = node 
+            self.cell_mapping[cur_node].remove(cell)
+            self.cell_mapping[node].append(cell)
+        else:
+            print("Warning: node does not exist. Cell not moved")
     def to_mapping(self):
 
         cell_mapping = {v: [] for v in self.clones}

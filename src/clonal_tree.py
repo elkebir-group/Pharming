@@ -198,33 +198,77 @@ class ClonalTree:
         return list(nx.dfs_preorder_nodes(self.tree, source=source))
     
     
-    def compute_dcfs(self, ca, segment):
-        counts = ca.get_cell_count()
-        total_cells = sum(counts[u] for u in counts)
-        cna_genos = self.get_cna_genos()[segment]
-        # cna_states = set(cna_genos[segment][v].to_tuple() for v in self.tree)
+    def compute_dcfs(self, ca):
         dcfs = {}
-        cell_counts = {n: 0 for n in self.tree}
-        res = []
+        counts = ca.get_cell_count()
+        ncells = len(ca.get_all_cells())
         for n in self.tree:
+            
             if len(self.mut_mapping[n]) > 0:
-                # snvs = self.mut_mapping[n]
-                # m = snvs[0]
+                snvs = self.mut_mapping[n]
+                m = snvs[0]
+                dcfs[n] = sum([counts[u] for u in self.preorder(source=n)])/ncells 
+        return dcfs 
+
+
+
+    # def compute_dcfs(self, ca, segment):
+    #     counts = ca.get_cell_count()
+    #     total_cells = sum(counts[u] for u in counts)
+    #     cna_genos = self.get_cna_genos()[segment]
+    #     # cna_states = set(cna_genos[segment][v].to_tuple() for v in self.tree)
+    #     dcfs = {}
+    #     cell_counts = {n: 0 for n in self.tree}
+    #     res = []
+    #     for n in self.tree:
+    #         if len(self.mut_mapping[n]) > 0:
+    #             # snvs = self.mut_mapping[n]
+    #             # m = snvs[0]
   
-                for u in self.preorder(source=n):
-                            count = counts[u]
-                            res.append([n, cna_genos[u].to_tuple(), count])
-                            cell_counts[n] += count
+    #             for u in self.preorder(source=n):
+    #                         count = counts[u]
+    #                         res.append([n, cna_genos[u].to_tuple(), count])
+    #                         cell_counts[n] += count
         
-        dcfs = {u: cell_counts[u]/total_cells for u in cell_counts}
-        df = pd.DataFrame(res, columns=["cluster",  "state", "count"])
-        dcf_by_state = df.groupby(["cluster", "state"]).sum("count")
-        print(dcf_by_state)
-        dcf_by_state = dcf_by_state/total_cells
-        print(dcf_by_state)
-        return dcfs, dcf_by_state
+    #     dcfs = {u: cell_counts[u]/total_cells for u in cell_counts}
+    #     df = pd.DataFrame(res, columns=["cluster",  "state", "count"])
+    #     dcf_by_state = df.groupby(["cluster", "state"]).sum("count")
+    #     print(dcf_by_state)
+    #     dcf_by_state = dcf_by_state/total_cells
+    #     print(dcf_by_state)
+    #     return dcfs, dcf_by_state
         
 
+
+    def mutation_cluster_tree(self):
+        cluster_nodes = [n for n in self.tree if len(self.mut_mapping[n]) > 0]
+
+        def find_closest_ancestor(u, nodes_list):
+        # Initialize variables to keep track of the closest ancestor and its distance
+            closest_ancestor = None
+            min_distance =  np.inf  # Initialize to infinity
+            
+            # Calculate the shortest path from u to each node in the list
+            for node in nodes_list:
+                # Calculate the shortest path length from u to the current node
+                if u !=node and nx.has_path(self.tree, source=node, target=u ):
+                    distance = nx.shortest_path_length(self.tree, source=node, target=u)
+                
+                    # Update the closest ancestor and its distance if the current node is closer
+                    if distance < min_distance:
+                        closest_ancestor = node
+                        min_distance = distance
+            return closest_ancestor
+    
+
+        T_m = nx.DiGraph()
+        for n in cluster_nodes:
+            T_m.add_node(n)
+            parent = find_closest_ancestor(n, cluster_nodes)
+            if parent is not None:
+                T_m.add_edge(parent, n)
+        return T_m
+      
 
 
     
@@ -658,8 +702,29 @@ class ClonalTree:
         return cell_scores
 
     
-    
-    def assign_cells(self, data, lamb=0, cna_only=False):
+    def compute_node_likelihoods(self, data, cells=None, snvs=None, lamb=0, lamb_vaf=1):
+        if cells is None:
+            cells = data.cells
+        nodes = np.array(self.tree)
+        node_cell_likes = []
+        for u in nodes: 
+            vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+            if snvs is None:
+                snvs = list(vaf.keys())
+            vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+        
+            node_cell_likes.append(data.binomial_likelihood(data.cells, snvs,vafs ))
+        
+        cell_scores = np.vstack(node_cell_likes)
+        cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+        cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
+
+        return cell_scores, nodes
+
+
+
+
+    def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
 
         nodes = np.array(self.tree)
         if cna_only:
@@ -670,7 +735,7 @@ class ClonalTree:
 
         if lamb > 0:
             cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
-            cell_scores = cell_scores + lamb*cell_cna_scores
+            cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
         assignments = np.argmin(cell_scores, axis=0)
         self.cost = np.nansum(np.nanmin(cell_scores,axis=0)).sum()
         

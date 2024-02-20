@@ -72,7 +72,7 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, S, k=4, r=3,seed=102, max_iter=5, nrestarts=1, tolerance=1.5, lamb1 =5, lamb2=5) -> None:
+    def __init__(self, S, k=4, r=3,seed=11, max_iter=3, nrestarts=20, tolerance=1.5, lamb1 =5, lamb2=100) -> None:
         self.k = k 
         self.r = r
 
@@ -81,13 +81,21 @@ class STI:
                  raise ValueError("CNA Tree S is not valid!")
         else:
             self.S = S 
+        
+
+        self.cn_states = {}
+        for i, u in enumerate(self.S):
+            self.cn_states[u] = self.k +i + 1 
+        
+        self.cn_states_inv = {val: key for key,val in self.cn_states.items()}
   
         self.max_iter = max_iter
         self.nrestarts = nrestarts
         self.tolerance = tolerance
         self.rng = np.random.default_rng(seed)
-        self.lamb1 = lamb1 
+        self.lamb1 = 10
         self.lamb2  =lamb2
+        self.lamb2 =100
 
         if len(list(self.S)) > 0:
             snv_tree_edgelists = clonelib.get_genotype_trees(list(self.S.edges))
@@ -105,7 +113,9 @@ class STI:
         self.T_SNVs = [nx.DiGraph(edges) for edges in snv_tree_edgelists]
         self.T_SNV_groups, self.group_desc = self.group_snv_trees()
         
-     
+        for g, trees in enumerate(self.T_SNV_groups):
+            for i,t in enumerate(trees):
+                draw(t,f"test/tree_g{g}_t{i}.png")
 
     
     @staticmethod
@@ -174,7 +184,7 @@ class STI:
 
 
 
-    def fit(self, data, segment):
+    def fit(self, data, segment, delta=None, beta_inv=None):
         self.data = data
         self.ell = segment
         self.snvs = self.data.seg_to_snvs[segment]
@@ -183,13 +193,15 @@ class STI:
         for w in range(self.nrestarts):
             
             #a dictionary of len k with the current DCF of each SNV cluster q
-            delta = self.initialize_dcfs()
+            if delta is  None:
+                delta = self.initialize_dcfs()
             print("initializing DCFs....")
             for q,dcf in delta.items():
                 print(f"{q}: {dcf}")
             
             #a cell to cluster mapping alpha: [n] -> [r]
-            beta, beta_inv  = self.initialize_cell_clusters(self.data.cells)      
+            if beta_inv is None:
+                beta, beta_inv  = self.initialize_cell_clusters(self.data.cells)      
             
             #a mapping of cell cluster to node in clonal tree for the segment
             phi = {}
@@ -197,6 +209,11 @@ class STI:
             for i in range(self.max_iter):
            
                 alpha_inv, omega, snv_clust_to_group = self.update_SNVclusters(delta, beta_inv)
+                alpha = self.to_mapping_dict(alpha_inv)
+                for q, val in alpha_inv.items():
+                    print(f"k: {q} dcf: {delta[q]} nsnvs: {len(val)}")
+                return alpha
+
                 delta = self.update_dcfs(alpha_inv, beta_inv, omega)
                 G, node_cn_states = self.construct_clonal_graph(delta, snv_clust_to_group)
                 clonal_trees = self.enumerate_trees(G, alpha_inv, delta, omega, node_cn_states)
@@ -205,17 +222,18 @@ class STI:
 
                 current_cost, beta_inv, phi = self.update_cell_clusters(ct, delta)
                 print(f"iteration: {i} diff: {np.abs(current_cost-prev_cost)} current cost: {current_cost} previous cost: {prev_cost}")
-                if np.abs(current_cost - prev_cost) <= self.tolerance or i == self.max_iter-1:
-                    sol_list.append(STISol(current_cost, deepcopy(ct), phi, 
+                sol_list.append(STISol(current_cost, deepcopy(ct), phi, 
                                            self.to_mapping_dict(alpha_inv), 
                                            self.to_mapping_dict(beta_inv), delta))
+                if np.abs(current_cost - prev_cost) <= self.tolerance:
                     break 
                 else:
                     prev_cost = current_cost
-
+        
+        return sorted(sol_list, key= lambda x: x.cost)
     
    
-    def group_to_graph(self, group, cluster_ids, delta, cn_states): 
+    def group_to_graph(self, group, cluster_ids, delta): 
         sscn =self.group_desc[group]['sscn']
         children = self.group_desc[group]['children']
     
@@ -224,11 +242,11 @@ class STI:
         G= nx.DiGraph()
 
 
-        for u in cn_states:
-            # G.add_node(cn_states[u])
+        for u in self.cn_states:
+            # G.add_node(self.cn_states[u])
             if u == sscn:
-                root = cn_states[u]
-                G.add_node(cn_states[u])
+                root = self.cn_states[u]
+                G.add_node(self.cn_states[u])
 
         if len(children) ==0:
             # for u,v in self.S.edges:
@@ -269,39 +287,50 @@ class STI:
 
         group_to_snv_clust = self.to_inverse_dict(snv_clust_to_group)
 
-        cn_states = {}
-        for i, u in enumerate(self.S):
-            cn_states[u] = self.k +i + 1 
+        # cn_states = {}
+        # for i, u in enumerate(self.S):
+        #     cn_states[u] = self.k +i + 1 
         refinements ={}
         groups_by_sscn = {u: [] for u in self.S}
         for g in group_to_snv_clust:
-            refinements[g] = self.group_to_graph(g, group_to_snv_clust[g], delta, cn_states)
+            refinements[g] = self.group_to_graph(g, group_to_snv_clust[g], delta)
             groups_by_sscn[self.group_desc[g]['sscn']].append(g)
 
         merged_graphs = []
         for sscn in groups_by_sscn:
             if len(groups_by_sscn[sscn]) > 0:
-                G= self.merge_groups(sscn, cn_states,  refinements, groups_by_sscn[sscn], group_to_snv_clust,delta )
+                G= self.merge_groups(sscn,  refinements, groups_by_sscn[sscn], group_to_snv_clust,delta )
                 merged_graphs.append(G)
         # clonal_graph= self.integrate_refinements(refinements,group_to_snv_clust)
         G= nx.compose_all(merged_graphs)
 
-        node_cn_states = {val: key for key, val in cn_states.items()}
+        node_cn_states = {val: key for key, val in self.cn_states.items()}
         for u in G:
             if u not in node_cn_states:
                 grp = snv_clust_to_group[u]
                 node_cn_states[u] = self.group_desc[grp]['sscn']
+        # draw(G, "test/clonal_graph.png")
+
+        for u in self.cn_states_inv:
+            if u not in  G:
+                parent = list(self.S.predecessors(self.cn_states_inv[u]))
+                if len(parent) == 1:
+                    G.add_edge(self.cn_states[parent[0]], u)
+
         if not nx.is_weakly_connected(G):
             components = list(nx.weakly_connected_components(G))
-            roots = []
+            components =sorted(components, key=lambda x: len(x), reverse=True)
+            main_comp = components.pop(0)
+            main_comp_cna = [u for u in main_comp if u in self.cn_states_inv]
+     
             for comp in components:
-                root = [u for u in comp if G.in_degree[u]==0][0]
+                roots = [u for u in comp if u in self.cn_states_inv ]
 
-                roots.append(root)
-            for u in roots:
-                for v in roots:
-                    if u !=v and (node_cn_states[u], node_cn_states[v]) in list(self.S.edges):
-                        G.add_edge(u,v)
+                for u in main_comp_cna:
+                    for v in roots:
+                        if (node_cn_states[u], node_cn_states[v]) in list(self.S.edges):
+                            G.add_edge(u,v)
+                            break
             
         draw(G, "test/clonal_graph.png")
 
@@ -310,7 +339,7 @@ class STI:
         return G, node_cn_states
 
 
-    def merge_groups(self, sscn, cn_states, refinements, groups, group_to_snv_clust, delta):
+    def merge_groups(self, sscn, refinements, groups, group_to_snv_clust, delta):
      
         #sort in reverse order from the most number of children to least
         sorted_groups = sorted([(g, self.group_desc[g]["children"]) for g in groups], key=lambda x: len(x[1]), reverse=True)
@@ -335,7 +364,7 @@ class STI:
 
         if len(children) == 1:
             child = children.pop()
-            G.add_edge(new_last, cn_states[child])
+            G.add_edge(new_last, self.cn_states[child])
 
         
 
@@ -349,9 +378,9 @@ class STI:
             added = False 
             for end, kids in children_last:
                 if len(children.intersection(kids)) > 0:
-                    new_root = list(G2.successors(cn_states[sscn]))[0]
+                    new_root = list(G2.successors(self.cn_states[sscn]))[0]
                     new_last = find_last(G2, g)
-                    G2.remove_node(cn_states[sscn])
+                    G2.remove_node(self.cn_states[sscn])
                     G= nx.union(G,G2)
                     G.add_edge(end,new_root)
                     children_last.append((new_last, children))
@@ -367,7 +396,7 @@ class STI:
              
             if len(children) == 1:
                 child = list(children.copy())[0]
-                G.add_edge(new_last, cn_states[child])
+                G.add_edge(new_last, self.cn_states[child])
             
             elif len(children)==0:
                 leaf_group = g 
@@ -415,7 +444,7 @@ class STI:
     
 
     @staticmethod
-    def solve(model,vars, threads=1, timelimit=60):
+    def solve(model,vars, threads=1, timelimit=120):
         model.Params.Threads = threads
         model.Params.TimeLimit = timelimit
      
@@ -508,14 +537,31 @@ class STI:
 
 
     def assign_cell_clusters(self,ct, beta_inv, delta,allow_multiple=True):
+        # if 78 in ct.get_all_muts():
+        #     ct.draw("test/snv_tree78.png")
+        #     print("here")
         clust_cost = {}
-        _, _, cell_scores, nodes = ct.assign_cells(self.data, self.lamb1)
+        _, _, cell_scores, nodes = ct.assign_cells(self.data, self.lamb1, lamb_vaf=5)
+        # cell_scores, nodes = ct.compute_node_likelihoods(self.data, lamb=100)
         nodes = nodes.tolist()
+        clust_score = []
         for q, cell_clust in beta_inv.items():
-            clust = cell_scores[:, cell_clust].sum(axis=1)
+  
+            # print(f"{q}: {self.data.compute_vafs(cell_clust, list(ct.psi.keys()))}")
+            # obs_vafs = self.data.obs_vafs(cell_clust, list(ct.psi.keys()))
+            # print(obs_vafs)
+            clust = cell_scores[:, cell_clust].sum(axis=1) /len(cell_clust)
+
+            clust_score.append(clust)
             for i, u in enumerate(nodes):
                 clust_cost[q, u] = clust[i]
-
+        
+        cs = np.vstack(clust_score)
+        best_clust = cs.argmin(axis=1)
+        objval = cs.min(axis=1).sum()
+        phi ={}
+        # for p, i in zip(beta_inv, best_clust):
+        #     phi[p] = nodes[i]
         model = gp.Model("MIP")
         clone_assign = [(q,u) for q in beta_inv for u in nodes]
         x = model.addVars(clone_assign, vtype = GRB.BINARY )
@@ -534,8 +580,8 @@ class STI:
         #TODO: set up constraints for absolute values
         for u in delta:
             descendants = list(ct.preorder(u))
-            model.addConstr( (1/self.data.N)*gp.quicksum(x[q,u] for q in beta_inv for u in descendants ) - delta[u] <= z[u] )
-            model.addConstr( (1/self.data.N)*gp.quicksum(x[q,u] for q in beta_inv for u in descendants ) - delta[u] >= -1*z[u] )
+            model.addConstr( (1/self.data.N)*gp.quicksum(len(beta_inv[q])*x[q,u] for q in beta_inv for u in descendants ) - delta[u] <= z[u] )
+            model.addConstr( (1/self.data.N)*gp.quicksum(len(beta_inv[q])*x[q,u] for q in beta_inv for u in descendants ) - delta[u] >= -1*z[u] )
         
         
         if not allow_multiple:
@@ -543,37 +589,142 @@ class STI:
             for u in nodes:
                 model.addConstr(gp.quicksum(x[q,u] for q in beta_inv) <=1)
         
-        objval, sol = self.solve(model, [x])
+        objval, sol = self.solve(model, [x, z])
         x_sol = sol[0]
+        z_sol = sol[1]
   
-        phi ={}
+    
         for q,u in clone_assign:
     
                 if x_sol[q,u] > 0.5:
                    phi[q] = u 
-        return objval, phi
+        
+        cell_phi = {}
+        for q in phi:
+            for i in beta_inv[q]:
+                cell_phi[i] = phi[q]
+        ca = CellAssign(cell_phi, ct.clones())
+        dcf = self.compute_dcfs(ct.get_all_muts()[0], ct, ca)
+    
+        return objval, phi, dcf
 
 
     def compute_snv_tree_cost(self, j, dcf, tree, beta_inv):
-        clust_cost = {}
+ 
           
         ct, mapping = self.convert_to_clonal_tree(tree,j)
 
+        # ct.draw("test/snv_tree.png")
+
 
         _, u, _, _ =  ct.get_split_nodes(j)
-        obj, phi = self.assign_cell_clusters(ct, beta_inv, delta={u: dcf})
+        obj, phi ,dcf = self.assign_cell_clusters(ct, beta_inv, delta={u: dcf})
         
-        return obj, ct, phi
+        return obj, ct, phi, dcf
 
  
 
+    def compute_dcfs(self, j, clonal_tree, cell_assign):
 
+
+
+        # clonal_tree.draw("test/ct.png")
+        # for u in clonal_tree.preorder():
+        #     print(f"{u}: {clonal_tree.genotypes[u][j]}")
+        # print(cell_assign.get_cell_count())
+
+        states= list(self.S.nodes)
+        parent, child, p_geno, c_geno = clonal_tree.get_split_nodes(j)
+        desc_genotypes = clonal_tree.get_desc_genotypes(child, j)
+        cn_star = p_geno.to_CNAgenotype().to_tuple()
+        cna_genos= clonal_tree.get_cna_genos()[self.ell]
+        ncells = len(cell_assign.get_all_cells())
+
+        def compute_lambda(v, F, cn_prop):
+            mu_x_y = cn_prop[cn_star]
+            term1 = 1/(c_geno.z*mu_x_y)
+            term2 = v*F
+            term3 = 0
+            for g in desc_genotypes:
+                g_cna = g.to_CNAgenotype()
+                if  g_cna != p_geno.to_CNAgenotype():
+                    term3 += g.z*cn_prop[g_cna.to_tuple()]
+            return term1*(term2 - term3)
+
+
+        
+        def v_to_dcf(v, F, cn_prop):
+        
+            # cn = genotype(*state, 0,0)
+            #if split state
+            # if state == cn_star:
+            d = (1/c_geno.z)*(v*F -sum([(g.z-c_geno.z)*cn_prop[g.to_CNAgenotype().to_tuple()] for g in desc_genotypes]))
+            # else:
+            #     d = sum([cn_prop[g.to_CNAgenotype().to_tuple()] for g in desc_genotypes if g.cna_eq(cn)])
+     
+            if d > 1 and d <= 1.5:
+                 return 1
+            elif d > 1.5 or d < 0:
+                return 1e8
+            else:
+                
+                return d
+            # if d < 0: return 0
+            # elif d > 1: return 1
+            # return d
+        
+        state_to_nodes = {state: [] for state in states}
+        for n, state in cna_genos.items():
+            state = state.to_tuple()
+            state_to_nodes[state].append(n)
+   
+       
+        
+        cells_by_state = {state: [] for state in state_to_nodes}
+    
+        dcfs = {}
+    
+        for state, nodes in state_to_nodes.items():
+            for n in nodes:
+                cells_by_state[state] += cell_assign.get_cells(n)
+        
+        cn_prop = {state: len(cells_by_state[state])/ncells for state in cells_by_state}
+        F = sum([(state[0]+ state[1])* cn_prop[state] for state in cn_prop])
+        vaf =self.data.compute_vafs(None, snvs=[j])
+        lamb = compute_lambda(vaf[0], F, cn_prop)
+        if lamb >=0 and lamb <=1:
+            dcf= (1-lamb)*cn_prop[cn_star] 
+            desc_cn_states = []
+            for g in desc_genotypes:
+                if g.to_CNAgenotype() != p_geno.to_CNAgenotype():
+                    desc_cn_states.append(g.to_CNAgenotype().to_tuple())
+            for cn in set(desc_cn_states):
+                dcf += cn_prop[cn]
+            return dcf 
+        else:
+            return 1e8
+        
+                
+        # return v_to_dcf(vaf[0], F, cn_prop)
+        # for state in states:
+        #     cells= None
+        #     # for s in cn_prop:
+        #     #     if s == state:
+        #     #         cn_prop[s] =1
+        #     #     else:
+        #     #         cn_prop[s] = 0
+        #     # cells = cells_by_state[state]
+        #    
+        #     
+        
+        # return dcfs
         
 
     
     def update_SNVclusters(self, delta, beta_inv ):
-        
+        all_costs = []
         cst = {}
+        delta_hat = {}
         tree_assign = {}
         num_groups = len(self.T_SNV_groups)
         '''
@@ -584,26 +735,54 @@ class STI:
             for q, dcf in delta.items():
                 for g, trees in enumerate(self.T_SNV_groups):
                     g_cost = np.Inf
-                    for t in trees:
+                    # if j==1108 and q ==3 and g==2:
+                    # if j==1108 and q ==4 and g==:
+                    #     print("here")
+                    for p,t in enumerate(trees):
+                     
+                        cost, ct, tree_phi, obs_dcf = self.compute_snv_tree_cost(j, dcf, t, beta_inv)
                         
-                        cost, ct, tree_phi = self.compute_snv_tree_cost(j, dcf, t, beta_inv)
+                        # tphi =self.to_mapping_dict(tree_phi)
+                        # tphi = {}
+                        # for k, u in tree_phi.items():
+                        #     for i in beta_inv[k]:
+                        #         tphi[i] = u
+                        # ca = CellAssign(tphi, ct.clones())
+                        # dc, _ = ct.compute_dcfs(ca, self.ell)
+                        # print(f"{q}: {dcf} vs {dc}")
+                        all_costs.append([j,q,dcf,g,p,cost])
                         if cost < g_cost:
                             cst[(j,q,g)] = cost 
+                            g_cost = cost
+                            delta_hat[j,q,g] = np.abs(obs_dcf - dcf)
                             tree_assign[j][g] = (ct,self.to_inverse_dict(tree_phi))
         
+        df = pd.DataFrame(all_costs, columns=["snv", "snv_clust", "dcf", "group", "tree", "cost"])
+        df.to_csv("test/all_costs.csv", index=False)
         pickle_object(cst, "test/costs.pkl")
         pickle_object(tree_assign, "test/tree_assign.pkl")
 
         cst = load_pickled_object("test/costs.pkl")
         tree_assign = load_pickled_object("test/tree_assign.pkl")
         model = gp.Model("MIP")
+
         clust_group_assign = [(j,q,g) for j in self.snvs for q in range(self.k) for g in range(num_groups)]
         clust_assign = [(j,g) for j in self.snvs for g in range(num_groups)]
         group_assign =  [(q,g) for q in range(self.k) for g in range(num_groups)]
         snv_clust = [(j,q) for j in self.snvs for q in range(self.k)]
+
+        # for j in [1108, 1309,1410, 1745]:
+        #     for q, g in group_assign:
+        #         print(f"{j}, {q}, {g}: {cst[j,q,g]}")
         x = model.addVars(clust_group_assign, vtype = GRB.BINARY )
+        
+        #assignment of cluster to group
         y =model.addVars(group_assign, vtype=GRB.BINARY)
+        
+        #assignment of SNV to group
         z = model.addVars(clust_assign, vtype = GRB.BINARY )
+        
+        #assignment of SNV to a cluster 
         w = model.addVars(snv_clust, vtype= GRB.BINARY)
        
   
@@ -622,7 +801,7 @@ class STI:
         #every snv cluster is assigned to one group
         model.addConstrs((gp.quicksum(y[q,g] for g in range(num_groups)) ==1) for q in range(self.k))
 
-        model.addConstrs((gp.quicksum(w[j,q] for j in self.snvs)>=5) for q in range(self.k)) 
+        model.addConstrs((gp.quicksum(w[j,q] for j in self.snvs)>=1) for q in range(self.k)) 
 
 
         #TODO: add pairwise compatible of selected groups 
@@ -631,10 +810,21 @@ class STI:
             for g in range(num_groups):
             # If cluster q is not assigned to group g, then SNV j in cluster q cannot be assigned to group g
                  model.addConstr(x[j, q, g] <= y[q, g])
-        for j,g in clust_assign:
-                model.addConstr(gp.quicksum(x[j,q,g] for q in range(self.k)) == z[j,g])
-        for j,q in snv_clust:
-            model.addConstr(gp.quicksum(x[j,q,g] for g in range(num_groups))  == w[j,q])
+        
+
+        for j, g in clust_assign:
+            for q in range(self.k):
+            # If cluster q is not assigned to group g, then SNV j in cluster q cannot be assigned to group g
+                 model.addConstr(x[j, q, g] <= z[j, g])
+        
+        for j, q in snv_clust:
+            for g in range(num_groups):
+            # If cluster q is not assigned to group g, then SNV j in cluster q cannot be assigned to group g
+                 model.addConstr(x[j, q, g] <= w[j, q])
+        # for j,g in clust_assign:
+        #         model.addConstr(gp.quicksum(x[j,q,g] for q in range(self.k)) == z[j,g])
+        # for j,q in snv_clust:
+        #     model.addConstr(gp.quicksum(x[j,q,g] for g in range(num_groups))  == w[j,q])
         
         #every snv assigned to snv cluster q must all have the same group assignment 
    
@@ -691,7 +881,7 @@ class STI:
     
 
     def enumerate_trees(self, G, alpha_inv, delta, omega, node_to_cn_state):
-        draw(G, "test/clonal_graph.png")
+        # draw(G, "test/clonal_graph.png")
         root = [u  for u in G if G.in_degree[u] ==0][0]
         for u,v in G.edges:
             G[u][v]["weight"] = 1

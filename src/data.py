@@ -5,7 +5,7 @@ import pickle
 from segment_genome import Segment
 import argparse
 from collections import defaultdict, Counter
-
+from scipy.stats import binom
 
 '''
 N = number of cells
@@ -55,6 +55,21 @@ class Data:
         return mystr
 
 
+    def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001):
+  
+
+        var =  self.total[np.ix_(cells, snvs)]
+        total =self.total[np.ix_(cells, snvs)]
+     
+
+        adj_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+        adj_vaf = adj_vaf.reshape(1, -1)
+        cellprobs= -1*binom.logpmf(var, total, p=adj_vaf)
+            
+        cellprobs = np.nansum(cellprobs, axis=1)
+
+        return cellprobs
+    
     def compute_vafs(self, cells=None, snvs=None):
         if cells is None:
             cells = self.cells 
@@ -64,6 +79,8 @@ class Data:
         var =self.var[np.ix_(cells, snvs)]
         total = self.total[np.ix_(cells, snvs)]
         return np.sum(var, axis=0)/np.sum(total, axis=0)
+    
+
     
     def obs_vafs(self, cells=None, snvs=None):
         if cells is None:
@@ -147,7 +164,13 @@ class Data:
         return set(cn_states), item_counts 
 
 
-
+    def cn_proportions(self, seg):
+        cn_props = {}
+        states, counts = self.cn_states_by_seg(seg)
+        for cn in states:
+            cn_props[cn] = counts[cn]/self.N
+        return cn_props
+        
 
 
 
