@@ -383,9 +383,10 @@ if __name__ == "__main__":
 
 #         self.nsamples = len(alt)
 
+
 #         for i in range(self.nrestarts):
 #             print(f"Restart: {i}")
-            
+            #until convergence loop     (move convergence check from fit_cnatree)
 #             dcfs = self.init_cluster_centers()
 #             best_likelihood = np.NINF
     
@@ -394,7 +395,7 @@ if __name__ == "__main__":
 #             for cna_tree in self.T_CNAs:
 #                 cand_T_SNVs = [tree for tree in self.T_SNVs if tree.is_refinement(cna_tree)]
 #                 # tree_id_to_indices
-#                 tree_results= self.fit_cna_tree(cna_tree, tree_id_to_indices, cand_T_SNVs, dcfs, alt, total)
+#                 tree_results= self.fit_cna_tree(cna_tree, tree_id_to_indices, cand_T_SNVs, dcfs, alt, total)#this updates DCFS
 #                 cna_tree_likes.append(tree_results.likelihood)
 #                 res.append(tree_results)
 #             max_index = cna_tree_likes.index(max(cna_tree_likes))
@@ -403,8 +404,13 @@ if __name__ == "__main__":
 #             best_likelihood = max(cna_tree_likes)
 #             best_res = res[max_index]
 #         return best_res
+
             
-                
+ #Outer function
+ #Initilizes DCFs
+ #For each segment:
+    #fit( . . . )
+    #move tree_results . . . here
 
             
 # @dataclass 

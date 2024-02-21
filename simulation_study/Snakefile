@@ -1,4 +1,3 @@
-
 configfile: "config.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
 import sys 
@@ -210,8 +209,6 @@ rule seg_tree_inference:
 #         "-T {input.ct} -c {params.cell_rates} -m {params.mut_rates} "
 #         "-s {wildcards.s} -r {params.nreps} "
 #         "-o {output} "
-
-
 
 
 
