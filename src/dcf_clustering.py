@@ -28,12 +28,10 @@ def unpack_assignments(cluster, assignments):
                     tree_id_to_indices[tree_id] = [index]
     return tree_id_to_indices
 class DCF_Clustering:
-    def __init__(self, nrestarts=25, rng=None, verbose=False):
+    def __init__(self, nrestarts=25, seed=1026, verbose=False):
         self.nrestarts =nrestarts 
-        if rng is None:
-            self.rng = rng 
-        else:
-            self.rng = np.random.default_rng(1026)
+   
+        self.rng = np.random.default_rng(seed)
 
 
         # self.clusters= [i+1 for i in range(max_clusters)]
@@ -364,11 +362,12 @@ class DCF_Clustering:
 if __name__ == "__main__":
      
      #load in pickled data object 
-
      from data import Data, load_from_pickle
      dat = load_from_pickle("pth/to_pickled_object.pkl")
-     dec = DCF_Clustering(nrestarts=50)
-     all_results = dec.run()
+     
+     #initialize object 
+     dec = DCF_Clustering(nrestarts=50,seed=21)
+     all_results = dec.run(dat, k_vals=[i+1 for i in range(8)])
 
      
 
