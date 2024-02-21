@@ -5,11 +5,13 @@ import networkx as nx
 from collections import Counter, defaultdict 
 from itertools import product, chain, combinations
 import pickle 
-import pygraphviz as pgv
-# import matplotlib.pyplot as pl
+# import pygraphviz as pgv
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
+from genotype import genotype 
+from cell_mapping import CellAssign
+from tree_to_json import convertToJson
 
 
 
@@ -48,21 +50,23 @@ class ClonalTree:
     tree : networkx DiGraph
         the clonal tree graph
     
-    genotypes: dict of dict of dict of genotype datastructs
+    genotypes: dict (node ids as keys) of dict (snv index as keys) of genotype datastructs
         genotypes[v][s][m]
     
-    cell_mapping : dict
-        a dictionary with node ids as keys and np.arrays with the indices of cells attached to that node
+    cell_mapping : dict of lists
+        a dictionary with node ids as keys and np.arrays with lists of cells attached to that node
     
-    mut_mapping : dict
-        a dictionary with node ids as keys and np.arrays with the indices of gained SNVs on the incoming edge
+    mut_mapping : dict of lists
+        a dictionary with node ids as keys and lists with the indices of gained SNVs on the incoming edge
     
     
-    mut_loss_mapping : dict 
-        a dictionary with node ids as keys and np.arrays with the indices of lost SNVs assigned to the 
+    mut_loss_mapping : dict of lists 
+        a dictionary with node ids as keys and lists with the indices of lost SNVs assigned to the 
         incoming edge of that node
 
-    score : float
+    cost : float current cost of cell assignment
+    
+    root : int id of root node 
     
     
 
@@ -105,54 +109,55 @@ class ClonalTree:
 
 
 
-    Genotypes[v][s][m] = genotype
     """
 
-    def __init__(self, tree, genotypes: dict, cell_mapping:dict=None, key=0, cost=np.Inf ):
+    def __init__(self, tree, genotypes: dict, seg_to_muts:dict=None,  key=0):
         self.tree: nx.DiGraph = tree
         self.genotypes = genotypes 
+        if seg_to_muts is None:
+            self.seg_to_muts = {}
+        else:
+            self.seg_to_muts = seg_to_muts
+        
+        self.mut_to_seg = {}
+        for seg, muts in self.seg_to_muts.items():
+            for m in muts:
+                self.mut_to_seg[m] = seg
         
         self.root= self.find_root()
+
+        #double check that all snvs have the same CNA copy number profile for each node
+        # for v in self.tree:
+        #     cna_genos =[self.genotypes[v][j].to_CNAgenotype().to_tuple() for j in self.genotypes[v]]
+        #     assert all(t == cna_genos[0] for t in cna_genos)
+
         
 
-        if cell_mapping is None:
-            self.cell_mapping = {}
+        # if cell_mapping is None:
+        #     self.cell_mapping = {}
             
-        else:    
-            self.cell_mapping = cell_mapping
-
-     
-        self.mut2seg = {}
-        for v in self.genotypes:
-            for s in self.genotypes[v]:
-                for m in self.genotypes[v][s]:
-                    self.mut2seg[m]=s
-        # self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
-        
-        self.seg2muts = {}
-        for m,s in self.mut2seg.items():
-            if s in self.seg2muts:
-                self.seg2muts[s].append(m)
-            else:
-                self.seg2muts[s] = [m]
+        # else:    
+        #     self.cell_mapping = cell_mapping
 
 
         self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
         self.psi = self.get_psi()
-        self.phi = self.get_phi()
+
         self.key = key
-        self.cost = cost
+        self.cost = np.Inf
+
+        self.snv_cost_func = self.node_snv_cost
 
     
     def __str__(self) -> str:
-        all_cells = self.get_all_cells()
+        # all_cells = self.get_all_cells()
         all_snvs  = self.get_all_muts()
         mystr =f"\nClonal Tree {self.key}"
         mystr += "\n--------------------------------"
 
         mystr +=f"\n{len(list(self.tree.nodes))} Nodes and {len(list(self.tree.edges))} Edges"
         mystr += f"\n{len(all_snvs)} SNVs"
-        mystr+= f"\n{len(all_cells)} cells\n"
+        # mystr+= f"\n{len(all_cells)} cells\n"
 
 
         node_order = list(nx.dfs_preorder_nodes(self.tree, source=self.root))
@@ -169,23 +174,104 @@ class ClonalTree:
            
                 mystr+= f"\nNode {u}->Node {v}\t{etype}"
                
-        mystr += "\n\nNode\tSNVs\tCells\tGenotype"
+        mystr += "\n\nNode\tSNVs\tGenotype"
         mystr += "\n--------------------------------"
         for n in  node_order:
             # genotype = self.tree.nodes[n]['genotype']
             genotype = ""
-            if n in self.cell_mapping:
-                ncells = len(self.cell_mapping[n])
-            else:
-                ncells = 0
+            # if n in self.cell_mapping:
+            #     ncells = len(self.cell_mapping[n])
+            # else:
+            #     ncells = 0
             if n in self.mut_mapping:
                 nmuts = len(self.mut_mapping[n])
             else:
                 nmuts = 0
-            mystr += f"\n{n}\t{nmuts}\t{ncells}\t{genotype}"
+            mystr += f"\n{n}\t{nmuts}\t{genotype}"
         mystr += "\n"
         mystr += f"\nJ(T,phi): {self.cost}\n"
         return mystr
+    
+    def preorder(self, source=None):
+        if source is None:
+            source = self.root 
+    
+        return list(nx.dfs_preorder_nodes(self.tree, source=source))
+    
+    
+    def compute_dcfs(self, ca):
+        dcfs = {}
+        counts = ca.get_cell_count()
+        ncells = len(ca.get_all_cells())
+        for n in self.tree:
+            
+            if len(self.mut_mapping[n]) > 0:
+                snvs = self.mut_mapping[n]
+                m = snvs[0]
+                dcfs[n] = sum([counts[u] for u in self.preorder(source=n)])/ncells 
+        return dcfs 
+
+
+
+    # def compute_dcfs(self, ca, segment):
+    #     counts = ca.get_cell_count()
+    #     total_cells = sum(counts[u] for u in counts)
+    #     cna_genos = self.get_cna_genos()[segment]
+    #     # cna_states = set(cna_genos[segment][v].to_tuple() for v in self.tree)
+    #     dcfs = {}
+    #     cell_counts = {n: 0 for n in self.tree}
+    #     res = []
+    #     for n in self.tree:
+    #         if len(self.mut_mapping[n]) > 0:
+    #             # snvs = self.mut_mapping[n]
+    #             # m = snvs[0]
+  
+    #             for u in self.preorder(source=n):
+    #                         count = counts[u]
+    #                         res.append([n, cna_genos[u].to_tuple(), count])
+    #                         cell_counts[n] += count
+        
+    #     dcfs = {u: cell_counts[u]/total_cells for u in cell_counts}
+    #     df = pd.DataFrame(res, columns=["cluster",  "state", "count"])
+    #     dcf_by_state = df.groupby(["cluster", "state"]).sum("count")
+    #     print(dcf_by_state)
+    #     dcf_by_state = dcf_by_state/total_cells
+    #     print(dcf_by_state)
+    #     return dcfs, dcf_by_state
+        
+
+
+    def mutation_cluster_tree(self):
+        cluster_nodes = [n for n in self.tree if len(self.mut_mapping[n]) > 0]
+
+        def find_closest_ancestor(u, nodes_list):
+        # Initialize variables to keep track of the closest ancestor and its distance
+            closest_ancestor = None
+            min_distance =  np.inf  # Initialize to infinity
+            
+            # Calculate the shortest path from u to each node in the list
+            for node in nodes_list:
+                # Calculate the shortest path length from u to the current node
+                if u !=node and nx.has_path(self.tree, source=node, target=u ):
+                    distance = nx.shortest_path_length(self.tree, source=node, target=u)
+                
+                    # Update the closest ancestor and its distance if the current node is closer
+                    if distance < min_distance:
+                        closest_ancestor = node
+                        min_distance = distance
+            return closest_ancestor
+    
+
+        T_m = nx.DiGraph()
+        for n in cluster_nodes:
+            T_m.add_node(n)
+            parent = find_closest_ancestor(n, cluster_nodes)
+            if parent is not None:
+                T_m.add_edge(parent, n)
+        return T_m
+      
+
+
     
     def find_root(self):
         for n in self.tree:
@@ -199,6 +285,32 @@ class ClonalTree:
 
     def edges(self):
         return list(self.tree.edges)
+    
+    def get_cna_genos(self):
+        self.cna_genotypes = {}
+        
+
+        for seg, snvs in self.seg_to_muts.items():
+            m = snvs[0]
+            self.cna_genotypes[seg] = {}
+            for v in self.tree:
+                self.cna_genotypes[seg][v] = self.genotypes[v][m].to_CNAgenotype()
+         
+        return self.cna_genotypes
+    
+
+
+    def get_cna_tree(self, seg):
+        self.get_cna_genos()
+        S = nx.DiGraph()
+        for u,v in self.tree.edges:
+            u_cna = self.cna_genotypes[seg][u] 
+            v_cna = self.cna_genotypes[seg][v]
+            if u_cna != v_cna:
+                S.add_edge(u_cna.to_tuple(), v_cna.to_tuple())
+        if len(S) ==0:
+            S.add_node(self.cna_genotypes[seg][self.root].to_tuple())
+        return S
     
     def parent(self, v):
         if v ==self.root:
@@ -238,22 +350,133 @@ class ClonalTree:
             return descendants
         return find_descendants(self.tree,v)
     
-    def clones(self):
-        return list(self.tree.nodes)
+    def get_desc_genotypes(self, v, j):
+        return [self.genotypes[u][j] for u in nx.dfs_preorder_nodes(self.tree, v) if u != v]
+
+    def get_split_nodes(self, j):
+        
+        for u in self.preorder():
+            if u != self.root:
+                parent= self.parent(u)
+                p_geno =self.genotypes[parent][j]
+                u_geno = self.genotypes[u][j]
+                if p_geno.cna_eq(u_geno) and u_geno.z > 0:
+                    return parent, u, p_geno, u_geno
+
+    def trim(self, cellAssign):
+        '''
+        remove nodes that only have cell assignments and pushees the cell assignments up the tree
+        '''
+        cell_mapping = cellAssign.cell_mapping
+        to_del = []
+        for k in cell_mapping:
+            if len(self.mut_mapping[k])==0 and len(self.mut_loss_mapping[k])==0:
+                if len(cell_mapping[k]) > 0 and self.is_leaf(k):
+                    path =nx.shortest_path(self.tree, source=self.root, target=k)
+                    path = path[::-1]
+                    for p in path:
+                        if len(self.mut_mapping[p]) >0 or len(self.mut_loss_mapping[p]) > 0:
+                            cell_mapping[p] += cell_mapping[k] 
+                            to_del.append(k)
+                            self.tree.remove_node(k)
+                            break
+        for k in  to_del:
+            del cell_mapping[k]
+        cellAssign.update_phi()
+        cellAssign.update_clones(self.clones())
     
-    def get_phi(self):
-         self.phi = {i : k  for k, cells in self.cell_mapping.items() for i in cells}
-         return self.phi
+
+
+    def toJson(self, fname, segment_csv=None, snv_csv=None):
+        json = convertToJson(self, segment_csv, snv_csv)
+        with open(fname, "w") as f:
+            f.write(str(json))
+    
+    def filter_snvs(self,  snvs):
+        snvs = set(snvs)
+        # snvs = set(self.seg_to_muts[seg])
+        keys = set(self.genotypes[self.root].keys())
+        to_del  = keys - snvs 
+
+
+        for v in self.genotypes:
+            self.mut_mapping[v] = [j for j in self.mut_mapping[v] if j in snvs]
+
+            for s in to_del:
+                del self.genotypes[v][s]
+        
+        for s in to_del:
+            seg = self.mut_to_seg[s]
+            self.seg_to_muts[seg].remove(s)
+            del self.mut_to_seg[s]
+        
+    
+    
+    def add_snv(self,j, seg, node, snv_tree):
+        '''
+        update the genotypes, mut_mapping and psi to include snv j
+        '''
+        if node not in self.tree:
+            raise KeyError("Node id is not in the clonal tree.")
+
+        if seg not in self.seg_to_muts:
+            raise KeyError("Segment is not in the clonal tree.")
+
+        self.mut_to_seg[j] = seg 
+        self.seg_to_muts[seg].append(j)
+        self.mut_mapping[node].append(j)
+        self.psi[j] = node 
+
+
+        def match_snv_genotype(tree, cn_state):
+            for u in tree:
+                geno = genotype(*u)
+                if geno.x_bar + geno.y_bar > 0 and geno.x == cn_state[0] and geno.y==cn_state[1]:
+                    return geno
+        
+        def update_desc_genotype(u, snv_tree):
+            descendants.append(u)
+       
+            cn_state = self.cna_genotypes[seg][u].to_tuple()
+            self.genotypes[u][j] =match_snv_genotype(snv_tree, cn_state)
+
+            for v in self.tree.successors(u):
+                update_desc_genotype(v, snv_tree)
+        
+        descendants = []
+        self.get_cna_genos()
+        update_desc_genotype(node, snv_tree)
+
+        not_present = set(self.clones())  - set(descendants)
+        for u in not_present:
+            self.genotypes[u][j] =  self.cna_genotypes[seg][u].to_genotype(0,0)
+        
+
+
+
+
+        
+    
+
+    def clones(self):
+        return set(self.tree.nodes)
+    
+    def is_leaf(self,node):
+        return self.tree.out_degree[node] ==0
+    
+    # def get_phi(self):
+    #      self.phi = {i : k  for k, cells in self.cell_mapping.items() for i in cells}
+    #      return self.phi
     
     def get_psi(self):
          self.psi = {m : k  for k, snvs in self.mut_mapping.items()  for m in snvs}
          return self.psi
 
-    def phi_to_cell_mapping(self, phi):
-        self.phi = phi 
-        self.cell_mapping = {v: [] for v in self.tree}
-        for i, v in self.phi.items():
-            self.cell_mapping[v].append(i)
+    # def phi_to_cell_mapping(self, phi):
+    #     self.phi = phi 
+    #     self.cell_mapping = {v: [] for v in self.tree}
+    #     for i, v in self.phi.items():
+    #         self.cell_mapping[v].append(i)
       
     
     def get_muts(self,node):
@@ -263,16 +486,33 @@ class ClonalTree:
             return self.mut_mapping[node]
     
 
-    def get_cells(self,node):
-        if node not in self.cell_mapping:
-            return []
-        else:
-            return self.cell_mapping[node]
-    
-    def get_cell_assigment(self, i):
-        for node in self.cell_mapping:
-            if i in self.cell_mapping[node]:
-                return node
+   
+
+    def reindex_snvs(self,mut_lookup):
+        new_genotypes = {}
+        new_mut_to_seg = {}
+        mapping_dict = {}
+        for index, mut_label in mut_lookup.items():
+            mapping_dict[mut_label] = index 
+            new_mut_to_seg[index] = self.mut_to_seg[mut_label]
+        
+        for v in self.clones():
+            new_genotypes[v] = {}
+            for m in self.genotypes[v]:
+                if m in mapping_dict:
+                    new_genotypes[v][mapping_dict[m]] = self.genotypes[v][m]
+        
+        self.genotypes = new_genotypes
+        self.mut_to_seg = new_mut_to_seg
+        self.seg_to_muts = {}
+        for m, seg in self.mut_to_seg.items():
+            if seg in self.seg_to_muts:
+                self.seg_to_muts[seg].append(m)
+            else:
+                self.seg_to_muts[seg] = [m]
+        
+        self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
+        self.psi = self.get_psi()
 
     def get_snv_assignment(self, m):
         for node in self.mut_mapping:
@@ -292,17 +532,25 @@ class ClonalTree:
     def get_key(self):
         return self.key 
 
-    def has_loss(self):
-        return len(self.mut_loss_mapping) > 0
+    # def has_loss(self):
+    #     return len(self.mut_loss_mapping) > 0
+
+    def has_snvs(self, n):
+        return len(self.mut_mapping[n]) > 0
     
-    def set_cell_mapping(self, cell_mapping):
-        self.cell_mapping  = cell_mapping
-        # self.psi = self.get_psi()
-        self.phi = self.get_phi()
-        # print("Warning, cost is not automatically updated, ensure cost is manually set.")
+    # def set_cell_mapping(self, cell_mapping):
+    #     self.cell_mapping  = cell_mapping
+    #     # self.psi = self.get_psi()
+    #     self.phi = self.get_phi()
+    #     # print("Warning, cost is not automatically updated, ensure cost is manually set.")
 
+    # def clear_cell_mapping(self):
+    #     self.phi = {}
+    #     self.cell_mapping = {}
+    #     self.cost = np.Inf
 
-    def prune_tree(self, node_to_remove):
+    def prune_tree(self, node_to_remove, cellAssign):
+        
         parent = next(self.tree.predecessors(node_to_remove))
 
         # Get the children of the node to be removed
@@ -316,23 +564,17 @@ class ClonalTree:
             self.tree.add_edge(parent, child)
 
         if node_to_remove in self.cell_mapping:
-            del self.cell_mapping[node_to_remove]
+            del cellAssign.cell_mapping[node_to_remove]
         
         if node_to_remove in self.genotypes:
             del self.genotypes[node_to_remove]
-
-    def get_latent_vafs(self, v, s=None):
-        vafs = {}
-        if s is None:
-            segs = list(self.seg2muts.keys())
-        else:
-            segs  = [s]
-        for s in segs:
-            for m in self.seg2muts[s]:
-                vafs[m] =self.genotypes[v][s][m].vaf
-                
         
-        return vafs 
+        cellAssign.update_clones(self.clones())
+
+             
+     
+    
+  
 
     def get_mut_mapping(self):
         gained= []
@@ -340,9 +582,8 @@ class ClonalTree:
         muts = []
         mut_mapping = {v: [] for v in self.tree}
         mut_loss_mapping = {v: [] for v in self.tree}
-        for v in self.tree:
-            for s in self.seg2muts:
-                for m, geno in self.genotypes[v][s].items():
+        for v in self.preorder():
+                for m, geno in self.genotypes[v].items():
                     if m not in muts:
                         muts.append(m)
                     # if m in [523, 792, 451,831]:
@@ -354,23 +595,29 @@ class ClonalTree:
                         mut_loss_mapping[v].append(m)
                         lost.append(m)
         missing= set(muts)- (set(gained).union(set(lost)))
-        # print(missing)
+        if len(missing) > 0:
+            print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
         for m in missing:
             mut_mapping[self.root].append(m)
         return mut_mapping, mut_loss_mapping 
+    
+    def update_mappings(self):
+
+        #TODO: update psi
+        self.mut_mapping, self.mut_loss_mapping =self.get_mut_mapping()
    
-    def get_desc_cells(self, node):
-        '''
-        node: int node in the tree
+    # def get_desc_cells(self, node):
+    #     '''
+    #     node: int node in the tree
 
-        returns a list of cell indices that are either assigned to that node or are descendents of given node
-        '''
+    #     returns a list of cell indices that are either assigned to that node or are descendents of given node
+    #     '''
 
-        cells = []
-        path = nx.dfs_preorder_nodes(self.tree, node)
-        for p in path:
-            cells += self.get_cells(p)
-        return cells 
+    #     cells = []
+    #     path = nx.dfs_preorder_nodes(self.tree, node)
+    #     for p in path:
+    #         cells += self.get_cells(p)
+    #     return cells 
 
 
 
@@ -378,17 +625,57 @@ class ClonalTree:
        
         path = list(nx.shortest_path(self.tree, self.root, node))
         present_muts =list(chain.from_iterable([self.mut_mapping[p] for p in path if p in self.mut_mapping]))
-        lost_muts = list(chain.from_iterable([self.mut_loss_mapping[p]
-                        for p in path if p in self.mut_loss_mapping]))
-        present_muts = list(set(present_muts) - set(lost_muts))
+        # lost_muts = list(chain.from_iterable([self.mut_loss_mapping[p]
+        #                 for p in path if p in self.mut_loss_mapping]))
+        present_muts = set(present_muts) #- set(lost_muts))
 
         return present_muts
     
+  
+    
+  
+    
+    def get_latent_genotypes(self,v):
+        return {m: geno for m,geno in self.genotypes[v].items()} 
+    
+    def get_latent_vafs(self, latent_genos):
+        return  {m: geno.vaf for m, geno in latent_genos.items()}               
+     
+    
+    def get_latent_cna_genos(self, latent_genos):
+        return  {m: geno.to_CNAgenotype() for m, geno in latent_genos.items()}    
 
-    def node_snv_cost(self, v, cells, data):
+  
+
+    def node_cna_cost(self, v, cells, data, latent_genos):
+        #dictionary is snvs as keys and cna_geno types as values
+        latent_cna_genos= self.get_latent_cna_genos(latent_genos)
+        # snv_keys = list(latent_cna_genos.keys())
+        # snv_to_seg = {s: data.snv_to_seg[s] for s in snv_keys}
+
+        seg_geno = {}
+        for key, seg in self.mut_to_seg.items():
+            if seg not in seg_geno:
+               seg_geno[seg] = latent_cna_genos[key]
+        latent_x, latent_y = [], []
+        for seg,cna_geno in seg_geno.items():
+            latent_x.append(cna_geno.x)
+            latent_y.append(cna_geno.y)
+        
+        latent_x = np.array(latent_x).reshape(1,-1)
+        latent_y = np.array(latent_y).reshape(1,-1)
+
+
+        segs = list(seg_geno.keys())
+        obs_copy_x, obs_copy_y =  data.copy_profiles_by_seg(segs, cells)
+        x_diff = np.abs(obs_copy_x - latent_x).sum(axis=1)
+        y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
+        return x_diff + y_diff
+ 
+    def node_snv_cost(self,  v, cells, data, latent_genos):
 
         snvs = self.get_all_muts()
-        latent_vafs = self.get_latent_vafs(v)
+        latent_vafs =self.get_latent_vafs(latent_genos)
         lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
         snvs = list(latent_vafs.keys())
         #dims = cells by snvs
@@ -399,77 +686,155 @@ class ClonalTree:
 
         return cell_scores
     
-    def pooled_node_snv_cost(self, v, cells, data):
+    def pooled_node_snv_cost(self, v, cells, data, latent_genos):
 
  
-        latent_vafs = self.get_latent_vafs(v)
-        lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
+        latent_vafs = self.get_latent_vafs(latent_genos)
+        lvafs = np.array(list(latent_vafs.values()))
         snvs = list(latent_vafs.keys())
         #dims = cells by snvs
         obs_vafs = data.compute_vafs(cells, snvs)
 
+        comp_df =  pd.DataFrame({'obs_vafs': obs_vafs, 'latent_vafs': lvafs, 'snvs': snvs})
+        comp_df["node"] = v
+        comp_df["ncells"] = len(cells)
+        self.all_dfs[v]=comp_df
         cell_scores = np.nansum(np.abs(obs_vafs - lvafs))
 
 
         return cell_scores
 
     
-    def assign_cells(self, data):
+    def compute_node_likelihoods(self, data, cells=None, snvs=None, lamb=0, lamb_vaf=1):
+        if cells is None:
+            cells = data.cells
+        nodes = np.array(self.tree)
+        node_cell_likes = []
+        for u in nodes: 
+            vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+            if snvs is None:
+                snvs = list(vaf.keys())
+            vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+        
+            node_cell_likes.append(data.binomial_likelihood(data.cells, snvs,vafs ))
+        
+        cell_scores = np.vstack(node_cell_likes)
+        cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+        cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
+
+        return cell_scores, nodes
+
+
+
+
+    def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
 
         nodes = np.array(self.tree)
-        cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data) for v in nodes])
+        if cna_only:
+            cell_scores =0
+            lamb=1
+        else:
+            cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+
+        if lamb > 0:
+            cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+            cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
         assignments = np.argmin(cell_scores, axis=0)
+        self.cost = np.nansum(np.nanmin(cell_scores,axis=0)).sum()
         
-        self.phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
-        self.phi_to_cell_mapping(self.phi)
+        
+        phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
+  
+        # self.phi_to_cell_mapping(self.phi)
+        return CellAssign(phi, self.clones()), self.cost, cell_scores, nodes   
         # self.cell_mapping = defaultdict(list)
         # for i, v in self.phi.items():
         #     self.cell_mapping[v].append(i)
         # self.cell_mapping = dict(self.cell_mapping)
 
+    def filter_snvs(self, snvs_to_keep):
+        snvs_to_remove = set(self.get_all_muts()) - set(snvs_to_keep)
+        for s in snvs_to_remove:
+            del self.psi[s]
+            for v in self.tree:
+                self.mut_mapping[v] = np.intersect1d(self.mut_mapping[v], snvs_to_keep).tolist()
+                self.mut_loss_mapping[v] = np.intersect1d(self.mut_loss_mapping[v], snvs_to_keep).tolist()
+                del self.genotypes[v][s]
+        
+            del self.mut_to_seg[s]
+
+            self.seg_to_muts = {}
+            for m, seg in self.mut_to_seg.items():
+                if seg in self.seg_to_muts:
+                    self.seg_to_muts[seg].append(m)
+                else:
+                    self.seg_to_muts[seg] = [m]
+
+        
+    def del_snv(self, j):
+        seg = self.mut_to_seg[j]
+        del self.mut_to_seg[j]
+        self.seg_to_muts[seg].remove(j)
+        node = self.psi[j]
+        if j in self.mut_mapping[node]:
+            self.mut_mapping[node].remove(j)
+        
+        for v in self.tree:
+            del self.genotypes[v][j]
 
 
-    def compute_costs(self, data, lamb=0):
-        if len(self.cell_mapping) ==0:
-            self.assign_cells(data)
+
+    def compute_costs(self, data,  cellAssign, lamb=0, cna_only=False):
+        if cna_only:
+            lamb = 1
+        # if  cellAssign is None:
+        #     self.assign_cells(data, lamb)
 
         self.node_cost = {}
         self.cost = 0
         for v in self.tree:
-                cells = self.cell_mapping[v]
+                cells = cellAssign.get_cells(v)
                 if len(cells) ==0:
                     continue
-                cell_scores = self.node_snv_cost(v, cells, data)
-                self.node_cost[v] = cell_scores.sum()
+                latent_genos = self.get_latent_genotypes(v)
+            
+                if cna_only:
+                    self.node_cost[v] =0
+                else:
+                    self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
+                if lamb >0:
+                    
+                    self.node_cost[v]+=lamb*self.node_cna_cost(v, cells,data, latent_genos).sum()
+             
         
         self.cost = sum([score for _, score in self.node_cost.items()])
 
         return self.cost 
     
-    def compute_pooled_costs(self, data, lamb=0):
-        if len(self.cell_mapping) ==0:
-            self.assign_cells(data)
-        self.node_cost = {}
-        self.cost = 0
-        for v in self.tree:
-                cells = self.cell_mapping[v]
-                if len(cells) ==0:
-                    continue
-                cell_scores = self.pooled_node_snv_cost(v, cells, data)
-                self.node_cost[v] = cell_scores.sum()
-        
-        self.cost = sum([score for v, score in self.node_cost.items()])
+    def compute_pooled_costs(self, data, cellAssign, lamb=0, cna_only=False):
+        self.all_dfs = {}
+        self.snv_cost_func = self.pooled_node_snv_cost
+        cost = self.compute_costs(data,cellAssign, lamb, cna_only)
+        self.snv_cost_func = self.node_snv_cost
+        # self.comp_df = pd.concat([vals for v, vals in self.all_dfs.items()])
+        # print(self.comp_df.head())
 
-        return self.cost 
+        return cost 
+
+    
 
 
 
 
    #-------------------------- Save Methods ---------------------------------------#
-    def draw(self, fname, mapping=None, cmap='Set3'):
-
+    def draw(self, fname, cellAssign=None, mapping=None,segments=None, cmap='Set3'):
+        if segments is not None:
+            cna_genos = self.get_cna_genos()
         mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
-        cell_count = {n : len(self.cell_mapping[n]) for n in self.cell_mapping}
+        if cellAssign is not None:
+            cell_count = cellAssign.get_cell_count()
+        else:
+            cell_count = {n: 0 for n in self.clones()}
         labels = {}
         # color_values, colormap = self.create_color_map(cmap)
         for n in self.tree:
@@ -477,13 +842,16 @@ class ClonalTree:
                     labels[n] = str(mapping[n])
                 else:
                     labels[n] = str(n)
-                if n in self.cell_mapping:
+                if n in cell_count:
                     if cell_count[n] > 0:
                         labels[n] += "\nCells:" + str(cell_count[n])
                 # SNV
                 if n in self.mut_mapping:
                     if mut_count[n] > 0:
                         labels[n] += "\nSNVs:" + str(mut_count[n])
+                if segments is not None:
+                    labels[n] += "\n" + ",".join([str(cna_genos[s][n]) for s in segments if s in self.seg_to_muts])
+
         like_label = f"Segment {self.key}\n"
         tree = pgv.AGraph(strict=False, directed=False)
         tree.node_attr['style']='filled'
@@ -491,29 +859,30 @@ class ClonalTree:
             total_like = np.round(self.cost)
             tree.graph_attr["label"] = f"Objective: {total_like}"
  
-        # colormap = cm.get_cmap(cmap)
-        for n in self.tree:
+    #     # colormap = cm.get_cmap(cmap)
+    #     for n in self.tree:
 
-            tree.add_node(n, label=labels[n])
+    #         tree.add_node(n, label=labels[n])
       
             node_attr = tree.get_node(n)
-            try:
-                x,y = self.tree.nodes[n]["genotype"]
-                color_value = x+y
-            except:
-                color_value = None
+            color_value = None
+            # try:
+            #     x,y = self.tree.nodes[n]["genotype"]
+            #     color_value = x+y
+            # except:
+            #     color_value = None
         
-            if color_value is not None:
+    #         if color_value is not None:
                
                 
-                # color = colormap(color_value)
-                # hex_color = mcolors.rgb2hex(color)
-                node_attr.attr['fillcolor'] =SET3_HEX[color_value]
-                # node_attr['fillcolor'] = hex_color
+    #             # color = colormap(color_value)
+    #             # hex_color = mcolors.rgb2hex(color)
+    #             node_attr.attr['fillcolor'] =SET3_HEX[color_value]
+    #             # node_attr['fillcolor'] = hex_color
     
-        tree.add_edges_from(list(self.tree.edges))
-        tree.layout("dot")
-        tree.draw(fname)
+    #     tree.add_edges_from(list(self.tree.edges))
+    #     tree.layout("dot")
+    #     tree.draw(fname)
   
 
     def save_text(self, path):
@@ -589,21 +958,17 @@ class ClonalTree:
         return []
     
     
-    def get_node_cells(self, t):
-        if t in self.cell_mapping:
-            return self.cell_mapping[t]
-        return []
+    # def get_node_cells(self, t):
+    #     if t in self.cell_mapping:
+    #         return self.cell_mapping[t]
+    #     return []
 
     def get_leaves(self):
         leaves = [l for l in list(self.tree.nodes())
                   if self.tree.out_degree(l) == 0]
         return leaves
 
-    def get_all_cells(self):
-        all_cells = []
-        for n in self.cell_mapping:
-            all_cells += self.cell_mapping[n]
-        return all_cells
+   
 
     def get_cell_assignments(self):
         n_cell = len(self.get_all_cells())
@@ -617,6 +982,7 @@ class ClonalTree:
         muts = list(chain.from_iterable([mut for n,mut in self.mut_mapping.items()]))
         muts.sort()
         return muts
+    
 
     def get_mut_assignments(self, n_mut=None):
         '''
@@ -647,15 +1013,19 @@ class ClonalTree:
         return adjusted_rand_score(v1, v2)
     
     def compute_cell_ari(self, obj) -> float:
-        gt_cell = self.get_cell_clusters()
-        pred_cell = obj.get_cell_clusters()
+        gt_cell = pd.Series(self.phi).values
+        pred_cell = pd.Series(obj.phi).values
         return self.ari(gt_cell, pred_cell)
 
     
     def compute_mut_ari(self,obj) -> float:
-         gt_mut = self.get_mut_clusters()
-         pred_mut = obj.get_mut_clusters()
-         return self.ari(gt_mut, pred_mut)
+        #  gt_mut = self.get_mut_clusters()
+         gt_mut =   pd.Series(self.get_psi())
+         pred_mut = pd.Series(obj.get_psi())
+         df = pd.concat([gt_mut, pred_mut], axis=1, keys=['gt', 'pred'])
+        #  pred_mut = obj.get_mut_clusters()
+      
+         return self.ari(df["gt"].values, df["pred"].values)
 
 
     @staticmethod
@@ -795,9 +1165,8 @@ class ClonalTree:
                  'anc_pair_recall' : self.ancestor_pair_recall(obj),
                  'incomp_pair_recall': self.incomp_pair_recall(obj),
                  'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="snv"),
-                 'gt_nodes' : len(self.mut_mapping),
-                'n_assigned': len(self.get_all_muts()),
-                'inf_nodes' : len(obj.mut_mapping)
+                 'n_assigned': len(self.get_all_muts())
+         
              }
              return scores 
     
@@ -898,10 +1267,19 @@ class ClonalTree:
 
 
 
-
-    
-
-    
+        # self.mut2seg = {}
+        # for v in self.genotypes:
+        #     for s in self.genotypes[v]:
+        #         for m in self.genotypes[v][s]:
+        #             self.mut2seg[m]=s
+        # self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
+        
+        # self.seg2muts = {}
+        # for m,s in self.mut2seg.items():
+        #     if s in self.seg2muts:
+        #         self.seg2muts[s].append(m)
+        #     else:
+        #         self.seg2muts[s] = [m]
 
     
 
