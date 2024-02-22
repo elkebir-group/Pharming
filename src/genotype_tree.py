@@ -256,13 +256,23 @@ class GenotypeTree(ClonalTree):
 
 
     def vectorized_posterior(self, dcf, a_vec, d_vec, cn_prop):
+        '''
+        dcf: int representing the cluster dcf value
+        a_vec: np:array of length snvs containing the total variant reads for each SNV 
+        d_vec: np:array of length snvs containing the total reads for each SNV 
+        cn_prop: dict containing CN states and proportions (mu in decifer paper)
+
+        returns np:array containing the posterior probability of the read counts for each SNV
+        '''
 
         F = sum([(cn[0] + cn[1])*cn_prop[cn]] for cn in cn_prop)
         v = (dcf*self.m_star)/F\
                 + (1/F)*sum([(m-self.m_star)*cn_prop[(x,y)] for x,y,m in self.desc_genotypes])
 
         logpost = binom.logpmf(a_vec, d_vec, v)
+        #
         #  logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
+        #if v (converted vaf) is outside [0,1] will return np.NINF
         if np.any(logpost==np.NINF):
              print("contains -NINF")
         logpost[logpost==np.NINF] = EPSILON
