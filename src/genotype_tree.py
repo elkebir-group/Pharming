@@ -248,7 +248,8 @@ class GenotypeTree(ClonalTree):
             v = (dcf*self.m_star)/F\
                 + (1/F)*sum([(m-self.m_star)*cn_prop[(x,y)] for x,y,m in self.desc_genotypes])
     
-            posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
+            # posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
+            posterior = max(binom.logpmf(a,d,v), self.EPSILON)
         return posterior
   
         
