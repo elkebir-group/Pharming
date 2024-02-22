@@ -255,26 +255,20 @@ class GenotypeTree(ClonalTree):
         
 
 
-    def vectorized_posterior(self, dcf_vec, a_vec, d_vec, cn):
-         raise NotImplemented
-         ######## USE non-vectorized version above####
-         ### Needs to be udpated#####
-         alpha =0.001
-         cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
-         const_part = sum([(m-self.m_star)*cn_prop[x+y] for x,y,m in self.desc_genotypes])
-    
-         vaf = dcf_vec*self.m_star/cn + const_part/cn
-         if vaf> 1:
-             print(self)
-         adjusted_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
-         logpost = binom.logpmf(a_vec, d_vec, adjusted_vaf)
-        #  logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
-         if np.any(logpost==np.NINF):
-             print("contains -NINF")
-        #  logpost[logpost==np.NINF] = EPSILON
+    def vectorized_posterior(self, dcf, a_vec, d_vec, cn_prop):
 
-         return logpost 
-        # Call the non-static function for a single element
+        F = sum([(cn[0] + cn[1])*cn_prop[cn]] for cn in cn_prop)
+        v = (dcf*self.m_star)/F\
+                + (1/F)*sum([(m-self.m_star)*cn_prop[(x,y)] for x,y,m in self.desc_genotypes])
+
+        logpost = binom.logpmf(a_vec, d_vec, v)
+        #  logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
+        if np.any(logpost==np.NINF):
+             print("contains -NINF")
+        logpost[logpost==np.NINF] = EPSILON
+
+        return logpost 
+
 
 
     def dcf_to_v(self,dcf,cn_prop):
