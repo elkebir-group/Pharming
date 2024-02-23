@@ -35,7 +35,7 @@ def compute_ari(alpha1, alpha2) -> float:
 
 
 
-def sti_fit(seg, gt, T_m, phi, delta, lamb=500, lamb2=5):
+def sti_fit(seg, gt, T_m, phi, delta, lamb=1e3, lamb2=1e5):
 
 
         gt_seg = deepcopy(gt)
@@ -43,15 +43,37 @@ def sti_fit(seg, gt, T_m, phi, delta, lamb=500, lamb2=5):
 
         snvs = dat.seg_to_snvs[seg]
         gt_seg.filter_snvs(snvs)
+        cost = gt_seg.compute_likelihood(dat, phi, lamb)
+        print(f"Segment {seg} ground truth cost: {cost} ")
+        gt_seg.draw(f"test/gt_seg{seg}.png", phi, segments=[seg] )
         gt_psi = gt.get_psi()
+        
         pd.Series(gt_psi).to_csv(f"test/s11_psi.csv")
         cn_states, counts = dat.cn_states_by_seg(seg)
         print(f"{seg}: {cn_states}")
         S = gt.get_cna_tree(seg)
+
         st  = STI(S,T_m, delta, lamb1=lamb, lamb2= lamb2)
+
+
         trees = st.fit(dat, seg)
-        trees[0].png("test/best_tree.png")
-        return trees 
+        print(f"Segment {seg} ground truth cost: {cost}  best inferred cost: {trees[0].cost}")
+        score_results = []
+        for i,res in enumerate(trees):
+            tree = res.ct
+            ca = res.phi
+            scores = gt_seg.score_snvs(tree)
+            scores["tree"] = i
+            scores["segment"] = seg 
+            scores["num_states"] = len(cn_states)
+            scores["cell_ari"] =phi.compute_ari(ca)
+            scores["cost"] = res.cost
+            scores["gt_cost"] = cost
+            score_results.append(scores)
+
+
+ 
+        return trees, score_results
 
 
         # pd.Series(gt_psi).to_csv(f"{args.out}/psi.csv")
@@ -265,46 +287,65 @@ if __name__ == "__main__":
     
     T_m = nx.relabel_nodes(gt_T_m, mapping)
 
-    delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
-    seg = 20
-    trees = sti_fit(seg, gt, T_m, phi, delta)
+    gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
+
+    all_scores = []
+    for seg in [20]:#dat.seg_to_snvs:
+        cn_states, counts = dat.cn_states_by_seg(seg)
+        if len(cn_states) <= 1:
+              continue
+        print(f"Inferring segment {seg}....")
+        trees, score_results = sti_fit(seg, gt, deepcopy(T_m), phi, gt_delta.copy())
+        all_scores.append(score_results)
+        if len(trees) <= 3:
+            num_sol = len(trees)
+        else:
+            num_sol = 3
+        for i in range(num_sol):
+                trees[i].png(f"test/seg{seg}_tree{i}.png", segments=[seg])
     
-    df = dict_to_df(gt_dcfs, ["node", "dcf"])
-#     df = pd.DataFrame.from_dict(gt_dcfs, orient='index', columns=['dcfs'])
-
-# # Reset index to create a column from dictionary keys
-#     df.reset_index(inplace=True)
-#     df.columns = ['nodes', 'dcfs']
-    df.to_csv("test/dcfs.csv", index=False)
-    # dcfs, _ = gt.compute_dcfs(phi, 20)
-    # for k,delta in dcfs.items():
-    #       print(f"{k}: {dcfs}")
-    cna_genos = gt.get_cna_genos()
-    cost = gt.compute_costs(dat, phi,lamb )
-    # gt.draw(f"{args.out}/gt.png")
-
-    score_results = []
-
-    best_trees = {}
-    # skip_segs = [10,12,17,20]
-    skip_segs= []
-    segments_to_process = list(dat.seg_to_snvs.keys())
-    # segments_to_process = [12]  #12
-
-    res = sti_fit(20, gt,dat, phi)
-    res[0].ct.draw("test/best_tree.png", res[0].phi)
+    flattened_list = [item for sublist in all_scores for item in sublist]
+    pd.DataFrame(flattened_list).to_csv("test/scores.csv", index=False)
+    print("done")
 
 
-    # Create a pool of processes
-    # with multiprocessing.Pool(args.cores) as pool:
-    #         # Use the pool to parallelize the processing of segments
-    #     score_results = pool.starmap(infer_segment_tree, [(seg, gt, dat, phi, lamb) for seg in segments_to_process])
+    
+#     df = dict_to_df(gt_dcfs, ["node", "dcf"])
+# #     df = pd.DataFrame.from_dict(gt_dcfs, orient='index', columns=['dcfs'])
 
-    merged_list = [item for sublist in score_results for item in sublist]
-    results = pd.DataFrame(merged_list)
-    results.to_csv(f"{args.scores}", index=False)
-    # print(f"Skipped segments: {skip_segs}")
-    print('done')
+# # # Reset index to create a column from dictionary keys
+# #     df.reset_index(inplace=True)
+# #     df.columns = ['nodes', 'dcfs']
+#     df.to_csv("test/dcfs.csv", index=False)
+#     # dcfs, _ = gt.compute_dcfs(phi, 20)
+#     # for k,delta in dcfs.items():
+#     #       print(f"{k}: {dcfs}")
+#     cna_genos = gt.get_cna_genos()
+#     cost = gt.compute_costs(dat, phi,lamb )
+#     # gt.draw(f"{args.out}/gt.png")
+
+#     score_results = []
+
+#     best_trees = {}
+#     # skip_segs = [10,12,17,20]
+#     skip_segs= []
+#     segments_to_process = list(dat.seg_to_snvs.keys())
+#     # segments_to_process = [12]  #12
+
+#     res = sti_fit(20, gt,dat, phi)
+#     res[0].ct.draw("test/best_tree.png", res[0].phi)
+
+
+#     # Create a pool of processes
+#     # with multiprocessing.Pool(args.cores) as pool:
+#     #         # Use the pool to parallelize the processing of segments
+#     #     score_results = pool.starmap(infer_segment_tree, [(seg, gt, dat, phi, lamb) for seg in segments_to_process])
+
+#     merged_list = [item for sublist in score_results for item in sublist]
+#     results = pd.DataFrame(merged_list)
+#     results.to_csv(f"{args.scores}", index=False)
+#     # print(f"Skipped segments: {skip_segs}")
+#     print('done')
     # for seg in dat.seg_to_snvs:
     #     # if seg == 20:
     #     # if seg in [1, 20,23]:
