@@ -17,6 +17,7 @@ from copy import deepcopy
 from enumerate import Enumerate
 
 
+
 def draw(tree, fname):
     ptree = pgv.AGraph(strict=False, directed=True)
     ptree.add_edges_from(list(tree.edges))
@@ -69,7 +70,7 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, S, T_m, delta, lamb1 =5, lamb2=1000) -> None:
+    def __init__(self, S, T_m, delta, lamb1 =5, niter=10) -> None:
     
 
         nodes = list(S)
@@ -86,9 +87,9 @@ class STI:
             self.delta = delta
 
         self.lamb1 = lamb1
-        self.lamb2  =lamb2
+     
 
- 
+        self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
         self.cn_states = {}
         self.k = len(self.delta)
@@ -96,6 +97,7 @@ class STI:
             self.cn_states[u] = self.k +i + 1 
         
         self.cn_states_inv = {val: key for key,val in self.cn_states.items()}
+
 
 
 
@@ -116,6 +118,8 @@ class STI:
   
         self.T_SNVs = [nx.DiGraph(edges) for edges in snv_tree_edgelists]
         self.T_SNV_groups, self.group_desc = self.group_snv_trees()
+
+        self.cn_delta = {}
 
     
 
@@ -616,12 +620,55 @@ class STI:
 
         return T 
                 
+    def get_cn_dcfs(self):
+        obs_copy_x, obs_copy_y =  self.data.copy_profiles_by_seg([self.ell], self.data.cells)
+        def node_cna_cost(cn):
+    
 
+            latent_x = np.array([cn[0]]).reshape(1,-1)
+            latent_y = np.array([cn[1]]).reshape(1,-1)
+      
+            x_diff = np.abs(obs_copy_x - latent_x).sum(axis=1)
+            y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
+            return x_diff + y_diff
+ 
+
+        cell_cna_scores = np.vstack([node_cna_cost(cn) for cn, _ in self.cn_states.items()])
+        nodes = [v for _,v in self.cn_states.items()]
+        cell_assign = np.argmin(cell_cna_scores, axis=0)
+        cell_totals = {v: 0 for v in nodes}
+        for i, v in zip(self.data.cells, cell_assign):
+            cell_totals[nodes[v]] += 1
+        
+        cell_fractions = {v: cell_totals[v]/self.data.N for v in cell_totals}
+        cn_dcfs = {v: cell_fractions[v] for v in nodes}
+      
+        for u in self.S:
+            for v in nx.descendants(self.S,u):
+                cn_dcfs[self.cn_states[u]] += cn_dcfs[self.cn_states[v]]
+           
+        # cn_dcfs = {v: cn_dcfs[v]/self.data.N for v in cn_dcfs}
+        return cn_dcfs
+
+    @staticmethod
+    def check_dcfs(T, merged_delta):
+        for u in T:
+            children_dcf = 0
+            for v in T.successors(u):
+                children_dcf += merged_delta[v]
+                # children_dcf = sum(merged_delta[v] for v in T.successors(u))
+            if merged_delta[u] < children_dcf or children_dcf > 1:
+                return False
+        return True
+        
+     
         
     def fit(self, data, segment):
         self.data = data
         self.ell = segment
         self.snvs = self.data.seg_to_snvs[segment]
+        self.cn_dcfs = self.get_cn_dcfs()
+
         refinements = Enumerate( self.T_m, self.S,).solve()
         
         #TODO: fix to account for errors in observed cn states
@@ -634,17 +681,24 @@ class STI:
         results = []
         opt_cost = np.Inf 
         print(f"Total refinements: {len(refinements)}")
+        merged_dcfs = self.cn_dcfs | self.delta
         for f, T in enumerate(refinements):
-            print(f"Starting refinement {f}...")
+
+     
             cluster_groups = self.identify_snv_cluster_trees(T)
             alpha_inv, omega = self.cluster_snvs(df, cluster_groups, tree_assign)
             snv_clusters = list(alpha_inv.keys())
             
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega)
+            
+            if not self.check_dcfs(segment_tree.tree, merged_dcfs):
+                continue
+
+            print(f"Starting refinement {f}...")
             best_phi = None
             cost  = np.Inf
 
-            for _ in range(10):
+            for _ in range(self.max_iterations):
                 ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
                 if ca_cost is None:
                     break
@@ -899,12 +953,12 @@ class STI:
                             tree_assign[j][g] = (ct,self.to_inverse_dict(tree_phi))
         
         df = pd.DataFrame(all_costs, columns=["snv", "snv_clust", "dcf", "group", "tree", "cost"])
-        df.to_csv("test/all_costs.csv", index=False)
-        pickle_object(cst, "test/costs.pkl")
-        pickle_object(tree_assign, "test/tree_assign.pkl")
+        # df.to_csv("test/all_costs.csv", index=False)
+        # pickle_object(cst, "test/costs.pkl")
+        # pickle_object(tree_assign, "test/tree_assign.pkl")
 
-        cst = load_pickled_object("test/costs.pkl")
-        tree_assign = load_pickled_object("test/tree_assign.pkl")
+        # cst = load_pickled_object("test/costs.pkl")
+        # tree_assign = load_pickled_object("test/tree_assign.pkl")
         model = gp.Model("MIP")
 
         clust_group_assign = [(j,q,g) for j in self.snvs for q in range(self.k) for g in range(num_groups)]

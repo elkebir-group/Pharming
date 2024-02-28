@@ -1,7 +1,7 @@
 
 simpath: "clonesim/build/simulate"
 genpath: "clonesim/build/generatesinglecells"
-nseeds: 5
+nseeds: 3
 
 cells:
   # - 500
@@ -15,7 +15,7 @@ snvs:
 # - 25000
 
 cov:
-  - 0.01
+  # - 0.01
   - 0.05
   - 0.1
   - 0.25

@@ -5,15 +5,17 @@ import networkx as nx
 from collections import Counter, defaultdict 
 from itertools import product, chain, combinations
 import pickle 
-# import pygraphviz as pgv
+import pygraphviz as pgv
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from sklearn.metrics.cluster import adjusted_rand_score
 from genotype import genotype 
 from cell_mapping import CellAssign
 from tree_to_json import convertToJson
+from scipy.stats import binom
+from scipy.stats import beta
 
-
+EPSILON = -1e5
 
 SET3_HEX = [
     '#8dd3c7',
@@ -146,7 +148,7 @@ class ClonalTree:
         self.key = key
         self.cost = np.Inf
 
-        self.snv_cost_func = self.node_snv_cost
+        # self.snv_cost_func = self.compute_node_likelihoods
 
     
     def __str__(self) -> str:
@@ -197,7 +199,15 @@ class ClonalTree:
             source = self.root 
     
         return list(nx.dfs_preorder_nodes(self.tree, source=source))
-    
+
+    def get_tree(self):
+        return self.tree.copy()
+
+    def get_genotypes(self):
+        return self.genotypes.copy()
+
+    def get_seg_to_muts(self):
+        return self.seg_to_muts.copy()
     
     def compute_dcfs(self, ca):
         dcfs = {}
@@ -210,6 +220,35 @@ class ClonalTree:
                 m = snvs[0]
                 dcfs[n] = sum([counts[u] for u in self.preorder(source=n)])/ncells 
         return dcfs 
+    
+
+
+    def posterior_dcf(self, j:int, dcf:float,a: int,d:int ,cn_prop:dict ):
+
+        # if j == 290:
+        #     print(f"{j}: {dcf}")
+        if d==0:
+            posterior = EPSILON
+        else:
+            parent, u, p_geno, u_geno = self.get_split_nodes(j)
+            m_star = u_geno.z 
+            #compute fractional copy number as weighted sum 
+            F = sum([ (cn[0]+ cn[1])*cn_prop[cn] for cn in cn_prop])
+            desc_geno = self.get_desc_genotypes(u, j)
+            # cn_prop = {x+y: 1.0 if x+y==cn else 0.0 for x,y,m in self.gamma}
+            #v = self.dcf(dcf, cn)
+            #copy code so that posterior 
+            v = (dcf*m_star)/F 
+            for geno in desc_geno:
+                cn_state = geno.to_CNAgenotype().to_tuple()
+                v += (1/F)* (geno.z-m_star)*cn_prop[cn_state]
+                # + (1/F)*sum([(geno.w-m_star)*cn_prop[cn_state] for x,y,m in self.desc_genotypes])
+    
+            # posterior = max(beta.logpdf(v, a+1, d-a + 1),EPSILON)
+            posterior = max(binom.logpmf(a, d,v), EPSILON)
+            # if posterior > 0:
+            #     print(f"{posterior}: {dcf} : {v} : {a/d}")
+        return posterior
 
 
 
@@ -351,6 +390,8 @@ class ClonalTree:
         return find_descendants(self.tree,v)
     
     def get_desc_genotypes(self, v, j):
+        
+        #TODO: fix convert to a set so that it works on clonal trees and not just genotype trees
         return [self.genotypes[u][j] for u in nx.dfs_preorder_nodes(self.tree, v) if u != v]
 
     def get_split_nodes(self, j):
@@ -385,6 +426,12 @@ class ClonalTree:
         cellAssign.update_phi()
         cellAssign.update_clones(self.clones())
     
+
+    
+            
+
+
+
 
 
     def toJson(self, fname, segment_csv=None, snv_csv=None):
@@ -577,6 +624,8 @@ class ClonalTree:
   
 
     def get_mut_mapping(self):
+        if len(self.genotypes) ==0:
+            return {v: [] for v in self.tree}, {v: [] for v in self.tree}
         gained= []
         lost = []
         muts = []
@@ -605,6 +654,12 @@ class ClonalTree:
 
         #TODO: update psi
         self.mut_mapping, self.mut_loss_mapping =self.get_mut_mapping()
+
+        for n, snvs in self.mut_mapping.items():
+            for j in snvs:
+                self.psi[j] = n
+
+        
    
     # def get_desc_cells(self, node):
     #     '''
@@ -704,27 +759,59 @@ class ClonalTree:
 
         return cell_scores
 
-    
-    def compute_node_likelihoods(self, data, cells=None, snvs=None, lamb=0, lamb_vaf=1):
+    def node_likelihood(self, u, data, cells):
+            vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+  
+            snvs = list(vaf.keys())
+            vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+        
+            return data.binomial_likelihood(cells, snvs,vafs )
+
+
+    def compute_node_likelihoods(self, data, cells=None, lamb=0):
         if cells is None:
             cells = data.cells
         nodes = np.array(self.tree)
         node_cell_likes = []
         for u in nodes: 
-            vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
-            if snvs is None:
-                snvs = list(vaf.keys())
-            vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+            # vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+            # if snvs is None:
+            #     snvs = list(vaf.keys())
+            # vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
         
-            node_cell_likes.append(data.binomial_likelihood(data.cells, snvs,vafs ))
+            node_cell_likes.append(self.node_likelihood(u, data, cells))
         
         cell_scores = np.vstack(node_cell_likes)
         cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
-        cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
+        cell_scores = cell_scores + lamb*cell_cna_scores
 
         return cell_scores, nodes
 
 
+    def compute_likelihood(self, data,  cellAssign, lamb=0):
+
+
+
+        self.node_cost = {}
+        self.snv_node_cost = {}
+        self.cna_node_cost = {}
+        self.cost = 0
+        for v in self.tree:
+                cells = cellAssign.get_cells(v)
+                if len(cells) ==0:
+                    continue      
+
+                else:
+                    self.snv_node_cost[v] = self.node_likelihood(v,data, cells).sum()
+                    self.cna_node_cost[v] = self.node_cna_cost(v, cells, data, self.get_latent_genotypes(v)).sum()
+                    self.node_cost[v]=  self.snv_node_cost[v] + lamb * self.cna_node_cost[v]
+             
+             
+
+
+        self.cost = sum([score for _, score in self.node_cost.items()])
+
+        return self.cost 
 
 
     def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
@@ -781,8 +868,63 @@ class ClonalTree:
         
         for v in self.tree:
             del self.genotypes[v][j]
+    
+    def update_genotype(self, node, j, snv_tree):
+        cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
+        old_node = self.psi[j]
+        pres_nodes = []
+        for u in sorted(nx.descendants(self.tree, node) | {node}):
+            cn_geno = cna_geno[u]
+            cn_state= cn_geno.to_tuple()
+            pres_nodes.append(u)
+            added = False
+            for v in snv_tree.preorder():
+                geno = snv_tree.genotypes[v][j]
+                if (geno.x, geno.y) == cn_state and geno.z > 0:
+                    self.genotypes[u][j] = genotype(*geno.to_tuple())
+                    added = True
+                    break 
+            if not added:
+                self.genotypes[u][j] = genotype(*cn_state, 0,0)
+        
+        for u in self.clones().difference(pres_nodes):
+            cn_state = cna_geno[u].to_tuple()
+            self.genotypes[u][j] = genotype(*cn_state, 0,0)
+        
+        self.psi[j] = node 
+        # self.mut_mapping[old_node].remove(j)
+    
+     
 
+     
 
+    # def compute_likelihood(self, data,  cellAssign, lamb=0, cna_only=False):
+    #     if cna_only:
+    #         lamb = 1
+    #     # if  cellAssign is None:
+    #     #     self.assign_cells(data, lamb)
+
+    #     self.node_cost = {}
+    #     self.cost = 0
+    #     for v in self.tree:
+    #             cells = cellAssign.get_cells(v)
+    #             if len(cells) ==0:
+    #                 continue
+    #             latent_genos = self.get_latent_genotypes(v)
+            
+    #             if cna_only:
+    #                 self.node_cost[v] =0
+    #             else:
+                    
+    #                 self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
+    #             if lamb >0:
+                    
+    #                 self.node_cost[v]+=lamb*self.node_cna_cost(v, cells,data, latent_genos).sum()
+             
+        
+    #     self.cost = sum([score for _, score in self.node_cost.items()])
+
+    #     return self.cost 
 
     def compute_costs(self, data,  cellAssign, lamb=0, cna_only=False):
         if cna_only:
@@ -801,6 +943,7 @@ class ClonalTree:
                 if cna_only:
                     self.node_cost[v] =0
                 else:
+                    
                     self.node_cost[v]= self.snv_cost_func(v, cells, data, latent_genos).sum() 
                 if lamb >0:
                     
@@ -859,10 +1002,10 @@ class ClonalTree:
             total_like = np.round(self.cost)
             tree.graph_attr["label"] = f"Objective: {total_like}"
  
-    #     # colormap = cm.get_cmap(cmap)
-    #     for n in self.tree:
+        # colormap = cm.get_cmap(cmap)
+        for n in self.tree:
 
-    #         tree.add_node(n, label=labels[n])
+            tree.add_node(n, label=labels[n])
       
             node_attr = tree.get_node(n)
             color_value = None
@@ -872,17 +1015,17 @@ class ClonalTree:
             # except:
             #     color_value = None
         
-    #         if color_value is not None:
+            # if color_value is not None:
                
                 
-    #             # color = colormap(color_value)
-    #             # hex_color = mcolors.rgb2hex(color)
-    #             node_attr.attr['fillcolor'] =SET3_HEX[color_value]
-    #             # node_attr['fillcolor'] = hex_color
+            #     # color = colormap(color_value)
+            #     # hex_color = mcolors.rgb2hex(color)
+            #     node_attr.attr['fillcolor'] =SET3_HEX[color_value]
+                # node_attr['fillcolor'] = hex_color
     
-    #     tree.add_edges_from(list(self.tree.edges))
-    #     tree.layout("dot")
-    #     tree.draw(fname)
+        tree.add_edges_from(list(self.tree.edges))
+        tree.layout("dot")
+        tree.draw(fname)
   
 
     def save_text(self, path):

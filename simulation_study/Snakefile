@@ -163,17 +163,17 @@ rule seg_tree_inference:
         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
         phi = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
-    params:
-        cores = 4,
-        lamb = 3
+    # params:
+    #     cores = 4,
+    #     lamb = 3
     output:"scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv"
     benchmark:"scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/benchmark.log"
     log:
-        std= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inference.log",
-        err= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inference.err.log"
+        std= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inf.log",
+        err= "scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/seg_inf.err.log"
     shell:
-        "python ../src/segment_main.py -d {input.data} -t {input.tree}  -c {input.phi} "
-        "-j {params.cores} -S {output} > {log.std} 2> {log.err} "
+        "python ../src/segment_main2.0.py -d {input.data} -t {input.tree}  -c {input.phi} "
+        "-S {output} > {log.std} 2> {log.err} "
 
 # rule eval_obj1:
 #     input:
