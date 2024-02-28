@@ -7,8 +7,9 @@ import pandas as pd
 from fit_segment import FitSegmentTree, draw 
 import networkx as nx 
 from sklearn.metrics.cluster import adjusted_rand_score
+import logging
 
-from sti_v2 import STI
+from sti_v2 import STI, pickle_object
 
 
 import multiprocessing  
@@ -45,15 +46,15 @@ def sti_fit(seg, gt, T_m, phi, delta, lamb=1e3, lamb2=1e5):
         gt_seg.filter_snvs(snvs)
         cost = gt_seg.compute_likelihood(dat, phi, lamb)
         print(f"Segment {seg} ground truth cost: {cost} ")
-        gt_seg.draw(f"test/gt_seg{seg}.png", phi, segments=[seg] )
+        # gt_seg.draw(f"test/gt_seg{seg}.png", phi, segments=[seg] )
         gt_psi = gt.get_psi()
         
-        pd.Series(gt_psi).to_csv(f"test/s11_psi.csv")
+        # pd.Series(gt_psi).to_csv(f"test/s11_psi.csv")
         cn_states, counts = dat.cn_states_by_seg(seg)
         print(f"{seg}: {cn_states}")
         S = gt.get_cna_tree(seg)
 
-        st  = STI(S,T_m, delta, lamb1=lamb, lamb2= lamb2)
+        st  = STI(S,T_m, delta, lamb1=lamb)
 
 
         trees = st.fit(dat, seg)
@@ -72,135 +73,10 @@ def sti_fit(seg, gt, T_m, phi, delta, lamb=1e3, lamb2=1e5):
             score_results.append(scores)
 
 
- 
+        pickle_object(trees[:2], f"test/seg{seg}_trees.pkl")
         return trees, score_results
 
 
-        # pd.Series(gt_psi).to_csv(f"{args.out}/psi.csv")
-        # dcfs, dcfs_by_state = gt.compute_dcfs(phi, seg)
-        # print(dcfs)
-        scores = {}
-
-    
-    
-  
-        # continue
-        score_results = []
-        if len(cn_states) <=3:
-            
-      
-                # draw(S, f"{args.out}/cna_tree_seg{seg}.png")
-                gt_psi = gt_seg.get_psi()
-                pd.Series(gt_psi).to_csv(f"test/gt_psi.csv")
-
-                # print(gt_psi[15])
-                #2850 = 0
-                #78 =4
-                pd.Series(inf_psi).to_csv(f"test/inf_psi.csv")
-                print(compute_ari(gt_psi, inf_psi))
-                print("done")
-                # sol_list = st.fit(dat, seg, delta, beta_inv)
-                # for i,sol in enumerate(sol_list):
-                #       print(sol.cost )
-                #       sol.ct.draw(f"test/sol_ct{i}.png", segments=[seg])
-
-
-
-                # fs = FitSegmentTree(S, max_clusters=2, psi=gt_psi)
-            
-            # try:
-                # best_tree =fs.fit(seg, dat, lamb, top_n=5)
-        
-        
-                # if len(best_tree) >0:
-                #     for i, tup in enumerate(best_tree):
-                #         tree, ca = tup
-                #     # tree = best_trees[seg]
-                #         # ca, cost, _, _ = tree.assign_cells(dat, lamb)
-                #         cost =tree.compute_costs(dat,ca, lamb)
-                   
-                #         # tree.draw(f"{args.out}/seg{seg}_tree{i}.png", segments=[seg])
-
-                #         cell_count = ca.get_cell_count()
-                
-                #         for u,n  in cell_count.items():
-                #             if n ==0 and tree.is_leaf(u):
-                #                 print(f"{u} invalid cell assigment")
-                #         # pd.Series(tree.get_psi()).to_csv(f"{args.out}/tree_psi.csv")
-                #         scores = gt_seg.score_snvs(tree)
-                        # scores["tree"] = i
-                        # scores["segment"] = seg 
-                        # scores["num_states"] = len(cn_states)
-                        # scores["cell_ari"] =phi.compute_ari(ca)
-                        # scores["cost"] = cost
-                        # score_results.append(scores)
-
-            # except:
-                # skip_segs.append(seg)
-                # print(f"Error building tree for segment {seg}, continuing... ")
-        return score_results
-
-# def infer_segment_tree(seg, T_m, dat, phi, lamb=5):
-#         # cna_genos = gt.get_cna_genos()
-#         gt_seg = deepcopy(gt)
-#         snvs = dat.seg_to_snvs[seg]
-#         gt_seg.filter_snvs(snvs)
-#         # gt_cost = gt_seg.compute_costs(dat, phi, lamb)
-#         # print(phi)
-#         # print(f"GT cost for seg {seg}: {gt_cost}")
-#         # gt_seg.draw(f"{args.out}/gt_segtree{seg}.png", segments=[seg])
-#         gt_psi = gt.get_psi()
-
-#         # pd.Series(gt_psi).to_csv(f"{args.out}/psi.csv")
-#         # dcfs, dcfs_by_state = gt.compute_dcfs(phi, seg)
-#         # print(dcfs)
-#         scores = {}
-
-    
-    
-#         cn_states, counts = dat.cn_states_by_seg(seg)
-#         print(f"{seg}: {cn_states}")
-#         # continue
-#         score_results = []
-      
-            
-#         S = gt.get_cna_tree(seg)
-#         # draw(S, f"{args.out}/cna_tree_seg{seg}.png")
-#         gt_psi = gt_seg.get_psi()
-        
-#         fs = STI(S, T_m, delta)
-    
-#     # try:
-#         best_tree =fs.fit(seg, dat, lamb, top_n=5)
-
-
-#         if len(best_tree) >0:
-#             for i, tup in enumerate(best_tree):
-#                 tree, ca = tup
-#             # tree = best_trees[seg]
-#                 # ca, cost, _, _ = tree.assign_cells(dat, lamb)
-#                 cost =tree.compute_costs(dat,ca, lamb)
-            
-#                 # tree.draw(f"{args.out}/seg{seg}_tree{i}.png", segments=[seg])
-
-#                 cell_count = ca.get_cell_count()
-        
-#                 for u,n  in cell_count.items():
-#                     if n ==0 and tree.is_leaf(u):
-#                         print(f"{u} invalid cell assigment")
-#                 # pd.Series(tree.get_psi()).to_csv(f"{args.out}/tree_psi.csv")
-#                 scores = gt_seg.score_snvs(tree)
-#                 scores["tree"] = i
-#                 scores["segment"] = seg 
-#                 scores["num_states"] = len(cn_states)
-#                 scores["cell_ari"] =phi.compute_ari(ca)
-#                 scores["cost"] = cost
-#                 score_results.append(scores)
-
-#             # except:
-#                 # skip_segs.append(seg)
-#                 # print(f"Error building tree for segment {seg}, continuing... ")
-        return score_results
 
 if __name__ == "__main__":
 
@@ -266,11 +142,11 @@ if __name__ == "__main__":
 
     
     gt.reindex_snvs(dat.mut_lookup)
-    gt.draw("test/gt_tree.png")
+    # gt.draw("test/gt_tree.png")
 
     gt_psi = gt.get_psi()
     psi_df  = dict_to_df(gt_psi, ["snv", "node"])
-    psi_df.to_csv(f"test/psi.csv", index=False)
+    # psi_df.to_csv(f"test/psi.csv", index=False)
     phi.relabel(dat.cell_lookup)
     gt_dcfs = gt.compute_dcfs(phi)
     root = gt.root
@@ -290,22 +166,25 @@ if __name__ == "__main__":
     gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
 
     all_scores = []
-    for seg in [20]:#dat.seg_to_snvs:
+    for seg in  [10,20]:#dat.seg_to_snvs:
         cn_states, counts = dat.cn_states_by_seg(seg)
         if len(cn_states) <= 1:
               continue
         print(f"Inferring segment {seg}....")
-        trees, score_results = sti_fit(seg, gt, deepcopy(T_m), phi, gt_delta.copy())
-        all_scores.append(score_results)
-        if len(trees) <= 3:
-            num_sol = len(trees)
-        else:
-            num_sol = 3
-        for i in range(num_sol):
-                trees[i].png(f"test/seg{seg}_tree{i}.png", segments=[seg])
+        try:
+            trees, score_results = sti_fit(seg, gt, deepcopy(T_m), phi, gt_delta.copy())
+            all_scores.append(score_results)
+        except Exception as Argument: 
+            logging.exception(f"Error on segment: {seg} ")
+        # if len(trees) <= 3:
+        #     num_sol = len(trees)
+        # else:
+        #     num_sol = 3
+        # for i in range(num_sol):
+        #         trees[i].png(f"test/seg{seg}_tree{i}.png", segments=[seg])
     
     flattened_list = [item for sublist in all_scores for item in sublist]
-    pd.DataFrame(flattened_list).to_csv("test/scores.csv", index=False)
+    pd.DataFrame(flattened_list).to_csv(args.scores, index=False)
     print("done")
 
 

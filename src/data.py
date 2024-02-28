@@ -57,8 +57,10 @@ class Data:
 
     def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001):
   
+        if isinstance(vaf, float) or isinstance(vaf, int):
+            vaf = np.array(vaf)
 
-        var =  self.total[np.ix_(cells, snvs)]
+        var =  self.var[np.ix_(cells, snvs)]
         total =self.total[np.ix_(cells, snvs)]
      
 
