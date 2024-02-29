@@ -24,30 +24,7 @@ def draw(tree, fname):
     ptree.layout("dot")
     ptree.draw(fname)
 
-def pickle_object(obj, file_path):
-    """
-    Pickle an object and save it to a file.
 
-    Args:
-    - obj: The object to pickle.
-    - file_path: The file path where the pickled object will be saved.
-    """
-    with open(file_path, 'wb') as f:
-        pickle.dump(obj, f)
-
-def load_pickled_object(file_path):
-    """
-    Load a pickled object from a file.
-
-    Args:
-    - file_path: The file path from which to load the pickled object.
-
-    Returns:
-    - The unpickled object.
-    """
-    with open(file_path, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
 
 
 @dataclass
@@ -255,14 +232,16 @@ class STI:
         #     ct.draw("test/ct.png", segments=[self.ell])
         _, u, _, _ =  ct.get_split_nodes(j)
         # ca, obj, cell_scores,nodes = ct.assign_cells(self.data, self.lamb1)
-        cell_scores, nodes = ct.compute_node_likelihoods(self.data,self.data.cells, lamb=self.lamb1)
-        node_assign = np.argmin(cell_scores, axis=0)
-        obj =cell_scores.min(axis=0)
-        obj = obj.sum()
-        phi = {}
-        for i, k in enumerate(node_assign):
-            phi[i] = nodes[k]
-        ca = CellAssign(phi, ct.clones())
+        obj, ca  = ct.assign_cells_by_likelihood(self.data,self.data.cells, lamb=self.lamb1)
+
+        # cell_scores, nodes = ct.compute_node_likelihoods(self.data,self.data.cells, lamb=self.lamb1)
+        # node_assign = np.argmin(cell_scores, axis=0)
+        # obj =cell_scores.min(axis=0)
+        # obj = obj.sum()
+        # phi = {}
+        # for i, k in enumerate(node_assign):
+        #     phi[i] = nodes[k]
+        # ca = CellAssign(phi, ct.clones())
         # if j == 290 and dcf == 0.179:
         #     ct.draw("test/ct.png", ca,  segments=[self.ell])
         alt = self.data.var[:, j].sum()
@@ -409,8 +388,7 @@ class STI:
         rev_mapping = {val: key for key,val in mapping.items()}
 
         for n in ct_tree:
-            # if n ==10:
-            #     print("here")
+
             cn_state = rev_mapping[n][1]
             cna_geno = CNAgenotype(*cn_state)
             genotypes[n] = {}
@@ -418,7 +396,7 @@ class STI:
             anc.append(n)
             present_clusters = [q for q in alpha_inv if q in anc]
             pres_snvs = set([j  for q in present_clusters for j in alpha_inv[q]])
-
+            not_added_muts = []
             for j in pres_snvs:
                 added = False
                 ct = omega[j][0]
@@ -431,10 +409,16 @@ class STI:
                         break 
                 if not added:
                     genotypes[n][j] =genotype(*cn_state, 0, 0)
+                    not_added_muts.append(j)
             
             for j in set(self.snvs).difference(pres_snvs):
                 genotypes[n][j] = genotype(*cn_state, 0,0)
-        return ClonalTree(ct_tree, genotypes, seg_to_snvs)
+        ct = ClonalTree(ct_tree, genotypes, seg_to_snvs)
+        if len(ct.mut_mapping[ct.root]) >0:
+            print(ct.mut_mapping[ct.root])
+            print(not_added_muts)
+
+        return ct
                     
 
 
@@ -549,6 +533,7 @@ class STI:
     
         return objval, ca
 
+    #TODO: fix
     def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters):
         T=  deepcopy(segtree)
         cna_genos = segtree.get_cna_genos()[self.ell]
@@ -593,6 +578,8 @@ class STI:
         
         psi = segtree.get_psi()
         for j in self.snvs:
+            # if j ==384:
+            #     print("here")
             best_cost = np.Inf
             vafs = {}
             for q in snv_clusters:
@@ -612,11 +599,15 @@ class STI:
                 if cost < best_cost:
                     new_node = q 
                     best_cost = cost 
+                    best_group = g
             if psi[j] != new_node:
                 # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
-                T.update_genotype(new_node, j, snv_tree)
+                
+                T.update_genotype(new_node, j,tree_assign[best_group][j][0])
         
         T.update_mappings()
+        if   len(T.mut_mapping[T.root]) > 0:
+            T.draw("test/bad_ct.png", ca, segments = [self.ell])
 
         return T 
                 
@@ -697,15 +688,13 @@ class STI:
             print(f"Starting refinement {f}...")
             best_phi = None
             cost  = np.Inf
-
+            # if f ==102:
+            #     segment_tree.draw("test/tree102.png", segments=[self.ell])
             for _ in range(self.max_iterations):
                 ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
                 if ca_cost is None:
                     break
-                #TODO: come up with a bound to not explore viable solutions
-                # segment_tree.draw("test/segtree.png", ca, segments=[self.ell])
                 segment_tree = self.assign_genotypes(segment_tree, ca, tree_assign, snv_clusters)
-                # segment_tree.draw("test/segtree.png", ca, segments=[self.ell])
                 updated_cost = segment_tree.compute_likelihood(self.data, ca, lamb=self.lamb1)
                 if updated_cost < cost:
                     best_segtree = deepcopy(segment_tree)
