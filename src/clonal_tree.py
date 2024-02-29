@@ -646,6 +646,7 @@ class ClonalTree:
         missing= set(muts)- (set(gained).union(set(lost)))
         if len(missing) > 0:
             print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
+            # print(missing)
         for m in missing:
             mut_mapping[self.root].append(m)
         return mut_mapping, mut_loss_mapping 
@@ -788,6 +789,18 @@ class ClonalTree:
         return cell_scores, nodes
 
 
+    def assign_cells_by_likelihood(self, data, cells=None, lamb=1000):
+        cell_scores, nodes = self.compute_node_likelihoods(data, cells,lamb)
+        node_assign = np.argmin(cell_scores, axis=0)
+        obj =cell_scores.min(axis=0)
+        obj = obj.sum()
+        phi = {}
+        for i, k in enumerate(node_assign):
+            phi[i] = nodes[k]
+        ca = CellAssign(phi, self.clones())
+        self.cost = obj
+        return obj, ca 
+
     def compute_likelihood(self, data,  cellAssign, lamb=0):
 
 
@@ -871,7 +884,7 @@ class ClonalTree:
     
     def update_genotype(self, node, j, snv_tree):
         cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
-        old_node = self.psi[j]
+
         pres_nodes = []
         for u in sorted(nx.descendants(self.tree, node) | {node}):
             cn_geno = cna_geno[u]
@@ -885,6 +898,10 @@ class ClonalTree:
                     added = True
                     break 
             if not added:
+                # if j ==384:
+                #     print(f"SNV {j} not added to node {node}")
+                #     print(snv_tree)
+                #     snv_tree.draw("test/snv_tree.png", segments=[10])
                 self.genotypes[u][j] = genotype(*cn_state, 0,0)
         
         for u in self.clones().difference(pres_nodes):

@@ -1,6 +1,6 @@
 from itertools import chain, combinations
 import pygraphviz as pgv 
-
+import pickle 
 
 def powerset(iterable):
         s = list(iterable)
@@ -30,3 +30,27 @@ def merge_lists(list1, list2):
         return merged_lists
 
 
+def pickle_object(obj, file_path):
+    """
+    Pickle an object and save it to a file.
+
+    Args:
+    - obj: The object to pickle.
+    - file_path: The file path where the pickled object will be saved.
+    """
+    with open(file_path, 'wb') as f:
+        pickle.dump(obj, f)
+
+def load_pickled_object(file_path):
+    """
+    Load a pickled object from a file.
+
+    Args:
+    - file_path: The file path from which to load the pickled object.
+
+    Returns:
+    - The unpickled object.
+    """
+    with open(file_path, 'rb') as f:
+        obj = pickle.load(f)
+    return obj

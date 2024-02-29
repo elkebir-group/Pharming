@@ -1,9 +1,8 @@
 import networkx as nx 
 
 from itertools import product
-from utils import powerset, draw, merge_lists, load_pickled_object 
+from utils import powerset, draw, merge_lists
 
-import numpy as np
 from copy import deepcopy
 from clonal_tree import ClonalTree
 from genotype import genotype
