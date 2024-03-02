@@ -209,6 +209,9 @@ class ClonalTree:
     def get_seg_to_muts(self):
         return self.seg_to_muts.copy()
     
+    def get_segments(self):
+        return set(self.seg_to_muts.keys())
+    
     def compute_dcfs(self, ca):
         dcfs = {}
         counts = ca.get_cell_count()
@@ -993,8 +996,13 @@ class ClonalTree:
         mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
         if cellAssign is not None:
             cell_count = cellAssign.get_cell_count()
+            if hasattr(cellAssign, 'n'):
+                ncells = cellAssign.n 
+            else:
+                ncells = sum(cell_count[u] for u in cell_count)
         else:
             cell_count = {n: 0 for n in self.clones()}
+            ncells = 0
         labels = {}
         # color_values, colormap = self.create_color_map(cmap)
         for n in self.tree:
@@ -1015,9 +1023,14 @@ class ClonalTree:
         like_label = f"Segment {self.key}\n"
         tree = pgv.AGraph(strict=False, directed=False)
         tree.node_attr['style']='filled'
+        segs = self.get_segments()
+        segs = [str(ell) for ell in segs ]
         if self.cost is not None:
             total_like = np.round(self.cost)
-            tree.graph_attr["label"] = f"Objective: {total_like}"
+            # tree.graph_attr["label"] = f"Objective: {total_like}\nSegments: {','.join(segs)}\nn={cellAssign.n} cells\nm={len(self.get_all_muts())} SNVs"
+            tree.graph_attr["label"] = f"Objective: {total_like}\nSegments: {','.join(segs)}\nn={ncells} cells\nm={len(self.get_all_muts())} SNVs"
+
+        tree
  
         # colormap = cm.get_cmap(cmap)
         for n in self.tree:

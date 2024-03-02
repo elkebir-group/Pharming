@@ -9,14 +9,14 @@ from sklearn.metrics.cluster import adjusted_rand_score
 import logging
 import utils
 import itertools
-from merge_segtrees import CNA_Merge
+from cna_merge import CNA_Merge
 
 from sti_v2 import STI
 
 
-import multiprocessing  
+
 import numpy as np
-from scipy.stats import binom
+
 
 def score_tree(gt, gt_phi, inf,inf_phi, segments):
       
@@ -24,8 +24,8 @@ def score_tree(gt, gt_phi, inf,inf_phi, segments):
         scores["tree"] = i
         scores["segment"] = ":".join([str(ell) for ell in segments])
         scores["cell_ari"] =gt_phi.compute_ari(inf_phi)
-        scores["cost"] = gt.cost 
-        scores["gt_cost"] = inf.cost 
+        scores["gt_cost"] = gt.cost 
+        scores["inf_cost"] = inf.cost 
         
         return scores 
             
@@ -169,6 +169,8 @@ if __name__ == "__main__":
     gt_T_m.remove_node(root)
 
 
+
+
     mapping = {}
     nodes = list(gt_T_m.nodes)
     nodes.sort()
@@ -177,16 +179,25 @@ if __name__ == "__main__":
     
     T_m = nx.relabel_nodes(gt_T_m, mapping)
 
+    with open("test/input/T_m.txt", "w+") as file:
+        for u,v in T_m.edges:
+              file.write(f"{u}\t{v}\n")
+
     utils.pickle_object(T_m, "test/T_m.pkl")
     utils.draw(T_m, "test/T_m.png")
 
     gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
 
-    test_segs = [10,20]
+    with open("test/input/dcfs.txt", "w+") as file:
+        for key,val in gt_delta.items():
+
+              file.write(f"{val}\n")
+
+    test_segs = [0,10,20, 24]
     snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in test_segs]))
     gt.filter_snvs(snvs)
     cost = gt.compute_likelihood(dat, phi, lamb)
-    gt.draw("test/gt_tree.png", phi, segments=test_segs)
+    gt.draw("test/output/gt_tree.png", phi, segments=test_segs)
 
     # all_scores = []
     # tree_sols = {}

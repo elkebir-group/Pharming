@@ -13,6 +13,7 @@ class CellAssign:
     def __post_init__(self):
 
         self.cell_mapping = self.to_mapping()
+        self.n = len(self.get_all_cells())
 
     def update(self, phi):
         self.phi = phi

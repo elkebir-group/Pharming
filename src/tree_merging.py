@@ -1,53 +1,63 @@
-from superimposition import Superimposition
+# from superimposition import Superimposition
 import numpy as np
+from cna_merge import CNA_Merge
+import itertools
+from utils import get_top_n
+
+RANDOM = 'random'
+NSNVS = 'N_SNVS'
 
 class ClonalTreeMerging:
-    def __init__(self, rng=None, seed=1026, order = 'random', pairwise=False, top_n=1,
-        lamb=0, threshold=10, threads=1, timelimit=100, n_orderings=5 ):
+    def __init__(self, rng=None, seed=1026, order = 'random', progressive=True, top_n=1,
+        n_orderings=5 ):
         
         if rng is not None:
             self.rng = rng 
         if rng is None:
             self.rng = np.random.default_rng(seed)
 
-        self.top_n = 1
+        self.top_n = top_n
 
-        #ILP superimposition parameters to use for all problem instances
-        self.threshold = threshold 
-        self.threads = threads 
-        self.timelimit = timelimit 
+        self.n_orderings = n_orderings
     
-        RANDOM = 'random'
-        NSNVS = 'N_SNVS'
+    
         
         if order not in ['random', 'N_SNVS']:
             self.order = RANDOM
-
-        if pairwise:
-            self.merge = self.pairwise_merge
         else:
+            self.order = order 
+
+        if progressive:
+            
             self.merge = self.progressive_merge
+ 
+        else:
+            self.merge = self.pairwise_merge
+   
     
-    def run(self, tree_list, data):
+    def fit(self, tree_list, T_m, data, lamb):
         '''
             @params tree_list: list of list of ClonalTrees on disjoint subsets of segments
             @params data: a Pharming Data object that is used to fit the superimposed trees 
         '''
+        self.data = data 
+        self.lamb = lamb
+        self.T_m = T_m
         cand_merged_lists = []
         if len(tree_list) <= 0:
                 raise ValueError("List must contain at least one tree.")
+        
         if self.order == RANDOM:
             for _ in range(self.n_orderings):
-                permutated_list = self.rng.permutation(tree_list)
+                permutated_order = self.rng.permutation(len(tree_list))
+                permutated_list = [tree_list[i] for i in permutated_order]
         
                 cand_merged_lists.append(self.merge(permutated_list))
         else:
             #sort the trees according to other criteria, like number of SNVs or normalized costs
             pass 
 
-        flattened_candidates = list(itertools.chain.from_iterable(cand_merged_lists))
-        top_n_list = sorted(flattened_candidates, key=lambda x: x.get_cost())[:self.top_n]
-        return top_n_list
+        return  get_top_n(cand_merged_lists, self.top_n)
 
 
     def merge_helper(self, tree_list1, tree_list2):
@@ -55,19 +65,19 @@ class ClonalTreeMerging:
             @params tree_list1 list of ClonalTrees on the same subset of segments
             @params tree_list2 list of ClonalTrees on the same subset of segments
             '''
-            merged_tree_cand = []
-            costs =[]
+            candidates = []
+     
             for tree1, tree2 in itertools.product(tree_list1, tree_list2):
+                cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
+                merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+                candidates.append(merged_tree_list)
+            
+            return get_top_n(candidates, self.top_n)
+      
 
-                sp = Superimposition(tree1, tree_list2)
-                merged_tree = sp.solve(self.data, lamb= self.lamb, threads=self.threads, timelimit=self.timelimit) 
-                merge_tree_cand.append(merge_tree)
-        
-            merged_tree_list = sorted(object_list, key=lambda x: x.get_cost())[:self.top_n]
-            return merged_tree_list
 
     def progressive_merge(self, tree_list):
-        self.data = data 
+      
         if len(tree_list) == 1:
             return tree_list[0]
 
@@ -77,17 +87,18 @@ class ClonalTreeMerging:
         
         # Merge every other tree in the list with the current merged_tree
         for i in range(2, len(tree_list)):
-            merged_tree_list=  self.merge_helper(merged_tree_listm tree_list[i])
+            merged_tree_list=  self.merge_helper(merged_tree_list, tree_list[i])
 
 
         return merged_tree_list
 
 
-   def pairwise_merge(self, tree_list):
-        
+    def pairwise_merge(self, tree_list):
         if len(tree_list) == 1:
             # Base case: If there's only one list of trees left, return it
             return tree_list[0]
+        # raise NotImplementedError
+     
         
         # Create pairs of trees for merging
         pairs = [tree_list[i:i + 2] for i in range(0, len(tree_list), 2)]
@@ -98,7 +109,7 @@ class ClonalTreeMerging:
         # Merge pairs of trees and add the merged trees to the new list
         for pair in pairs:
             if len(pair) == 2:
-                mew_tree_list.append( self.merge_helper(pair[0], pair[1]))
+                new_tree_list.append( self.merge_helper(pair[0], pair[1]))
             else:
                 # If there's an odd number of trees, add the unpaired tree to the new list
                 new_tree_list.append(pair[0])
