@@ -69,7 +69,7 @@ class STI:
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
         self.cn_states = {}
-        self.k = len(self.delta)
+        self.k = max(self.T_m)
         for i, u in enumerate(self.S):
             self.cn_states[u] = self.k +i + 1 
         

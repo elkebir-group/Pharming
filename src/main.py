@@ -79,7 +79,7 @@ def main(args):
                 )
 
   
-    solutions = ph.fit(dat,args.lamb, args.segments, cores=args.cores)
+    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
 
     if args.scores is not None:
             print("Saving cost values...")
@@ -163,11 +163,11 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "4",
+        "-j", "7",
         "-D", f"{gtpth}/input/dcfs.txt",
         "-T", f"{gtpth}/input/T_m.txt",
-        "-n", "5",
-        "-L", "0",  "10", "20", "24",
+        "-n", "3",
+        # "-L", "0",  "10", "20", "24",
         # "-s", "14",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",

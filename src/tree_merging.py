@@ -3,6 +3,7 @@ import numpy as np
 from cna_merge import CNA_Merge
 import itertools
 from utils import get_top_n
+import multiprocessing
 
 RANDOM = 'random'
 NSNVS = 'N_SNVS'
@@ -35,7 +36,7 @@ class ClonalTreeMerging:
             self.merge = self.pairwise_merge
    
     
-    def fit(self, tree_list, T_m, data, lamb):
+    def fit(self, tree_list, T_m, data, lamb, cores=1):
         '''
             @params tree_list: list of list of ClonalTrees on disjoint subsets of segments
             @params data: a Pharming Data object that is used to fit the superimposed trees 
@@ -43,6 +44,8 @@ class ClonalTreeMerging:
         self.data = data 
         self.lamb = lamb
         self.T_m = T_m
+        self.cores =cores 
+        
         cand_merged_lists = []
         if len(tree_list) <= 0:
                 raise ValueError("List must contain at least one tree.")
@@ -60,17 +63,29 @@ class ClonalTreeMerging:
         return  get_top_n(cand_merged_lists, self.top_n)
 
 
+    def merge_parallel(self, tree1, tree2):
+        cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
+        merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+        return merged_tree_list
+
     def merge_helper(self, tree_list1, tree_list2):
             '''
             @params tree_list1 list of ClonalTrees on the same subset of segments
             @params tree_list2 list of ClonalTrees on the same subset of segments
             '''
             candidates = []
-     
-            for tree1, tree2 in itertools.product(tree_list1, tree_list2):
-                cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
-                merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
-                candidates.append(merged_tree_list)
+
+            if self.cores <= 1:
+        
+                for tree1, tree2 in itertools.product(tree_list1, tree_list2):
+                    cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
+                    merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+                    candidates.append(merged_tree_list)
+            else:
+                arguments = [(tree1, tree2) for tree1, tree2 in itertools.product(tree_list1, tree_list2)]
+      
+                pool = multiprocessing.Pool(processes=self.cores)
+                candidates = pool.starmap(self.merge_parallel, arguments)
             
             return get_top_n(candidates, self.top_n)
       

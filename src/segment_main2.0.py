@@ -135,7 +135,7 @@ if __name__ == "__main__":
         # "-s", "14",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-S", f"/Users/leah/Documents/Research/projects/Pharming/test/cna_scores.csv",
+        "-S", f"/Users/leah/Documents/Research/projects/Pharming/test/full_scores.csv",
 
     ])
 
@@ -165,6 +165,9 @@ if __name__ == "__main__":
     gt_dcfs = gt.compute_dcfs(phi)
     root = gt.root
 
+
+
+
     gt_T_m = gt.mutation_cluster_tree()
     gt_T_m.remove_node(root)
 
@@ -193,11 +196,24 @@ if __name__ == "__main__":
 
               file.write(f"{val}\n")
 
-    test_segs = [0,10,20, 24]
+    # test_segs = [0,10,20, 24]
+    test_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
     snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in test_segs]))
     gt.filter_snvs(snvs)
     cost = gt.compute_likelihood(dat, phi, lamb)
     gt.draw("test/output/gt_tree.png", phi, segments=test_segs)
+
+    merge_list  = load_from_pickle("test/output/solution.pkl")
+
+    for i,sol in enumerate(merge_list):
+          sol.prune()
+          sol.png(f"test/output/pruned_ct{i}.png")
+          foo = gt.cna_genotype_similarity(phi, sol.ct, sol.phi)
+    # merge_list  = load_from_pickle("test/clonal_trees.pkl")[0]
+    score_results= [score_tree(gt, phi, sol.ct, sol.phi, segments=test_segs) for sol in merge_list]
+
+    pd.DataFrame(score_results).to_csv(args.scores, index=False)
+
 
     # all_scores = []
     # tree_sols = {}
@@ -223,34 +239,34 @@ if __name__ == "__main__":
     # flattened_list = [item for sublist in all_scores for item in sublist]
     # pd.DataFrame(flattened_list).to_csv(args.scores, index=False)
     # utils.pickle_object(tree_sols, "test/tree_sols.pkl")
-    tree_sols = utils.load_pickled_object("test/tree_sols.pkl")
-    merge_list = []
-    root = [n for n in T_m if T_m.in_degree[n]==0][0]
-    T_m.add_edge(max(T_m)+2, root) 
-    bad_trees = []
-    for l1, l2 in  itertools.combinations(tree_sols.keys(), 2):
-         for sol1 in tree_sols[l1]:
-              CT1 = sol1.ct
-              for sol2 in tree_sols[l2]:
-                CT2 = sol2.ct 
-                try:
-                    all_sols = CNA_Merge(CT1, CT2, T_m).fit(dat, lamb=1e5)
-                    merge_list += all_sols
-                except:
-                    bad_trees.append((CT1, CT2))
-                    all_sols = CNA_Merge(CT1, CT2, T_m, verbose=True).fit(dat, lamb=lamb)
+    # tree_sols = utils.load_pickled_object("test/tree_sols.pkl")
+    # merge_list = []
+    # root = [n for n in T_m if T_m.in_degree[n]==0][0]
+    # T_m.add_edge(max(T_m)+2, root) 
+    # bad_trees = []
+    # for l1, l2 in  itertools.combinations(tree_sols.keys(), 2):
+    #      for sol1 in tree_sols[l1]:
+    #           CT1 = sol1.ct
+    #           for sol2 in tree_sols[l2]:
+    #             CT2 = sol2.ct 
+    #             try:
+    #                 all_sols = CNA_Merge(CT1, CT2, T_m).fit(dat, lamb=1e5)
+    #                 merge_list += all_sols
+    #             except:
+    #                 bad_trees.append((CT1, CT2))
+    #                 all_sols = CNA_Merge(CT1, CT2, T_m, verbose=True).fit(dat, lamb=lamb)
 
-    # utils.pickle_object(bad_trees, "test/bad_trees.png")            
-    # print(len(bad_trees))
-    merge_list = sorted(merge_list, key=lambda x: x[0])
-    for i in range(min(len(merge_list),5)):
-        obj, ca, ct = merge_list[i]
-        ct.draw(f"best_tree{i}.png", ca, segments=test_segs)
+    # # utils.pickle_object(bad_trees, "test/bad_trees.png")            
+    # # print(len(bad_trees))
+    # merge_list = sorted(merge_list, key=lambda x: x[0])
+    # for i in range(min(len(merge_list),5)):
+    #     obj, ca, ct = merge_list[i]
+    #     ct.draw(f"best_tree{i}.png", ca, segments=test_segs)
 
    
-    score_results= [score_tree(gt, phi, ct, ca, segments=test_segs) for obj,ca, ct in merge_list]
+    # score_results= [score_tree(gt, phi, ct, ca, segments=test_segs) for obj,ca, ct in merge_list]
 
-    pd.DataFrame(score_results).to_csv(args.scores, index=False)
+    # pd.DataFrame(score_results).to_csv(args.scores, index=False)
   
                      
 
@@ -258,5 +274,5 @@ if __name__ == "__main__":
               
 
 
-    print("done")
+    # print("done")
 
