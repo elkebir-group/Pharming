@@ -165,6 +165,10 @@ class Data:
 
         return set(cn_states), item_counts 
 
+    def num_cn_states(self, seg, root_state=None):
+        cn_states, counts = self.cn_states_by_seg(seg)
+        # cn_states = set(root_state).intersection(cn_states)
+        return len(cn_states)
 
     def cn_proportions(self, seg):
         cn_props = {}

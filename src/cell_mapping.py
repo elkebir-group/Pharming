@@ -57,7 +57,7 @@ class CellAssign:
         all_cells = []
         for n in self.cell_mapping:
             all_cells += self.cell_mapping[n]
-        return all_cells
+        return set(all_cells)
     
     def get_cell_count(self):
          return {n : len(self.cell_mapping[n]) for n in self.clones if n in self.cell_mapping}
@@ -72,6 +72,10 @@ class CellAssign:
         for index, cell_label in cell_lookup.items():
             new_phi[index]  = self.phi[cell_label]
         self.update(new_phi)
+
+    
+   
+        
          
 
     def compute_ari(self,obj) -> float:

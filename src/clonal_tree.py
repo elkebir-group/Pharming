@@ -361,7 +361,7 @@ class ClonalTree:
             return list(self.tree.predecessors(v))[0]
     
     def children(self, v):
-        return list(self.tree.neighbors[v])
+        return list(self.tree.neighbors(v))
     
     def get_ancestors(self, v):
 
@@ -599,6 +599,17 @@ class ClonalTree:
     #     self.cell_mapping = {}
     #     self.cost = np.Inf
 
+    def prune(self, cellAssign):
+        counts = cellAssign.get_cell_count()
+        self.update_mappings()
+        for u in self.preorder():
+            if u ==self.root:
+                continue
+            if len(self.children(u)) ==1:    
+                if counts[u] ==0 and len(self.get_muts(u)) ==0 and len(self.mut_loss_mapping[u]) ==0:
+                    self.prune_tree(u,cellAssign)
+        
+
     def prune_tree(self, node_to_remove, cellAssign):
         
         parent = next(self.tree.predecessors(node_to_remove))
@@ -613,11 +624,17 @@ class ClonalTree:
         for child in children:
             self.tree.add_edge(parent, child)
 
-        if node_to_remove in self.cell_mapping:
-            del cellAssign.cell_mapping[node_to_remove]
+        # if node_to_remove in self.cell_mapping:
+        #     del cellAssign.cell_mapping[node_to_remove]
         
         if node_to_remove in self.genotypes:
             del self.genotypes[node_to_remove]
+        
+        if node_to_remove in self.mut_mapping:
+            del self.mut_mapping[node_to_remove]
+
+        if node_to_remove in self.mut_loss_mapping:
+            del self.mut_loss_mapping[node_to_remove]
         
         cellAssign.update_clones(self.clones())
 
@@ -629,24 +646,38 @@ class ClonalTree:
     def get_mut_mapping(self):
         if len(self.genotypes) ==0:
             return {v: [] for v in self.tree}, {v: [] for v in self.tree}
-        gained= []
-        lost = []
-        muts = []
+        gained= set()
+        lost = set()
+    
+        muts= set(self.get_all_muts())
+      
         mut_mapping = {v: [] for v in self.tree}
         mut_loss_mapping = {v: [] for v in self.tree}
-        for v in self.preorder():
-                for m, geno in self.genotypes[v].items():
-                    if m not in muts:
-                        muts.append(m)
-                    # if m in [523, 792, 451,831]:
-                    #     print(m)
-                    if geno.z > 0 and m not in gained:
-                        mut_mapping[v].append(m)
-                        gained.append(m)
-                    if m in gained and geno.z ==0 and m not in lost:
-                        mut_loss_mapping[v].append(m)
-                        lost.append(m)
-        missing= set(muts)- (set(gained).union(set(lost)))
+        for u in self.preorder():
+                for v in self.children(u):
+                    for j in muts:
+                        geno_v = self.genotypes[v][j]
+                        geno_u = self.genotypes[u][j]
+                        if geno_u.z ==0 and geno_v.z > 0:
+                            mut_mapping[v].append(j)
+                            gained.add(j)
+                        if geno_u.z > 0 and geno_v.z == 0:
+                            mut_loss_mapping[v].append(j)   
+                            lost.add(j)
+
+
+                    # for m, geno in self.genotypes[v].items():
+                    # if m not in muts:
+                    #     muts.append(m)
+                    # # if m in [523, 792, 451,831]:
+                    # #     print(m)
+                    # if geno.z > 0 and m not in gained:
+                    #     mut_mapping[v].append(m)
+                    #     gained.append(m)
+                    # if m in gained and geno.z ==0 and m not in lost:
+                    #     mut_loss_mapping[v].append(m)
+                    #     lost.append(m)
+        missing= muts - (gained.union(lost))
         if len(missing) > 0:
             print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
             # print(missing)
@@ -1016,7 +1047,9 @@ class ClonalTree:
                 # SNV
                 if n in self.mut_mapping:
                     if mut_count[n] > 0:
-                        labels[n] += "\nSNVs:" + str(mut_count[n])
+                        labels[n] += "\n+SNVs:" + str(mut_count[n])
+                    if len(self.mut_loss_mapping[n]) > 0:
+                        labels[n] += "\n-SNVs:" + str(len(self.mut_loss_mapping[n]))
                 if segments is not None:
                     labels[n] += "\n" + ",".join([str(cna_genos[s][n]) for s in segments if s in self.seg_to_muts])
 
@@ -1435,6 +1468,61 @@ class ClonalTree:
                     for child in children:
                         pairs.update(product(mut_mapping[node], mut_mapping[child]))
         return pairs
+
+    def gt_latent_genos(self, u):
+        lat_genos = self.get_latent_genotypes(u)
+        latent_cna_genos = self.get_latent_cna_genos(lat_genos)
+        seg_geno = {}
+        for key, seg in self.mut_to_seg.items():
+            if seg not in seg_geno:
+               seg_geno[seg] = latent_cna_genos[key]
+        latent_x, latent_y = [], []
+        for seg,cna_geno in sorted(seg_geno.items()):
+            latent_x.append(cna_geno.x)
+            latent_y.append(cna_geno.y)
+        
+        latent_x = np.array(latent_x).reshape(-1,1)
+        latent_y = np.array(latent_y).reshape(-1, 1)
+        return latent_x, latent_y
+
+    def cna_genotype_similarity(self, gt_phi, inf_ct, inf_phi):
+
+        total_dist = 0
+        # if len(gt_phi.get_all_cells() ^ inf_phi.get_all_cells()) ==0:
+
+        
+        all_u_dist = []
+        for u in gt_phi.clones:
+            gt_cells = gt_phi.get_cells(u)
+            if len(gt_cells) ==0:
+                continue
+            gt_x, gt_y = self.gt_latent_genos(u)
+            
+            node_mapping = {}
+            for i in gt_cells:
+                node = inf_phi.phi[i]
+                if node in node_mapping:
+                    node_mapping[node].append(i)
+                else:
+                    node_mapping[node] = [i]
+            for v, inf_cells in node_mapping.items():
+                ncells = len(inf_cells)
+                inf_x, inf_y = inf_ct.gt_latent_genos(v)
+                x_dist =  np.abs(inf_x - gt_x)
+                y_dist  = np.abs(inf_y - gt_y)
+                geno_diff = (x_dist + y_dist).sum() 
+                # if geno_diff > 0:
+                #     print(f"gt node: {u} inf node: {v}")
+                #     print(x_dist)
+                #     print(y_dist)
+    
+                total_dist  += ncells*geno_diff
+        
+    
+        mad = total_dist/ len(inf_phi.get_all_cells())
+        return  mad
+                    
+
 
 
 
