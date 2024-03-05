@@ -16,6 +16,20 @@ from enumerate import Enumerate
 from solution import Solution
 
 
+import timeit
+import functools
+
+def timeit_decorator(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = timeit.default_timer()
+        result = func(*args, **kwargs)
+        end_time = timeit.default_timer()
+        execution_time = end_time - start_time
+        print(f"Execution time of {func.__name__}: {execution_time} seconds")
+        return result
+    return wrapper
+
 
 def draw(tree, fname):
     ptree = pgv.AGraph(strict=False, directed=True)
@@ -69,7 +83,7 @@ class STI:
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
         self.cn_states = {}
-        self.k = max(self.T_m)
+        self.k = len(self.delta)
         for i, u in enumerate(self.S):
             self.cn_states[u] = self.k +i + 1 
         
@@ -237,7 +251,7 @@ class STI:
         
         return obj, ct, ca, posterior_dcf
     
-    
+    @timeit_decorator
     def compute_snv_cluster_tree_cost(self):
         all_costs = []
         cst = {}
@@ -424,10 +438,13 @@ class STI:
              print("warning: model infeasible!")
              return np.Inf, solutions 
 
-    def assign_cell_clusters(self,ct, snv_clusters):
+    @timeit_decorator
+    def assign_cell_clusters(self,ct, snv_clusters, ilp=False ):
 
     
         delta =self.delta
+        if not ilp:
+            return ct.assign_cells_by_likelihood(self.data, self.data.cells, self.lamb1)
         # _, _, cell_scores, nodes = ct.assign_cells(self.data, self.lamb1)
         cell_scores, nodes = ct.compute_node_likelihoods(self.data, self.data.cells, self.lamb1)
         nodes = nodes.tolist()
@@ -486,7 +503,15 @@ class STI:
     
         return objval, ca
 
-    #TODO: fix
+    # def get_group(self, segtree, cna_genos, q):
+    #     sscn = cna_genos[q].to_tuple()
+    #     children_states = {cna_genos[u].to_tuple() for u in segtree.preorder(q) if u != q}
+        
+    #     for g, desc in self.group_desc.items():
+    #         if sscn == desc['sscn'] and children_states == set(desc['children']):
+    #             return g
+
+    @timeit_decorator
     def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters):
         T=  deepcopy(segtree)
         cna_genos = segtree.get_cna_genos()[self.ell]
@@ -537,6 +562,7 @@ class STI:
             vafs = {}
             for q in snv_clusters:
                 #get group of q 
+                # g = self.get_group(segtree, cna_genos, q)
                 g = get_group(q)
                 #get the optimal snv tree for snv j in group of q
                 snv_tree = tree_assign[g][j][0]
@@ -604,7 +630,7 @@ class STI:
         return True
         
      
-        
+    @timeit_decorator
     def fit(self, data, segment):
         self.data = data
         self.ell = segment
@@ -620,7 +646,7 @@ class STI:
 
         results = []
         opt_cost = np.Inf 
-        print(f"Total refinements: {len(refinements)}")
+        # print(f"Total refinements: {len(refinements)}")
         merged_dcfs = self.cn_dcfs | self.delta
         for f, T in enumerate(refinements):
 
@@ -634,11 +660,11 @@ class STI:
             if not self.check_dcfs(segment_tree.tree, merged_dcfs):
                 continue
 
-            print(f"Starting refinement {f}...")
+            # print(f"Starting refinement {f}...")
             best_phi = None
             cost  = np.Inf
  
-            for _ in range(self.max_iterations):
+            for i in range(self.max_iterations):
                 ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
                 if ca_cost is None:
                     break
@@ -647,12 +673,21 @@ class STI:
                 if updated_cost < cost:
                     best_segtree = deepcopy(segment_tree)
                     best_phi = deepcopy(ca)
-                    cost  = updated_cost
+                    cost = updated_cost
                     if cost < opt_cost:
                         opt_cost = cost 
                 else:
                     break
-            print(f"Ending refinement {f}: cost: {cost} opt_cost: {opt_cost}")
+
+                # if np.abs(updated_cost - cost) < 5:
+                #     best_segtree = deepcopy(segment_tree)
+                #     best_phi = deepcopy(ca)
+                #     cost  = updated_cost
+                #     if cost < opt_cost:
+                #         opt_cost = cost 
+                # else:
+                #     break
+            # print(f"Ending refinement {f}: cost: {cost} opt_cost: {opt_cost}")
             if best_phi is not None:
                 results.append(Solution(cost, best_segtree, best_phi))
 

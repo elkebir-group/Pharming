@@ -9,7 +9,9 @@ from sklearn.metrics.cluster import adjusted_rand_score
 import logging
 import utils
 import itertools
-from cna_merge import CNA_Merge
+import numpy as np 
+import seaborn as sns 
+
 
 from sti_v2 import STI
 
@@ -26,6 +28,7 @@ def score_tree(gt, gt_phi, inf,inf_phi, segments):
         scores["cell_ari"] =gt_phi.compute_ari(inf_phi)
         scores["gt_cost"] = gt.cost 
         scores["inf_cost"] = inf.cost 
+        scores['cna_mad'] = gt.cna_genotype_similarity(gt_phi, inf, inf_phi)
         
         return scores 
             
@@ -123,7 +126,7 @@ if __name__ == "__main__":
 
     instance = "s11_m5000_k25_l7"
     # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.25_e0" 
+    folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
 
     args = parser.parse_args([
@@ -135,7 +138,7 @@ if __name__ == "__main__":
         # "-s", "14",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-S", f"/Users/leah/Documents/Research/projects/Pharming/test/full_scores.csv",
+        "-S", f"/Users/leah/Documents/Research/projects/Pharming/test/output_0.05/scores.csv",
 
     ])
 
@@ -144,8 +147,31 @@ if __name__ == "__main__":
 # S = nx.DiGraph([((1,1), (2,1)), ((1,1), (4,1))])
     from data import Data, load_from_pickle
 
+   outdir = "test/output_0.01"
+
+
     lamb = args.lamb
     dat = load_from_pickle(args.data)
+
+
+    test_segs = [2,10,20, 24]
+    # test_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
+    snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in test_segs]))
+
+    varcount = np.count_nonzero(dat.var, axis=0)[snvs]
+    totcount = np.count_nonzero(dat.total, axis=0)[snvs]
+
+    to_remove = [snvs[i] for i in range(varcount.shape[0]) if varcount[i]<= 2]
+
+    df = pd.DataFrame({"snv": snvs, "var_nonzero": varcount, "tot_nonzero":totcount})
+    df.to_csv("test/output_0.05/cell_counts.csv", index=False)
+
+    # sns.histplot(data=varcount[snvs], bins=50) 
+    # totcount = np.count_nonzero(dat.total, axis=0)
+
+
+
+
     print(dat)
     gt = load_from_pickle(args.tree)
     print(gt)
@@ -182,35 +208,44 @@ if __name__ == "__main__":
     
     T_m = nx.relabel_nodes(gt_T_m, mapping)
 
-    with open("test/input/T_m.txt", "w+") as file:
+    with open("test/input_0.05/T_m.txt", "w+") as file:
         for u,v in T_m.edges:
               file.write(f"{u}\t{v}\n")
 
     utils.pickle_object(T_m, "test/T_m.pkl")
-    utils.draw(T_m, "test/T_m.png")
+    utils.draw(T_m, "test/input_0.05/T_m.png")
 
     gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
 
-    with open("test/input/dcfs.txt", "w+") as file:
+    with open("test/input_0.05/dcfs.txt", "w+") as file:
         for key,val in gt_delta.items():
 
               file.write(f"{val}\n")
 
-    # test_segs = [0,10,20, 24]
-    test_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
+    test_segs = [2,10,20, 24]
+    # test_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
     snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in test_segs]))
     gt.filter_snvs(snvs)
+
+    # not_placed = set(snvs) - set(to_remove)
+    # gt.filter_snvs(list(not_placed))
+
     cost = gt.compute_likelihood(dat, phi, lamb)
-    gt.draw("test/output/gt_tree.png", phi, segments=test_segs)
+    gt.draw("test/output_0.05/gt_tree.png", phi, segments=test_segs)
 
-    merge_list  = load_from_pickle("test/output/solution.pkl")
+    merge_list  = load_from_pickle("test/output_0.05_greedy/solution.pkl")
 
-    for i,sol in enumerate(merge_list):
-          sol.prune()
-          sol.png(f"test/output/pruned_ct{i}.png")
-          foo = gt.cna_genotype_similarity(phi, sol.ct, sol.phi)
+    # for i,sol in enumerate(merge_list):
+    #       print(sol.cost)
+    #     #   sol.ct.filter_snvs(list(not_placed))
+    #       cost = sol.ct.compute_likelihood(dat, sol.phi, lamb)
+    #       print(f"{sol.cost} vs {cost}")
+   
+        #   foo = gt.cna_genotype_similarity(phi, sol.ct, sol.phi)
     # merge_list  = load_from_pickle("test/clonal_trees.pkl")[0]
     score_results= [score_tree(gt, phi, sol.ct, sol.phi, segments=test_segs) for sol in merge_list]
+
+
 
     pd.DataFrame(score_results).to_csv(args.scores, index=False)
 

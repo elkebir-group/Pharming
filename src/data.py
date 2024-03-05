@@ -94,6 +94,12 @@ class Data:
         total = self.total[np.ix_(cells, snvs)]
         return var/total
     
+    def nonzero(self, axis):
+
+        varcount = np.count_nonzero(self.var, axis=axis)
+        totcount = np.count_nonzero(self.total, axis=axis)
+        return varcount, totcount
+    
 
     def export_mut_lookup(self, fname):
         df = pd.DataFrame({"index": self.mut_lookup.index, "label": self.mut_lookup.values}).reset_index(drop=True)
