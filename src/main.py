@@ -21,9 +21,6 @@ def main(args):
                 must be specified or alternatively, the path to the \
                 preprocessed pharming data object!")
     
-
-    # cnm = load_pickled_object("test/cnmerge.pkl")
-    # trees = cnm.fit(dat, args.lamb)
     if args.segments is None:
         segments = dat.segments
     
@@ -79,7 +76,8 @@ def main(args):
                 )
 
   
-    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
+    solutions, best_costs = ph.fit(dat,args.lamb, segments, cores=args.cores)
+
 
     if args.scores is not None:
             print("Saving cost values...")
@@ -94,8 +92,12 @@ def main(args):
     if args.out is not None:
         print("Drawing clonal trees...")
         for i,sol in enumerate(solutions):
-
             sol.png(f"{args.out}/ct{i}.png")
+
+        with open(f"{args.out}/best_costs.txt", "w+") as file:
+            for b in best_costs:
+                file.write(f"{b}\n")
+
      
 
 
@@ -114,7 +116,7 @@ if __name__ == "__main__":
                         help="input file for variant and total read counts with unlabled columns: [chr segment snv cell var total]")
     parser.add_argument("-c" ,"--copy-numbers", required=False,
                         help="input files of copy numbers by segment with unlabeled columns [segment cell totalCN]")
-    parser.add_argument("-s" ,"--seed", required=False, type=int,
+    parser.add_argument("-s" ,"--seed", required=False, type=int, default=1026,
                         help="random number seed (default: 1026)")
     parser.add_argument("-j" ,"--cores", required=False, type=int,default=1,
                         help="Max number of cores to use for inferring segment trees")
@@ -153,7 +155,7 @@ if __name__ == "__main__":
 
     instance = "s11_m5000_k25_l7"
     # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.25_e0" 
+    folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
 
     gtpth = "test"
@@ -163,17 +165,17 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "7",
-        "-D", f"{gtpth}/input/dcfs.txt",
-        "-T", f"{gtpth}/input/T_m.txt",
+        "-j", "5",
+        "-D", f"{gtpth}/input_0.05/dcfs.txt",
+        "-T", f"{gtpth}/input_0.05/T_m.txt",
         "-n", "3",
-        # "-L", "0",  "10", "20", "24",
-        # "-s", "14",
+        "-L", "2",  "10", "20", "24",
+        "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/output/scores.csv",
-        "-P", f"{gtpth}/output/solution.pkl",
-        "-O", f"{gtpth}/output"
+        "-J", f"{gtpth}/output_0.05_greedy/scores.csv",
+        "-P", f"{gtpth}/output_0.05_greedy/solution.pkl",
+        "-O", f"{gtpth}/output_0.05_greedy"
 
     ])
 

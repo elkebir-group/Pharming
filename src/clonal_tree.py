@@ -649,7 +649,7 @@ class ClonalTree:
         gained= set()
         lost = set()
     
-        muts= set(self.get_all_muts())
+        muts= set(list(chain.from_iterable([self.seg_to_muts[ell] for ell in self.seg_to_muts])))
       
         mut_mapping = {v: [] for v in self.tree}
         mut_loss_mapping = {v: [] for v in self.tree}
