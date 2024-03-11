@@ -794,32 +794,51 @@ class ClonalTree:
 
         return cell_scores
 
-    def node_likelihood(self, u, data, cells):
-            vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+
+
+
+    # def compute_node_likelihoods(self, data, cells=None, lamb=0):
+    #     if cells is None:
+    #         cells = data.cells
+    #     nodes = np.array(self.tree)
+    #     node_cell_likes = []
+    #     for u in nodes: 
+    #         # vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
+    #         # if snvs is None:
+    #         #     snvs = list(vaf.keys())
+    #         # vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+        
+    #         node_cell_likes.append(self.node_likelihood(u, data, cells))
+        
+    #     cell_scores = np.vstack(node_cell_likes)
+    #     cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+    #     cell_scores = cell_scores + lamb*cell_cna_scores
+
+    #     return cell_scores, nodes
+    
+    def node_likelihood(self, u, data, cells, vaf):
+
   
             snvs = list(vaf.keys())
             vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
         
             return data.binomial_likelihood(cells, snvs,vafs )
-
-
+    
     def compute_node_likelihoods(self, data, cells=None, lamb=0):
         if cells is None:
             cells = data.cells
         nodes = np.array(self.tree)
         node_cell_likes = []
-        for u in nodes: 
-            # vaf = self.get_latent_vafs(self.get_latent_genotypes(u))
-            # if snvs is None:
-            #     snvs = list(vaf.keys())
-            # vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
-        
-            node_cell_likes.append(self.node_likelihood(u, data, cells))
-        
-        cell_scores = np.vstack(node_cell_likes)
-        cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
-        cell_scores = cell_scores + lamb*cell_cna_scores
+        node_cna_scores = []
+        for u in nodes:
+            latent_genos = self.get_latent_genotypes(u)
+            latent_vaf = self.get_latent_vafs(latent_genos)
+            node_cell_likes.append(self.node_likelihood(u, data, cells,latent_vaf))
+            node_cna_scores.append(self.node_cna_cost(u, cells, data, latent_genos))
 
+        cell_scores = np.vstack(node_cell_likes)
+        cell_cna_scores = np.vstack(node_cna_scores)
+        cell_scores += lamb * cell_cna_scores
         return cell_scores, nodes
 
 
@@ -849,8 +868,9 @@ class ClonalTree:
                     continue      
 
                 else:
-                    self.snv_node_cost[v] = self.node_likelihood(v,data, cells).sum()
-                    self.cna_node_cost[v] = self.node_cna_cost(v, cells, data, self.get_latent_genotypes(v)).sum()
+                    lat_genos = self.get_latent_genotypes(v)
+                    self.snv_node_cost[v] = self.node_likelihood(v,data, cells, self.get_latent_vafs(lat_genos)).sum()
+                    self.cna_node_cost[v] = self.node_cna_cost(v, cells, data,lat_genos ).sum()
                     self.node_cost[v]=  self.snv_node_cost[v] + lamb * self.cna_node_cost[v]
              
              
@@ -915,14 +935,13 @@ class ClonalTree:
         
         for v in self.tree:
             del self.genotypes[v][j]
-    
     def update_genotype(self, node, j, snv_tree):
         cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
 
         pres_nodes = []
         for u in sorted(nx.descendants(self.tree, node) | {node}):
             cn_geno = cna_geno[u]
-            cn_state= cn_geno.to_tuple()
+            cn_state = cn_geno.to_tuple()
             pres_nodes.append(u)
             added = False
             for v in snv_tree.preorder():
@@ -931,18 +950,42 @@ class ClonalTree:
                     self.genotypes[u][j] = genotype(*geno.to_tuple())
                     added = True
                     break 
-            if not added:
-                # if j ==384:
-                #     print(f"SNV {j} not added to node {node}")
-                #     print(snv_tree)
-                #     snv_tree.draw("test/snv_tree.png", segments=[10])
-                self.genotypes[u][j] = genotype(*cn_state, 0,0)
+            if added:
+                break  # Early termination if condition is met
+        else:
+            for u in sorted(self.clones().difference(pres_nodes)):
+                cn_state = cna_geno[u].to_tuple()
+                self.genotypes[u][j] = genotype(*cn_state, 0, 0)
+
+        self.psi[j] = node
+    
+    # def update_genotype(self, node, j, snv_tree):
+    #     cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
+
+    #     pres_nodes = []
+    #     for u in sorted(nx.descendants(self.tree, node) | {node}):
+    #         cn_geno = cna_geno[u]
+    #         cn_state= cn_geno.to_tuple()
+    #         pres_nodes.append(u)
+    #         added = False
+    #         for v in snv_tree.preorder():
+    #             geno = snv_tree.genotypes[v][j]
+    #             if (geno.x, geno.y) == cn_state and geno.z > 0:
+    #                 self.genotypes[u][j] = genotype(*geno.to_tuple())
+    #                 added = True
+    #                 break 
+    #         if not added:
+    #             # if j ==384:
+    #             #     print(f"SNV {j} not added to node {node}")
+    #             #     print(snv_tree)
+    #             #     snv_tree.draw("test/snv_tree.png", segments=[10])
+    #             self.genotypes[u][j] = genotype(*cn_state, 0,0)
         
-        for u in self.clones().difference(pres_nodes):
-            cn_state = cna_geno[u].to_tuple()
-            self.genotypes[u][j] = genotype(*cn_state, 0,0)
+    #     for u in self.clones().difference(pres_nodes):
+    #         cn_state = cna_geno[u].to_tuple()
+    #         self.genotypes[u][j] = genotype(*cn_state, 0,0)
         
-        self.psi[j] = node 
+    #     self.psi[j] = node 
         # self.mut_mapping[old_node].remove(j)
     
      

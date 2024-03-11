@@ -1,6 +1,7 @@
 
 configfile: "config.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
+seeds = [11]
 import sys 
 sys.path.append("../src")
 
@@ -28,7 +29,7 @@ rule all:
         #     mclust = config['mclust'],
         #     err = config["cerror"]
         # ),
-        expand("scores/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
+        expand("pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -175,24 +176,92 @@ rule seg_tree_inference:
         "python ../src/segment_main2.0.py -d {input.data} -t {input.tree}  -c {input.phi} "
         "-S {output} > {log.std} 2> {log.err} "
 
-# rule eval_obj1:
-#     input:
-#         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
-#     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb{lamb}/obj1_cell_accuracy.csv"
-#     shell:
-#         "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l {wildcards.lamb}"
+rule get_gt_dcfs:
+    input:
+        tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+        phi = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+        # data = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+    output:
+        dcfs = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        tm = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
+    shell:
+        "python ../src/get_dcfs.py -t {input.tree} -c {input.phi} -d {output.dcfs} -T {output.tm}"
+
+rule pharming:
+    input:
+        dcfs = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        tm = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+
+    params:
+        lamb = 1e3,
+        topn = 3,
+        opath = "./pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}"
+    threads: 7
+    output:
+        sol = "pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
+        profile = "pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/run.prof",
+    benchmark:"pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/benchmark.log"
+    log:
+        std= "pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.log",
+        err= "pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.err.log"
+    shell:
+        "python ../src/main.py -d {input.data} -T {input.tm}  -D {input.dcfs} "
+        "-s {wildcards.s} "
+        "-l {params.lamb} "
+        "-n {params.topn} "
+        "-j {threads} "
+        "-O {params.opath} "
+        "--profile {output.profile} "
+        "-P {output.sol} > {log.std} 2> {log.err} "
+
+rule pharming_ilp:
+    input:
+        dcfs = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        tm = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",        
+    params:
+        lamb = 1e3,
+        topn = 3,
+        opath = "./pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}"
+    threads: 7
+    output:
+        sol = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
+        profile = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/run.prof",
+    benchmark:"pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/benchmark.log"
+    log:
+        std= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.log",
+        err= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.err.log"
+    shell:
+        "python ../src/main.py -d {input.data} -T {input.tm}  -D {input.dcfs} "
+        "-s {wildcards.s} "
+        "-l {params.lamb} "
+        "-n {params.topn} "
+        "-j {threads} "
+        "-O {params.opath} "
+        "--profile {output.profile} "
+        "-P {output.sol} > {log.std} 2> {log.err} "
+    
+rule eval_solutions:
+    input:
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+        cellassign = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+        sol = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
+    params:
+        lamb = 1e3,
+    output:
+        scores = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
+    log:
+        std= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.log",
+        err= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.err.log"
+    shell:
+        "python ../src/score_tree.py -d {input.data} -t {input.gt} -c {input.cellassign} "
+        "-S {input.sol} "
+        "-l {params.lamb} "
+        "-o {output.scores} > {log.std} 2> {log.err} "
 
 
-
-
-# rule eval_cna_only:
-#     input:
-#         tree = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pickle",
-#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pickle",
-#     output:"input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/lamb0/cna_only_cell_accuracy.csv"
-#     shell:
-#         "python ../src/compare_obj_func.py -d {input.data} -t {input.tree} -o {output} -l 0 --cna-only"
 
 
 
