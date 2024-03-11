@@ -283,15 +283,15 @@ class DCF_Clustering:
                 seg_like = np.Inf
                 for S in S[ell]:
                     scriptT = clonelib.get_genotype_trees(S)
-                    T_SNVs = []
-                    for snv_edges in scriptT:
+                    T_SNVs = [GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT) ]
+                    # for snv_edges in scriptT:
 
-                        T = nx.DiGraph(snv_edges)
-                        #recode the tree so the nodes are labeled by integers
-                        node_mapping ={u: i for i,u in enumerate(T)}
-                        T= nx.relabel_nodes(T, node_mapping)
+                        # T = nx.DiGraph(snv_edges)
+                        # #recode the tree so the nodes are labeled by integers
+                        # node_mapping ={u: i for i,u in enumerate(T)}
+                        # T= nx.relabel_nodes(T, node_mapping)
 
-                        T_SNVs.append(GenotypeTree(T, node_mapping))
+                        # T_SNVs.append(GenotypeTree(T, node_mapping))
                     
                     #find an SNV tree assignment and DCF cluster assignment
                         
