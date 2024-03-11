@@ -18,6 +18,7 @@ class GenotypeTree:
         """
 
         self.tree = nx.DiGraph(edges)
+        
         #recode the tree so the nodes are labeled by integers
         self.node_mapping:dict ={u: i for i,u in enumerate(self.tree)}
         self.tree= nx.relabel_nodes(self.tree, self.node_mapping)
