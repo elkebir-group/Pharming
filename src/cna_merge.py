@@ -53,14 +53,14 @@ class CNA_Merge:
         
         assert all(n in T for n in self.all_nodes)
            
-        for n in T:
-            if T.in_degree[n] > 1:
-                print(n)
-                pickle_object(self, "test/cnmerge.pkl")
-                # print(f" node {n} not in node mapping")
-                draw(T, "test/current_tree.png")
-                draw(self.T1, "test/T1.png")
-                draw(self.T2, "test/T2.png")
+        # for n in T:
+            # if T.in_degree[n] > 1:
+            #     print(n)
+            #     pickle_object(self, "test/cnmerge.pkl")
+            #     # print(f" node {n} not in node mapping")
+            #     draw(T, "test/current_tree.png")
+            #     draw(self.T1, "test/T1.png")
+            #     draw(self.T2, "test/T2.png")
 
   
         def get_predecessor(u, T_orig):
@@ -102,11 +102,11 @@ class CNA_Merge:
             
             else:  #n is in T2
                 parent = get_predecessor(n, self.T1)
-                if n > 8 and n not in self.new_to_old:
-                    print(f" node {n} not in node mapping")
-                    draw(T, "test/current_tree.png")
-                    draw(self.T1, "test/T1.png")
-                    draw(self.T2, "test/T2.png")
+                # if n > 8 and n not in self.new_to_old:
+                #     print(f" node {n} not in node mapping")
+                #     draw(T, "test/current_tree.png")
+                #     draw(self.T1, "test/T1.png")
+                #     draw(self.T2, "test/T2.png")
                 genos[n] = deepcopy(self.genotypes2[self.new_to_old[n]])
                 for j in self.snvs1:
                     geno = self.genotypes1[parent][j].to_tuple()

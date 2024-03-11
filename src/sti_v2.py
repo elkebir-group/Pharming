@@ -234,7 +234,7 @@ class STI:
 
     
     
-    def compute_tree_cost(self, j, dcf, tree):
+    def compute_tree_cost(self, j, tree):
  
           
         ct, mapping = self.convert_to_clonal_tree(tree,j)
@@ -242,48 +242,118 @@ class STI:
         _, u, _, _ =  ct.get_split_nodes(j)
 
         obj, ca  = ct.assign_cells_by_likelihood(self.data,self.data.cells, lamb=self.lamb1)
-
-
-        alt = self.data.var[:, j].sum()
-        total = self.data.total[:,j].sum()
-        posterior_dcf = ct.posterior_dcf(j, dcf, alt, total, self.cn_props)
-    
         
-        return obj, ct, ca, posterior_dcf
+        return obj, ct, ca
     
     @timeit_decorator
     def compute_snv_cluster_tree_cost(self):
         all_costs = []
-        cst = {}
-
         tree_assign = {}
 
-        '''
-        Enumerate costs for each SNV cluster and each tree/group
-        '''
-        for q, dcf in self.delta.items():
-            cst[q] = {}
-            for g, trees in enumerate(self.T_SNV_groups):
-                cst[q][g] = {}
-                tree_assign[g] = {}
+        for g, trees in enumerate(self.T_SNV_groups):
+            tree_assign[g] = {}
+            for j in self.snvs:
+                jg_cost = np.Inf
+                for p, t in enumerate(trees):
+                    cost, ct, ca = self.compute_tree_cost(j, t)
+                    if cost < jg_cost:
+                        tree_assign[g][j] = (ct, ca)
+                        jg_cost = cost
+
+                    
+                    for q, dcf in self.delta.items():
+                        alt_total = self.data.var[:, j].sum(), self.data.total[:, j].sum()
+                        post_dcf = -1*ct.posterior_dcf(j, dcf, *alt_total, self.cn_props)
+                        all_costs.append({"snv": j, "snv_clust": q,  "group": g, "cost": cost, "posterior_dcf": post_dcf, "total": cost+ post_dcf})
+
+        return all_costs, tree_assign
+    # def compute_snv_cluster_tree_cost(self):
+    #     all_costs = []
+ 
+
+    #     tree_assign = {}
+
+    #     '''
+    #     Enumerate costs for each SNV cluster and each tree/group
+    #     '''
+
+    #     for g, trees in enumerate(self.T_SNV_groups):
+    #         tree_assign[g] = {}
+    #         for j in self.snvs:
+    #             jg_cost = np.Inf
+    #             for p,t, in enumerate(trees):
+    #                 cost, ct, ca = self.compute_tree_cost(j, t)
+    #                 if cost < jg_cost:
+    #                     tree_assign[g][j] = (ct,ca)
+    #                     jg_cost = cost 
+    #                 for q,dcf in self.delta.items():
+    #                     alt = self.data.var[:, j].sum()
+    #                     total = self.data.total[:,j].sum()
+    #                     post_dcf = ct.posterior_dcf(j, dcf, alt, total, self.cn_props)
+    #                     all_costs.append([j,q,dcf,g,p,cost, post_dcf])
+                   
+            
+    #     df = pd.DataFrame(all_costs,
+    #                        columns=["snv", "snv_clust", "dcf", "group", "tree", "cost", "posterior_dcf"])
+
+    #     df['snv'] = df['snv'].astype(int)
+    #     df['snv_clust'] = df['snv_clust'].astype(int)
+    #     df['group'] = df['group'].astype(int)
+    #     return df, tree_assign         
+
+        # for q, dcf in self.delta.items():
+        #     cst[q] = {}
+        #     for g, trees in enumerate(self.T_SNV_groups):
+        #         cst[q][g] = {}
+        #         tree_assign[g] = {}
               
                
-                for j in self.snvs:
-                    jg_cost = np.Inf
-                    for p,t in enumerate(trees):
+        #         for j in self.snvs:
+        #             jg_cost = np.Inf
+        #             for p,t in enumerate(trees):
                      
-                        cost, ct, ca,post_dcf = self.compute_tree_cost(j, dcf, t)
+        #                 cost, ct, ca,post_dcf = self.compute_tree_cost(j, dcf, t)
                         
-                        all_costs.append([j,q,dcf,g,p,cost, post_dcf])
-                        if cost < jg_cost:
-                            cst[q][g][j]  = cost 
-                            jg_cost = cost
-                            # delta_hat[j,q,g] = np.abs(obs_dcf - dcf)
-                            tree_assign[g][j] = (ct,ca)
+        #                 all_costs.append([j,q,dcf,g,p,cost, post_dcf])
+        #                 if cost < jg_cost:
+        #                     cst[q][g][j]  = cost 
+        #                     jg_cost = cost
+        #                     # delta_hat[j,q,g] = np.abs(obs_dcf - dcf)
+        #                     tree_assign[g][j] = (ct,ca)
+
+    # @timeit_decorator
+    # def compute_snv_cluster_tree_cost(self):
+    #     all_costs = []
+    #     cst = {}
+
+    #     tree_assign = {}
+
+    #     '''
+    #     Enumerate costs for each SNV cluster and each tree/group
+    #     '''
+    #     for q, dcf in self.delta.items():
+    #         cst[q] = {}
+    #         for g, trees in enumerate(self.T_SNV_groups):
+    #             cst[q][g] = {}
+    #             tree_assign[g] = {}
+              
+               
+    #             for j in self.snvs:
+    #                 jg_cost = np.Inf
+    #                 for p,t in enumerate(trees):
+                     
+    #                     cost, ct, ca,post_dcf = self.compute_tree_cost(j, dcf, t)
+                        
+    #                     all_costs.append([j,q,dcf,g,p,cost, post_dcf])
+    #                     if cost < jg_cost:
+    #                         cst[q][g][j]  = cost 
+    #                         jg_cost = cost
+    #                         # delta_hat[j,q,g] = np.abs(obs_dcf - dcf)
+    #                         tree_assign[g][j] = (ct,ca)
         
-        df = pd.DataFrame(all_costs,
-                           columns=["snv", "snv_clust", "dcf", "group", "tree", "cost", "posterior_dcf"])
-        return cst, df, tree_assign
+    #     df = pd.DataFrame(all_costs,
+    #                        columns=["snv", "snv_clust", "dcf", "group", "tree", "cost", "posterior_dcf"])
+    #     return cst, df, tree_assign
    
 
 
@@ -305,55 +375,87 @@ class STI:
                       for w_q, w_cn in nx.dfs_preorder_nodes(T, source = (v_q, v_cn)):
                           if w_cn != v_cn and w_cn not in children[v_q]:
                               children[v_q].append(w_cn)
-        groups = {}
+        groups = []
         for q in sscn:
             for g in self.group_desc:
                 g_sscn = self.group_desc[g]['sscn']
                 g_children = self.group_desc[g]['children']
                 if sscn[q] == g_sscn and set(children[q]) == set(g_children):
-                    if g in groups:
+                    groups.append((g,q))
+
+                    # if g in groups:
                   
-                        groups[g].append(q)
-                    else:
-                        groups[g] = [q]
+                    #     groups[g].append(q)
+                    # else:
+                    #     groups[g] = [q]
         return groups 
     
-                          
-    def cluster_snvs(self, df, cluster_groups, tree_assign):
+
+    def cluster_snvs(self, snv_costs, valid_groups_snvclusts, tree_assign):
+        filtered_costs = [cost for cost in snv_costs if (cost["group"], cost["snv_clust"]) in valid_groups_snvclusts]
+        sorted_costs = sorted(filtered_costs, key=lambda x: (x["cost"], x["posterior_dcf"]))
         
-        all_dfs = []
-        for g in cluster_groups:
-            temp = df[df['group']==g]
-            temp = temp[temp['snv_clust'].isin(cluster_groups[g])]
-            all_dfs.append(temp)
-        df_filt= pd.concat(all_dfs)
+        first_rows = {}
+        for cost in sorted_costs:
+            if cost["snv"] not in first_rows:
+                first_rows[cost["snv"]] = cost
+        
+        psi = {row["snv"]: row["snv_clust"] for row in first_rows.values()}
+        omega = {row["snv"]: tree_assign[row["group"]][row["snv"]] for row in first_rows.values()}
 
-        grouped = df_filt.groupby('snv')
+        return self.to_inverse_dict(psi), omega
+    
+    # def cluster_snvs(self, df, valid_groups_snvclusts, tree_assign):
+    #     # Filter the DataFrame based on valid group and SNV cluster combinations
+    #     # valid_combinations = [(group, snv_clust) for group, snv_clusts in cluster_groups.items() for snv_clust in snv_clusts]
+    #     filtered_df = df[df[['group', 'snv_clust']].apply(tuple, axis=1).isin(valid_groups_snvclusts)]
 
-        # Define a function to sort and select the first row of each group
-        def sort_select_first(group):
-            sorted_group = group.sort_values(by=['cost', 'posterior_dcf'], ascending=[True, False])
-            return sorted_group.iloc[0]
+    #     # Sort the filtered DataFrame by 'cost' and 'posterior_dcf' within each group
+    #     sorted_df = filtered_df.sort_values(by=['group', 'cost', 'posterior_dcf'], ascending=[True, True, False])
 
-        # Apply the function to each group and concatenate the results
-        result = grouped.apply(sort_select_first)
+    #     # Group by 'snv' and select the first row of each group
+    #     first_rows = sorted_df.groupby('snv').first().reset_index()
 
-        # Reset index if needed
-        result = result.reset_index(drop=True)
-        result['snv']  = result['snv'].astype(int)
-        result['snv_clust']  = result['snv_clust'].astype(int)
-        result['group']  = result['group'].astype(int)
 
-        psi = dict(zip(result['snv'], result['snv_clust']))
-        snv_group = dict(zip(result['snv'], result['group']))
+    #     # Create dictionaries for psi and omega
+    #     psi = dict(zip(first_rows['snv'], first_rows['snv_clust']))
+    #     omega = {j: tree_assign[g][j] for j, g in first_rows[['snv', 'group']].values}
 
-        omega = {}
-        for j,g in snv_group.items():
-            omega[j] = tree_assign[g][j]
+    #     return self.to_inverse_dict(psi), omega
+           
+    # def cluster_snvs(self, df, cluster_groups, tree_assign):
+        
+    #     all_dfs = []
+    #     for g in cluster_groups:
+    #         temp = df[df['group']==g]
+    #         temp = temp[temp['snv_clust'].isin(cluster_groups[g])]
+    #         all_dfs.append(temp)
+    #     df_filt= pd.concat(all_dfs)
+
+    #     grouped = df_filt.groupby('snv')
+
+    #     # Define a function to sort and select the first row of each group
+ 
+
+    #     # Apply the function to each group and concatenate the results
+    #     result = grouped.apply(self.sort_select_first)
+
+    #     # Reset index if needed
+    #     result = result.reset_index(drop=True)
+    #     result['snv']  = result['snv'].astype(int)
+    #     result['snv_clust']  = result['snv_clust'].astype(int)
+    #     result['group']  = result['group'].astype(int)
+
+    #     psi = dict(zip(result['snv'], result['snv_clust']))
+    #     snv_group = dict(zip(result['snv'], result['group']))
+
+    #     omega = {}
+    #     for j,g in snv_group.items():
+    #         omega[j] = tree_assign[g][j]
              
 
 
-        return self.to_inverse_dict(psi), omega
+    #     return self.to_inverse_dict(psi), omega
 
 
     def construct_segment_tree(self, T, alpha_inv, omega):
@@ -438,8 +540,8 @@ class STI:
              print("warning: model infeasible!")
              return np.Inf, solutions 
 
-    @timeit_decorator
-    def assign_cell_clusters(self,ct, snv_clusters, ilp=False ):
+    # @timeit_decorator
+    def assign_cell_clusters(self,ct, snv_clusters, ilp=True ):
 
     
         delta =self.delta
@@ -503,92 +605,165 @@ class STI:
     
         return objval, ca
 
-    # def get_group(self, segtree, cna_genos, q):
-    #     sscn = cna_genos[q].to_tuple()
-    #     children_states = {cna_genos[u].to_tuple() for u in segtree.preorder(q) if u != q}
-        
-    #     for g, desc in self.group_desc.items():
-    #         if sscn == desc['sscn'] and children_states == set(desc['children']):
-    #             return g
+    def get_group(self, nxtree, cna_genos, q):
+        sscn = cna_genos[q].to_tuple()
+        children_states = {cna_genos[u].to_tuple() for u in nx.descendants(nxtree, q)} - set([sscn])
 
-    @timeit_decorator
-    def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters):
-        T=  deepcopy(segtree)
+        
+        for g, desc in self.group_desc.items():
+            if sscn == desc['sscn'] and children_states == set(desc['children']):
+                return g
+        return None
+
+    # @timeit_decorator
+    def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters, has_path):
+        # T=  deepcopy(segtree)
         cna_genos = segtree.get_cna_genos()[self.ell]
         cell_counts  = ca.get_cell_count()
-        
-        def get_group(q):    
-            sscn = cna_genos[q].to_tuple()
-            children_states = []
-            for u in segtree.preorder(q):
-                if u !=q:
-                    cn_state = cna_genos[u].to_tuple()
-                    if cn_state not in children_states and cn_state != sscn:
-                        children_states.append(cn_state)
-            for g in self.group_desc:
-                if sscn == self.group_desc[g]['sscn']:
-                    if set(children_states) == self.group_desc[g]['children']:
-                        return g
-  
-                
-        def get_vafs(q,j,snv_tree):
-            vafs = {}
-            
-            for u in segtree.clones():
-                if cell_counts[u] > 0:
-                    if nx.has_path(segtree.tree, u, q) and u !=q:
-                        vafs[u] =0
-                        continue
-                    if nx.has_path(segtree.tree, q,u):
-                        cn_state = cna_genos[u].to_tuple()
-                        added = False
-                        for v in snv_tree.preorder():
-                            geno = snv_tree.genotypes[v][j]
-                            if (geno.x, geno.y) == cn_state and geno.z > 0:
-                                vafs[u] = geno.vaf
-                                added = True
-                                break 
-                        if not added:
-                            vafs[u] =0 #loss occurred 
-                    else:
-                        vafs[u] =0
-            return vafs 
-        
+        clones  = [u for u in segtree.clones() if cell_counts[u] >0]
         psi = segtree.get_psi()
-        for j in self.snvs:
-            # if j ==384:
-            #     print("here")
-            best_cost = np.Inf
-            vafs = {}
-            for q in snv_clusters:
-                #get group of q 
-                # g = self.get_group(segtree, cna_genos, q)
-                g = get_group(q)
-                #get the optimal snv tree for snv j in group of q
+
+
+
+        
+        def get_vafs(q, j, snv_tree):
+            vafs = np.zeros(len(clones))
+
+            for idx, u in enumerate(clones):
+                # if (u,q) not in has_path or (u,q) not in has_path:
+                    # print("here")
+                    # segtree.draw("test/segtree.png", ca, segments=[self.ell])
+                if has_path[u,q] and u != q:
+                    continue
+                if has_path[q,u]:
+                    cn_state = cna_genos[u].to_tuple()
+                    for v in snv_tree.preorder():
+                        geno = snv_tree.genotypes[v][j]
+                        if (geno.x, geno.y) == cn_state and geno.z > 0:
+                            vafs[idx] = geno.vaf
+                            break
+            return vafs 
+
+            
+
+        clust_groups = {}
+        all_cluster_costs = []
+        for q in snv_clusters:
+            g = self.get_group(segtree.tree, cna_genos, q)
+            clust_groups[q] = g
+
+            vaf_list = []
+            for j in self.snvs:
                 snv_tree = tree_assign[g][j][0]
                 vafs = get_vafs(q, j, snv_tree)
+                vaf_list.append(vafs)
            
-                #get latent vaf of each node in nonempty clones
-                cost = 0
-                for u in ca.clones:
-                    if cell_counts[u] > 0:
-                        cells = ca.get_cells(u)
-                        cell_costs = self.data.binomial_likelihood(cells, [j], vafs[u])
-                        cost += cell_costs.sum()
-                if cost < best_cost:
-                    new_node = q 
-                    best_cost = cost 
-                    best_group = g
-            if psi[j] != new_node:
+            all_vafs = np.vstack(vaf_list).T
+
+            cluster_costs = np.zeros(shape= len(self.snvs))
+            assert all_vafs.shape[0] == len(clones)
+            for i,u in enumerate(clones):
+                cells = ca.get_cells(u)
+                clone_cost = self.data.binomial_likelihood(cells, self.snvs, all_vafs[i,:], axis=0)
+                cluster_costs += clone_cost
+            
+            all_cluster_costs.append(cluster_costs)
+        clust_costs = np.vstack(all_cluster_costs)
+
+        snv_cluster_assign = clust_costs.argmin(axis=0)
+
+        for j,q in zip(self.snvs, snv_cluster_assign): 
+            opt_clust = snv_clusters[q]
+            if psi[j] != opt_clust:
                 # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
                 
-                T.update_genotype(new_node, j,tree_assign[best_group][j][0])
+                segtree.update_genotype(opt_clust, j,tree_assign[clust_groups[opt_clust]][j][0])
         
-        T.update_mappings()
-        if   len(T.mut_mapping[T.root]) > 0:
-            T.draw("test/bad_ct.png", ca, segments = [self.ell])
+        segtree.update_mappings()
+        # if   len(segtree.mut_mapping[segtree.root]) > 0:
+        #     segtree.draw("test/bad_ct.png", ca, segments = [self.ell])
 
-        return T 
+        return segtree 
+    # def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters):
+    #     T=  deepcopy(segtree)
+    #     cna_genos = segtree.get_cna_genos()[self.ell]
+    #     cell_counts  = ca.get_cell_count()
+    #     clones  = segtree.clones()
+        
+    #     # def get_group(q):    
+    #     #     sscn = cna_genos[q].to_tuple()
+    #     #     children_states = []
+    #     #     for u in segtree.preorder(q):
+    #     #         if u !=q:
+    #     #             cn_state = cna_genos[u].to_tuple()
+    #     #             if cn_state not in children_states and cn_state != sscn:
+    #     #                 children_states.append(cn_state)
+    #     #     for g in self.group_desc:
+    #     #         if sscn == self.group_desc[g]['sscn']:
+    #     #             if set(children_states) == self.group_desc[g]['children']:
+    #     #                 return g
+  
+          
+    #     def get_vafs(q,j,snv_tree):
+    #         vafs = {}
+            
+    #         for u in clones:
+    #             if cell_counts[u] > 0:
+    #                 if nx.has_path(segtree.tree, u, q) and u !=q:
+    #                     vafs[u] =0
+    #                     continue
+    #                 if nx.has_path(segtree.tree, q,u):
+    #                     cn_state = cna_genos[u].to_tuple()
+    #                     added = False
+    #                     for v in snv_tree.preorder():
+    #                         geno = snv_tree.genotypes[v][j]
+    #                         if (geno.x, geno.y) == cn_state and geno.z > 0:
+    #                             vafs[u] = geno.vaf
+    #                             added = True
+    #                             break 
+    #                     if not added:
+    #                         vafs[u] =0 #loss occurred 
+    #                 else:
+    #                     vafs[u] =0
+    #         return vafs 
+        
+
+        
+    #     psi = segtree.get_psi()
+    #     for j in self.snvs:
+    #         # if j ==384:
+    #         #     print("here")
+    #         best_cost = np.Inf
+    #         vafs = {}
+    #         for q in snv_clusters:
+    #             #get group of q 
+    #             g = self.get_group(segtree.tree, cna_genos, q)
+    #             # g = get_group(q)
+    #             #get the optimal snv tree for snv j in group of q
+    #             snv_tree = tree_assign[g][j][0]
+    #             vafs = get_vafs(q, j, snv_tree)
+           
+    #             #get latent vaf of each node in nonempty clones
+    #             cost = 0
+    #             for u in ca.clones:
+    #                 if cell_counts[u] > 0:
+    #                     cells = ca.get_cells(u)
+    #                     cell_costs = self.data.binomial_likelihood(cells, [j], vafs[u])
+    #                     cost += cell_costs.sum()
+    #             if cost < best_cost:
+    #                 new_node = q 
+    #                 best_cost = cost 
+    #                 best_group = g
+    #         if psi[j] != new_node:
+    #             # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
+                
+    #             T.update_genotype(new_node, j,tree_assign[best_group][j][0])
+        
+    #     T.update_mappings()
+    #     if   len(T.mut_mapping[T.root]) > 0:
+    #         T.draw("test/bad_ct.png", ca, segments = [self.ell])
+
+    #     return T 
                 
     def get_cn_dcfs(self):
         obs_copy_x, obs_copy_y =  self.data.copy_profiles_by_seg([self.ell], self.data.cells)
@@ -642,20 +817,29 @@ class STI:
         #TODO: fix to account for errors in observed cn states
         self.cn_props = self.data.cn_proportions(self.ell)
 
-        cost, df, tree_assign = self.compute_snv_cluster_tree_cost()
+        all_costs, tree_assign = self.compute_snv_cluster_tree_cost()
+   
 
         results = []
         opt_cost = np.Inf 
         # print(f"Total refinements: {len(refinements)}")
         merged_dcfs = self.cn_dcfs | self.delta
+        max_iter = 0
+ 
         for f, T in enumerate(refinements):
 
      
-            cluster_groups = self.identify_snv_cluster_trees(T)
-            alpha_inv, omega = self.cluster_snvs(df, cluster_groups, tree_assign)
-            snv_clusters = list(alpha_inv.keys())
+            valid_group_snvclusts = self.identify_snv_cluster_trees(T)
+            alpha_inv, omega = self.cluster_snvs(all_costs, valid_group_snvclusts, tree_assign)
+            snv_clusters = list({q for _,q in valid_group_snvclusts})
             
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega)
+
+            all_shortest_paths = dict(nx.all_pairs_shortest_path(segment_tree.tree))
+
+         # Create lookup table for has_path[u, q]
+            clones = segment_tree.clones()
+            has_path = {(u, v): v in all_shortest_paths[u] for u in clones for v in clones}
             
             if not self.check_dcfs(segment_tree.tree, merged_dcfs):
                 continue
@@ -663,12 +847,14 @@ class STI:
             # print(f"Starting refinement {f}...")
             best_phi = None
             cost  = np.Inf
- 
+    
             for i in range(self.max_iterations):
                 ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
+                if i > max_iter:
+                    max_iter = i
                 if ca_cost is None:
                     break
-                segment_tree = self.assign_genotypes(segment_tree, ca, tree_assign, snv_clusters)
+                segment_tree = self.assign_genotypes(segment_tree, ca, tree_assign, snv_clusters, has_path)
                 updated_cost = segment_tree.compute_likelihood(self.data, ca, lamb=self.lamb1)
                 if updated_cost < cost:
                     best_segtree = deepcopy(segment_tree)
@@ -690,7 +876,7 @@ class STI:
             # print(f"Ending refinement {f}: cost: {cost} opt_cost: {opt_cost}")
             if best_phi is not None:
                 results.append(Solution(cost, best_segtree, best_phi))
-
+        print(f"max iterations: {max_iter}")
         return sorted(results, key= lambda x: x.cost)
 
 

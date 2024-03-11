@@ -69,3 +69,10 @@ def load_pickled_object(file_path):
     with open(file_path, 'rb') as f:
         obj = pickle.load(f)
     return obj
+
+def dict_to_df(mydict, colnames):
+    df = pd.DataFrame.from_dict(mydict, orient='index', columns=[colnames[1]])
+    # Reset index to create a column from dictionary keys
+    df.reset_index(inplace=True)
+    df.columns = colnames
+    return df 

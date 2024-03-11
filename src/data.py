@@ -55,7 +55,7 @@ class Data:
         return mystr
 
 
-    def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001):
+    def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001, axis=1):
   
         if isinstance(vaf, float) or isinstance(vaf, int):
             vaf = np.array(vaf)
@@ -68,7 +68,7 @@ class Data:
         adj_vaf = adj_vaf.reshape(1, -1)
         cellprobs= -1*binom.logpmf(var, total, p=adj_vaf)
             
-        cellprobs = np.nansum(cellprobs, axis=1)
+        cellprobs = np.nansum(cellprobs, axis=axis)
 
         return cellprobs
     
