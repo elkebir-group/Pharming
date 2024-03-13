@@ -10,13 +10,19 @@ EPSILON = -1e40
 SEQERROR = 1e-40
 
 
+
+
+
+
 def scalar_obj( dcf, id_to_index, trees, alt_vec, total_vec,cn):
         obj = 0
-        for id, tree in zip(id_to_index, trees):
+        for id, tree in zip(id_to_index, trees): #could loop over snv/tree matchings and do non-vectoirzed posterior
             alt = alt_vec[cn][id_to_index[id]]
             total =total_vec[cn][id_to_index[id]]
             obj += tree.vectorized_posterior(dcf, alt, total,cn).sum()
         return -1*obj
+
+
 def unpack_assignments(cluster, assignments):
     tree_id_to_indices ={}
     for index, assign in enumerate(assignments):
@@ -32,6 +38,8 @@ class DCF_Clustering:
         self.nrestarts =nrestarts 
    
         self.rng = np.random.default_rng(seed)
+
+        self.verbose=verbose
 
 
         # self.clusters= [i+1 for i in range(max_clusters)]
@@ -126,32 +134,82 @@ class DCF_Clustering:
  
         return assignments, likelihood
 
+
+    def optimize_cluster_and_tree_assignments(self, tree_id_to_indices, dcfs, alt, total, ell):
+        snvs = self.data.seg_to_snvs[ell]
+        cn_prob = self.data.cn_proportions(ell)
+        # get a_vec and d_vec for the snvs
+        a_vec = alt.sum(axis=0)[snvs]
+        d_vec = total.sum(axis=0)[snvs]
+        best_prob = {}
+        best_cluster = {}
+        best_tree = {}
+        likelihood = {}
+        for snv in snvs:
+            best_prob[snv] = -np.inf
+
+        for cluster in range(len(dcfs)):
+            for tree in tree_id_to_indices:
+                #prob_arr = []
+                #for a, d in zip(a_vec, d_vec):
+                prob_arr = tree.vectorized_posterior(dcfs[cluster], a_vec, d_vec, cn_prob)
+                #prob_arr.append(prob)
+                idx = 0
+                for prob in prob_arr:
+                    if prob > best_prob[snvs[idx]]:
+                        best_cluster[snvs[idx]] = cluster
+                        best_tree[snvs[idx]] = tree
+                        likelihood[snvs[idx]] = prob
+                    idx += 1
+
+        return best_cluster, best_tree, likelihood
+
+
+
+
+
+
                 
-    def optimize_cluster_assignments(self, tree_id_to_indices, dcfs, alt, total):
-        CNs = list(alt.keys())
+    def optimize_cluster_assignments(self, tree_id_to_indices, dcfs, alt, total): #TO DO: Check if this should be updated?
+       #alt --> cells x snvs : summing over axis 0 will sum all cells
+
+        #CNs = []
+        #for tree in tree_id_to_indices:
+        #    for genotype in tree.gamma:
+        #        cn = (genotype.x, genotype.y)
+        #        CNs.append(cn)
+
+        #there is a function to get copy numbers & proportions
     #     #for each homogenous sample
     #     combos = []
+
+
+       #for each SNV:
+            #for each tree this SNV will have:
+                #for each cluster this SNV could be assigned to:
+                        #compute likelihood
+
         like = 0
         assignments = []
         clusters = np.empty(shape= alt[CNs[0]].shape[0], dtype=int)
+
+       #for tree in tree_id_to_indices:
+       #     post_arr = []
+       #     post_arr.append(self.id_to_tree[id].posterior_distribution(dcf, alt, total, cn))
+        #loop over trees:
+
+        #for tree in tree_id_to_indices:
+                #compute vectorized posterior for that dcf value, for all of the snvs simultaneously - return [1, #snvs] array
+
+                # vectorize_posterior
+        #assign each snv to the tree & cluster with minimum value
         for id, snv_indices in tree_id_to_indices.items():
             all_arrs = []
 
             for k in range(dcfs.shape[1]):
 
-
-    
                 post_arr =[]
-                for sample, cn in enumerate(CNs):
-                        dcf = dcfs[sample,k]
-                        a_vec = alt[cn][snv_indices]
-                        d_vec=total[cn][snv_indices]
-                 
-
-                 
-                   
-        
-                        post_arr.append(self.id_to_tree[id].vectorized_posterior(dcf, a_vec,d_vec, cn))
+                post_arr.append(self.id_to_tree[id].vectorized_posterior(dcf, a_vec,d_vec, cn)) #cn - should be replaced with dictionary of cn proportions by segment
                 sample_arr = np.vstack(post_arr).sum(axis=0)
 
                 all_arrs.append(sample_arr)
@@ -164,10 +222,17 @@ class DCF_Clustering:
              assignments.append((clusters[i], self.snv_index_to_tree_id[i]))
              
         return assignments, like
-        
 
-                  
-                
+        '''
+        TO DO: Optimize cluster assignments needs to be updated.
+        You will need to compute the posterior probability of each dcf q and T pair in T_SNVs for each SNV
+        Set omega equal to the tree with max posterior prob
+        Set alpha equal cluster id q with max posterior prob
+        the likelihood is the sum of the  log posterior probabilities for all optimal assignments
+        '''
+
+
+
 
 
 
@@ -180,32 +245,41 @@ class DCF_Clustering:
             #compute the likelihood
             
      
+    #def new_optimize_cluster_centers(self, assignments, alt, total):
 
+    def scalar_obj_new(dcf, tree_assignments, segs_in_cluster, alt, total):
+        obj = 0
+        # for each SNV:
+        # get alt, cn, total
 
-    def optimize_cluster_centers(self, assignments, alt, total):
-        
+        for seg in segs_in_cluster:
+            cn_prob = self.data.cn_proportions(seg)
+            tree = tree_assignments[seg]
+            for snv in self.data.seg_to_snvs[seg]:
+                obj += tree.posterior_dcf(dcf, alt[snv], total[snv], cn_prob)
+
+        return obj
+
+    def optimize_cluster_centers(self, dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, alt, total): #TO DO: Check if this should be updated?
         new_dcfs = []
-        CNs = list(alt.keys())
-        #optimize the cluster dcf for each sample and cluster
-        for c in CNs:
-             sample_dcf =[]
-             for k in range(self.k):
-                tree_id_to_indices= unpack_assignments(k, assignments)
-                trees =[self.id_to_tree[i] for i in tree_id_to_indices]  
-                if len(trees) >0:
-                    new_dcf= minimize_scalar(scalar_obj, args=(tree_id_to_indices, trees, alt, total, c), method='bounded', bounds=[0,1]).x
-                    
+        for k in range(len(dcfs)): #looping over clusters
+            segs_in_cluster = []
+            tree_in_cluster = []
+            #find segments of clusters
+            for seg, cluster in CLUSTER_ASSIGNMENTS.items():
+                if cluster == k:
+                    segs_in_cluster.append(seg)
+                if len(segs_in_cluster) > 0:
+                    new_dcf = minimize_scalar(scalar_obj_new, args=(TREE_ASSIGNMENTS, segs_in_cluster, alt, total), method='bounded', bounds=[0,1]).x
                 else:
-                    new_dcf = self.rng.random()    
-                sample_dcf.append(new_dcf)
-                    
-             new_dcfs.append(sample_dcf)
-        
-        
+                    new_dcf = self.rng.random()
+            new_dcfs.append(new_dcf)
         return np.array(new_dcfs)
+
+
+
     
     # def optimize_cluster_centers(self, snv_clusters, alt, total):
-        
     #     new_dcfs = []
     #     CNs = list(alt.keys())
     #     #optimize the cluster dcf for each sample and cluster
@@ -232,21 +306,21 @@ class DCF_Clustering:
         
         
     #     return np.array(new_dcfs)
-    def compute_likelihood(self,dcfs, assignments, alt, total):
-   
-        CNs = list(alt.keys())
+    def compute_likelihood(self, dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, alt, total):
+
+        #scalar_obj_new(dcf, tree_assignments, segs_in_cluster, alt, total):
+
+
         likelihood = 0
         #optimize the cluster dcf for each sample and cluster
-        for j,c in enumerate(CNs):
-             for k in range(self.k):
-                tree_id_to_indices= unpack_assignments(k, assignments)
-                trees =[self.id_to_tree[i] for i in tree_id_to_indices]  
-                if len(trees) >0:
-                    likelihood += -1*scalar_obj(dcfs[j,k],tree_id_to_indices, trees, alt, total, c)
-                    
+        for cluster in range(len(dcfs)):
+            segs_in_cluster = []
+            for seg, clust in CLUSTER_ASSIGNMENTS.items():
+                if clust == cluster:
+                    segs_in_cluster.append(seg)
+            if len(segs_in_cluster) > 0:
+                likelihood += scalar_obj_new(dcfs[cluster], segs_in_cluster, alt, total)
         return likelihood
-        
-        
 
 
 
@@ -274,15 +348,18 @@ class DCF_Clustering:
              
         #S = {\ell: [CNA trees]}
        
-        for j in range(self.max_iterations):
-            OMEGA = {}
-            ALPHA = {}
+        #for j in range(self.max_iterations): #TO DO: make max_iterations a parameter
+        for j in range(100):
+            CLUSTER_ASSIGNMENTS = {}
+            TREE_ASSIGNMENTS = {}
             CNA_tree ={}
-            for ell in self.segments:
+            for ell in self.segments: #TO DO: Swap these segments and CNA tree assignment
                 snvs = self.data.seg_to_snvs[ell]
-                seg_like = np.Inf
-                for S in S[ell]:
-                    scriptT = clonelib.get_genotype_trees(S)
+                seg_like = -np.Inf
+                for s in S[ell]:
+                    #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
+                    #after doing this for all the segments, then update the clusters (using assignments & dcf values)
+                    scriptT = clonelib.get_genotype_trees(s)
                     T_SNVs = [GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT) ]
                     # for snv_edges in scriptT:
 
@@ -296,39 +373,43 @@ class DCF_Clustering:
                     #find an SNV tree assignment and DCF cluster assignment
                         
                     '''
-                    Optimize cluster assignments needs to be updated.
+                    TO DO: Optimize cluster assignments needs to be updated.
                     You will need to compute the posterior probability of each dcf q and T pair in T_SNVs for each SNV
                     Set omega equal to the tree with max posterior prob
                     Set alpha equal cluster id q with max posterior prob
                     the likelihood is the sum of the  log posterior probabilities for all optimal assignments
                     '''   
-                    omega, alpha, likelihood  = self.optimize_cluster_assignments(T_SNVs, dcfs, snvs)
-        
-                    if likelihood > seg_like:
-                        CNA_tree[ell] = S 
-                        OMEGA[ell] = omega 
-                        ALPHA[ell] = alpha 
-                        seg_like = likelihood
+                    cluster, tree, likelihood  = self.optimize_cluster_and_tree_assignments(T_SNVs, dcfs, self.data.var, self.data.total, ell)
+
+                    new_seg_likelihood = 0
+                    for key, val in likelihood.items():
+                        new_seg_likelihood += val
+
+                    if new_seg_likelihood > seg_like:
+                        CNA_tree[ell] = s
+                        CLUSTER_ASSIGNMENTS[ell] = cluster
+                        TREE_ASSIGNMENTS[ell] = tree
+                        seg_like = new_seg_likelihood
                 
                                     
         
             
             '''
-            Optimize cluster centers need to be updated to account the assignments (omega, alpha) 
+            TO DO: Optimize cluster centers need to be updated to account the assignments (omega, alpha) 
             being a dictionary of dictionaries
             
 
 
             '''  
             old_dcfs = dcfs.copy()
-            dcfs, new_likelihood = self.optimize_cluster_centers(dcfs, OMEGA, ALPHA)
+            dcfs = self.optimize_cluster_centers(dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, self.data.var, self.data.total)
             dcfs[dcfs > 0.99] =1.0
             dcfs[dcfs < 1e-3] =0
 
             '''
-            The likelihood computation needs to be updated as well 
+            TO DO: The likelihood computation needs to be updated as well 
             '''
-            new_likelihood = self.compute_likelihood(dcfs,OMEGA, ALPHA)
+            new_likelihood = self.compute_likelihood(dcfs,CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, self.data.var, self.data.total)
             #check for covergence:
             diff = new_likelihood -prev_likelihood
             if self.verbose:
@@ -340,7 +421,7 @@ class DCF_Clustering:
                  prev_likelihood = new_likelihood
             
 
-            return new_likelihood, dcfs, CNA_tree, ALPHA, OMEGA,
+            return new_likelihood, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
             
                             
 
@@ -348,7 +429,7 @@ class DCF_Clustering:
        
         results = {}
         for k in k_vals:
-            for i in self.nrestarts:
+            for i in range(self.nrestarts):
                results[k,i] = self.decifer(data, k)
 
 
@@ -363,10 +444,10 @@ if __name__ == "__main__":
      
      #load in pickled data object 
      from data import Data, load_from_pickle
-     dat = load_from_pickle("pth/to_pickled_object.pkl")
+     dat = load_from_pickle("/Users/annahart/CLionProjects/Pharming/s11_m5000_k25_l7/n1000_c0.25_e0/data.pkl")
      
      #initialize object 
-     dec = DCF_Clustering(nrestarts=50,seed=21)
+     dec = DCF_Clustering(nrestarts=50,seed=21,verbose=True)
      all_results = dec.run(dat, k_vals=[i+1 for i in range(8)])
 
      
