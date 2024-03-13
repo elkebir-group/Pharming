@@ -64,7 +64,8 @@ class DCF_Clustering:
         ''' 
         randomly initialize cluster centers 
         '''
-        return self.rng.uniform(low=0.0, high=1.0, size=self.k)
+        #return self.rng.uniform(low=0.0, high=1.0, size=self.k)
+        return [0.056, 0.146, 0.179, 0.996, 0.617, 0.138, 0.382]
 
 
     def optimize_cluster_and_tree_assignments(self, tree_id_to_indices, dcfs, alt, total, ell):
@@ -268,7 +269,8 @@ if __name__ == "__main__":
      
      #initialize object 
      dec = DCF_Clustering(nrestarts=50,seed=21,verbose=True)
-     all_results = dec.run(dat, k_vals=[i+1 for i in range(8)])
+     #all_results = dec.run(dat, k_vals=[i+1 for i in range(8)])
+     results = dec.run(dat, k_vals=[7])
 
      
 
