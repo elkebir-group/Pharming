@@ -1,3 +1,6 @@
+clonesim/
+phertilizer/
+simulation_study/.snakemake/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -30,6 +33,7 @@ MANIFEST
 .vs_code/
 *.Rhistory
 *.Rproj
+test/
 
 
 # PyInstaller
