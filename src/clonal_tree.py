@@ -147,6 +147,8 @@ class ClonalTree:
 
         self.key = key
         self.cost = np.Inf
+        self.snv_cost = np.Inf
+        self.cna_cost = np.Inf
 
         # self.snv_cost_func = self.compute_node_likelihoods
 
@@ -878,6 +880,9 @@ class ClonalTree:
 
         self.cost = sum([score for _, score in self.node_cost.items()])
 
+        self.snv_cost = sum(self.snv_node_cost[u] for u in self.snv_node_cost)
+        self.cna_cost = sum(self.cna_node_cost[u] for u in self.snv_node_cost)
+
         return self.cost 
 
 
@@ -1064,10 +1069,17 @@ class ClonalTree:
 
 
    #-------------------------- Save Methods ---------------------------------------#
-    def draw(self, fname, cellAssign=None, mapping=None,segments=None, cmap='Set3'):
+    def draw(self, fname, cellAssign=None, mapping=None,segments=None, include_dcfs=False, cmap='Set3'):
         if segments is not None:
             cna_genos = self.get_cna_genos()
         mut_count = {n : len(self.mut_mapping[n]) for n in self.mut_mapping}
+
+        if include_dcfs and cellAssign is not None:
+            dcfs = self.compute_dcfs(cellAssign)
+            include_dcfs = True 
+        else:
+            include_dcfs = False 
+
         if cellAssign is not None:
             cell_count = cellAssign.get_cell_count()
             if hasattr(cellAssign, 'n'):
@@ -1084,6 +1096,8 @@ class ClonalTree:
                     labels[n] = str(mapping[n])
                 else:
                     labels[n] = str(n)
+                if include_dcfs and n in dcfs:
+                    labels[n] += f"\ndelta:{round(dcfs[n],3)}"
                 if n in cell_count:
                     if cell_count[n] > 0:
                         labels[n] += "\nCells:" + str(cell_count[n])
@@ -1103,8 +1117,11 @@ class ClonalTree:
         segs = [str(ell) for ell in segs ]
         if self.cost is not None:
             total_like = np.round(self.cost)
+            snv_cost = np.round(self.snv_cost)
+            cna_cost = np.round(self.cna_cost)
+        
             # tree.graph_attr["label"] = f"Objective: {total_like}\nSegments: {','.join(segs)}\nn={cellAssign.n} cells\nm={len(self.get_all_muts())} SNVs"
-            tree.graph_attr["label"] = f"Objective: {total_like}\nSegments: {','.join(segs)}\nn={ncells} cells\nm={len(self.get_all_muts())} SNVs"
+            tree.graph_attr["label"] = f"Objective: {total_like}\nSNV:{snv_cost}, CNA:{cna_cost}\nSegments: {','.join(segs)}\nn={ncells} cells\nm={len(self.get_all_muts())} SNVs"
 
         tree
  

@@ -95,41 +95,41 @@ class CellAssign:
             mystr += f"{n}: {count}\n"
         return mystr
 
-def load_from_pickle(fname):
-    return pd.read_pickle(fname)
+# def load_from_pickle(fname):
+#     return pd.read_pickle(fname)
 
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--phi", required=True,
-                        help="input file for cell assignment")
-    parser.add_argument("-t", "--tree", required=True,
-                        help="pickled clonal tree")
-    parser.add_argument("-P", "--assign",
-                        help="input file for cell assignment")
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("-p", "--phi", required=True,
+#                         help="input file for cell assignment")
+#     parser.add_argument("-t", "--tree", required=True,
+#                         help="pickled clonal tree")
+#     parser.add_argument("-P", "--assign",
+#                         help="input file for cell assignment")
         
     
-    args = parser.parse_args()
+#     args = parser.parse_args()
 
-    ct = load_from_pickle(args.tree)
+#     ct = load_from_pickle(args.tree)
     
-    cell_assignment = pd.read_csv(args.phi)
-    phi = {}
+#     cell_assignment = pd.read_csv(args.phi)
+#     phi = {}
 
-    # print(cell_assignment.head())
-    for index, row in cell_assignment.iterrows():
+#     # print(cell_assignment.head())
+#     for index, row in cell_assignment.iterrows():
 
-        i = row['Cell']
-        v = row['Cluster']
+#         i = row['Cell']
+#         v = row['Cluster']
 
         
     
-        phi[index] = v
+#         phi[index] = v
 
 
-    ca = CellAssign(phi, ct.clones())
-    if args.assign is not None:
-        ca.save(args.assign)
+#     ca = CellAssign(phi, ct.clones())
+#     if args.assign is not None:
+#         ca.save(args.assign)
 
          

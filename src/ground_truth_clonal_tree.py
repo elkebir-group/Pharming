@@ -1,13 +1,15 @@
+# Created by: L.L. Weber
+# Created on: 2024-03-14 13:01:31
+
+
 from clonal_tree import ClonalTree
-from data import Data 
-import pickle 
+from data import Data
+from cell_mapping import CellAssign
+from utils import load_pickled_object
 import argparse 
 import pandas as pd 
-import numpy as np 
 import networkx as nx
 from genotype import genotype
-import pickle 
-
 
 
 
@@ -24,8 +26,6 @@ def genotypes_prep(genotypes_fname, genotypes):
                 row = line.strip().split("\t")
                 row = [int(r) for r in row]
                 m = row[4]
-                # if row[4] in mut_lookup.values:
-                    # m = mut_lookup[mut_lookup == row[4]].index[0]
                 mut_to_seg[m] = row[1]
     
                 g= genotype(row[2], row[3], row[5], row[6])
@@ -36,48 +36,50 @@ def genotypes_prep(genotypes_fname, genotypes):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--tree", type=str,
-        help="filename of input tree")
-    # parser.add_argument("--phi", type=str, help="ground truth cell assignments")
+    parser.add_argument("-t", "--tree", type=str, help="filename of input tree")
     parser.add_argument("-g" ,"--genotypes", type=str, help="ground truth genotypes")
-    # parser.add_argument("-m", "--mut_lookup",  type=str, 
-    #     help="input filename of mapping of internal data index to mutation label ")
+    parser.add_argument("-d" ,"--data", type=str, 
+                        help="filename of data object, if given, the gt genotypes will be filtered/reindexed")
+    parser.add_argument("-p", "--phi", required=True,
+                        help="input file for cell assignment")
+    parser.add_argument("-l" ,"--lamb", required=False, type=float, default=1e3)
+    parser.add_argument("-D" ,"--dcfs", required=False, type=str)
+    parser.add_argument("-P", "--assign",
+                        help="input file for cell assignment")
+    parser.add_argument( "--mut-cluster-tree", required=False, type=str)
     parser.add_argument("-T", "--clonal-tree",  type=str, 
         help="output filename of pickled clonal tree object")
     parser.add_argument( "--draw",  type=str, 
         help="png or pdf of output tree")
 
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
+
+
+    instance = "s11_m5000_k25_l7"
     # instance = "s12_m5000_k25_l7"
-    # dpath = "n500_c0.1"
-    # pth = f"simulation_study/input/{instance}"
-    # args = parser.parse_args([
+    folder = "n1000_c0.05_e0" 
+    pth = f"simulation_study/input"
+    opth = "test"
 
-    #      "-g", f"{pth}/node.tsv",
-    #      "--phi", f"{pth}/{dpath}/cellAssignments.p0",
-    #      "-t", f"{pth}/tree.tsv",
-    #      "-T", f"test/ground_truth.pickle",
-    #      "-d", f"{pth}/{dpath}/data.pickle",
-    #      "--draw", f"test/tree.png"
-    #     ]
-    # )
+    args = parser.parse_args([
+
+        # "-d", f"{pth}/{instance}/{folder}/data.pkl",
+        "-d", f"{opth}/data.pkl",
+        "-g", f"{pth}/{instance}/node.tsv",
+        "-t", f"{pth}/{instance}/tree.tsv",
+        "-p", f"{pth}/{instance}/{folder}/cellAssignments.p0",
+        "-l", "1e3",
+        "-D", f"{opth}/dcfs.txt",
+        "-T", f"{opth}/gt.pkl",
+        "-P", f"{opth}/phi.pkl",
+        "--mut-cluster-tree", f"{opth}/Tm.txt",
+        "--draw", f"{opth}/gt.png"
+    ])
 
 
-
-    # if args.mut_lookup is not None:
-    #     mut_lookup = pd.read_csv(args.mut_lookup)
-    #     mut_lookup = mut_lookup.set_index("index")
- 
-
-    # for key,val in data.cells_by_cn(1).items():
-    #     print(f"State:{key} # of cells: {len(val)}")
     
-
-    # for s in data.segments:
-    #     print(f"{s}: {data.cn_states_by_seg(s)}")
-    #     cell_state_map = data.cells_by_cn(s)
-    
+    #construct the tree from the edges 
     tree = nx.DiGraph()
     with open(args.tree, "r+") as file:
         for line in file:
@@ -85,6 +87,7 @@ if __name__ == "__main__":
                vals = [int(v) for v in vals]
                tree.add_edge(vals[0], vals[1])
 
+    #create the genotypes for the tree
     genotypes = {v:  {} for v in tree}
 
     mut_to_seg = genotypes_prep(args.genotypes, genotypes)
@@ -95,51 +98,76 @@ if __name__ == "__main__":
         else:
             seg_to_snvs[value].append(key)
     
-    # cell_mapping = {v: [] for v in tree}
-    ct = ClonalTree(tree, genotypes, seg_to_muts= seg_to_snvs )
-    # if args.phi is not None:
-    #     cell_assignment = pd.read_csv(args.phi)
-    #     phi = {}
-    #     series = dat.cell_lookup
-    #     # print(cell_assignment.head())
-    #     for index, row in cell_assignment.iterrows():
+    #make ground truth clonal tree
+    gt = ClonalTree(tree, genotypes, seg_to_muts= seg_to_snvs )
 
-    #         i = row['Cell']
-    #         v = row['Cluster']
-
-         
-    #         filtered_series = series[series == i]
-
-    #         # Get the corresponding indices
-    #         index = filtered_series.index.tolist()[0]
-    #         phi[index] = v
-
-    #         # cell_mapping[v].append(i)
-
-    #     ca = CellAssign(phi, ct.clones())
-    #     if args.cell_assign is not None:
-    #         ca.save(args.cell_assign)
+    #reindex the SNVs to make the indices in the data object
+    #filter to include only SNVs in data object
+    if args.data is not None:
+        dat = load_pickled_object(args.data)
+        gt.reindex_snvs(dat.mut_lookup)
+        gt.filter_snvs(dat.muts)
 
 
-    #     ct.trim(ca)
+    #make ground truth cell assignment phi
+    cell_assignment = pd.read_csv(args.phi)
+    phi = {}
 
-    #     costs = ct.compute_costs(dat, ca, lamb=0.25)
-    #     if args.draw is not None:
-    #         ct.draw(args.draw, ca)
-    # else:
-    if args.draw is not None:
-            ct.draw(args.draw)
-    # missing_muts = set(dat.muts) - set(ct.get_all_muts())
-    if args.clonal_tree is not None:
-        ct.save(args.clonal_tree)
-    # if args.phi is not None:
-        # cost2 = ct.compute_pooled_costs(data, lamb=100)
+    for index, row in cell_assignment.iterrows():
+
+        i = row['Cell']
+        v = row['Cluster']
+        phi[index] = v
+
+
+    ca = CellAssign(phi, gt.clones())
+
+    ca.relabel(dat.cell_lookup)
+    if args.assign is not None:
+        ca.save(args.assign)
+   
  
-        # print(f"cost 1: {costs} cost 2: {cost2}")
+    #get additional useful files like DCFs and Tm
+    gt_dcfs = gt.compute_dcfs(ca)
+    root = gt.root
+
+
+    gt_T_m = gt.mutation_cluster_tree()
+    gt_T_m.remove_node(root)
+
+
+
+
+    mapping = {}
+    nodes = list(gt_T_m.nodes)
+    nodes.sort()
+    for i,n in enumerate(nodes):
+          mapping[n] =i 
+    
+    T_m = nx.relabel_nodes(gt_T_m, mapping)
+    if args.mut_cluster_tree is not None:
+        with open(args.mut_cluster_tree, "w+") as file:
+            for u,v in T_m.edges:
+                file.write(f"{u}\t{v}\n")
+
+
+    gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
+
+    if args.dcfs is not None:
+        with open(args.dcfs, "w+") as file:
+            for key,val in gt_delta.items():
+
+                file.write(f"{val}\n")
+
+    gt.compute_likelihood(dat, ca, args.lamb )
+
+    if args.draw is not None:
+        gt.draw(args.draw, ca, segments=dat.segments, include_dcfs=True)
+
+    if args.clonal_tree is not None:
+        gt.save(args.clonal_tree)
+
         
-
-
-
 
 
 

@@ -1,6 +1,7 @@
 from itertools import chain, combinations
 import pygraphviz as pgv 
 import pickle 
+import pandas as pd 
 
 
 def powerset(iterable):
