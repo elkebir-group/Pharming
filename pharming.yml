@@ -3,6 +3,7 @@ channels:
   - bioconda
   - conda-forge
 dependencies:
+  - pip
   - networkx
   - pygraphviz
   - numpy
@@ -15,7 +16,12 @@ dependencies:
   - snakemake
   - pybind11
   - python=3.9
+  - umap-learn
+  - lemon
+  - boost-cpp
+  - cmake
   - pip:
     - gurobipy==10.0.2
+  
 
 
