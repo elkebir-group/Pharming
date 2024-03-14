@@ -25,7 +25,7 @@ class CNA_Merge:
         self.old_to_new, self.new_to_old = {}, {}
         self.seg_to_snvs = T1.get_seg_to_muts() | T2.get_seg_to_muts()
         self.k = max(self.T_m)
-        assert self.k <= 8
+        # assert self.k <= 8
         starting_node = max(self.T1)
         for i,u in enumerate(self.T2):
             if u not in self.T_m:
@@ -50,17 +50,21 @@ class CNA_Merge:
     def construct_clonal_tree(self, T, data, lamb):
         # if self.verbose:
         #     draw(T, "test/current_tree.png")
-        
-        assert all(n in T for n in self.all_nodes)
+
+        if not all(n in T for n in self.all_nodes):
+            pickle_object(self, "test/cnmerge.pkl")
+            for n in self.all_nodes:
+                if n not in T:
+                     print(f" node {n} not in node mapping")
+            draw(T, "test/current_tree.png")
+            draw(self.T1, "test/T1.png")
+            draw(self.T2, "test/T2.png")
+        # assert all(n in T for n in self.all_nodes)
            
         # for n in T:
             # if T.in_degree[n] > 1:
             #     print(n)
-            #     pickle_object(self, "test/cnmerge.pkl")
-            #     # print(f" node {n} not in node mapping")
-            #     draw(T, "test/current_tree.png")
-            #     draw(self.T1, "test/T1.png")
-            #     draw(self.T2, "test/T2.png")
+
 
   
         def get_predecessor(u, T_orig):
@@ -414,6 +418,20 @@ class CNA_Merge:
     
 
 
+#testing 
+# instance = "s11_m5000_k25_l7"
+# # instance = "s12_m5000_k25_l7"
+# folder = "n1000_c0.05_e0" 
+# pth = f"simulation_study/input"
+
+# gtpth = "test"
+# from data import Data, load_from_pickle
+# dat = load_from_pickle( f"{pth}/{instance}/{folder}/data.pkl")
+
+# inst = load_from_pickle(f"{gtpth}/cnmerge.pkl")
+# inst.verbose = True
+# lamb = 1e3
+# foo = inst.fit(dat, lamb)
 
 
                             

@@ -169,7 +169,7 @@ class GenotypeTree:
         if v >= vmin and v <= vplus:
             return v 
         else:
-            return np.NaN
+            return np.NAN
         
 
     

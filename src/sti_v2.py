@@ -245,7 +245,7 @@ class STI:
         
         return obj, ct, ca
     
-    @timeit_decorator
+    # @timeit_decorator
     def compute_snv_cluster_tree_cost(self):
         all_costs = []
         tree_assign = {}
@@ -541,7 +541,7 @@ class STI:
              return np.Inf, solutions 
 
     # @timeit_decorator
-    def assign_cell_clusters(self,ct, snv_clusters, ilp=True ):
+    def assign_cell_clusters(self,ct, snv_clusters, ilp=False ):
 
     
         delta =self.delta
