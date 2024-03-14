@@ -1,17 +1,17 @@
 
-simpath: "clonesim/build/simulate"
-genpath: "clonesim/build/generatesinglecells"
+simpath: "../clonesim/build/simulate"
+genpath: "../clonesim/build/generatesinglecells"
 nseeds: 5
 
 cells:
-  # - 500
+  - 500
   - 1000
-  # - 5000
+  - 5000
 
 snvs:
-  # - 1000
+  - 1000
   - 5000
-  # - 10000
+  - 10000
 # - 25000
 
 cov:
@@ -31,13 +31,10 @@ nsegs:
   # - 100
 
 mclust:
+  - 5
   - 7
 
-lamb:
-  - 0
-  - 0.1
-  - 1
-  - 5
+
 
 
 

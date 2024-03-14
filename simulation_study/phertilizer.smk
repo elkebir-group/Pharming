@@ -5,8 +5,7 @@ seeds = [i+10 for i in range(config["nseeds"])]
 import sys 
 sys.path.append("../src")
 
-# #TODO: add rule generate cna trees 
-# ruleorder:  simulate > generatesinglecells
+
 
 rule all:
     # noinspection PyInterpreter
@@ -29,9 +28,7 @@ rule make_data:
         readcounts = "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/read_counts.tsv",
         umap =  "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cn_umap.csv"
     shell:
-        "python ../src/prep_phertilizer.py -d {input} -f {output.readcounts} -u {output.umap}
-
-
+        "python ../src/prep_phertilizer.py -d {input} -f {output.readcounts} -u {output.umap}"
 
 
 rule phertilizer:
@@ -52,7 +49,7 @@ rule phertilizer:
     shell:
         "phertilizer -f {input.readcounts} --bin_count_data {input.umap} --no-umap "
         "--tree_pickle {output.pickle} --tree {output.png} --tree_text --likelihood {output.like} "
-        " -n {output.predcell} - m {output.predmut}  --post_process -s {wildcards.seed} "
+        " -n {output.predcell} - m {output.predmut}  --post_process -s {wildcards.s} "
         " > {log.std} 2> {log.err} "
 
 

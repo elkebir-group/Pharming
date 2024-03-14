@@ -20,6 +20,7 @@ dependencies:
   - lemon
   - boost-cpp
   - cmake
+  - graphviz
   - pip:
     - gurobipy==10.0.2
   

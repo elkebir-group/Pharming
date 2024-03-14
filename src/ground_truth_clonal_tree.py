@@ -61,11 +61,13 @@ if __name__ == "__main__":
     # folder = "n1000_c0.05_e0" 
     # pth = f"simulation_study/input"
     # opth = "test"
+    # instance = "s13_m10000_k25_l7"
+    # folder = "n1000_c0.05_e0"
 
     # args = parser.parse_args([
 
-    #     # "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-d", f"{opth}/data.pkl",
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     # "-d", f"{opth}/data.pkl",
     #     "-g", f"{pth}/{instance}/node.tsv",
     #     "-t", f"{pth}/{instance}/tree.tsv",
     #     "-p", f"{pth}/{instance}/{folder}/cellAssignments.p0",
@@ -129,11 +131,13 @@ if __name__ == "__main__":
  
     #get additional useful files like DCFs and Tm
     gt_dcfs = gt.compute_dcfs(ca)
-    root = gt.root
+  
 
 
     gt_T_m = gt.mutation_cluster_tree()
-    gt_T_m.remove_node(root)
+
+    if gt.root in gt_T_m:
+        gt_T_m.remove_node(gt.root)
 
 
 
@@ -151,7 +155,7 @@ if __name__ == "__main__":
                 file.write(f"{u}\t{v}\n")
 
 
-    gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != root}
+    gt_delta = {mapping[n]: gt_dcfs[n] for n in mapping if n != gt.root}
 
     if args.dcfs is not None:
         with open(args.dcfs, "w+") as file:
