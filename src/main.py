@@ -100,6 +100,8 @@ def main(args):
 
      
 
+    if args.all_sol is not None:
+        pickle_object(ph.clonal_trees, args.all_sol)
 
 
     print("\nPharming complete...let's go sell our trees at the local Pharmer's Market!")
@@ -148,6 +150,8 @@ if __name__ == "__main__":
                         help="directory where output files should be written")
     parser.add_argument("-J", "--scores", type=str,
         help = "filename of tree scores")
+    parser.add_argument( "--all-sol", type=str,
+        help = "filename of object to pickle all top clonal trees inferred from each mutation cluster tree")
     parser.add_argument("--profile", type=str)
 
 
@@ -155,31 +159,32 @@ if __name__ == "__main__":
     
 
 
-    # instance = "s11_m5000_k25_l7"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/input"
+    instance = "s11_m5000_k25_l7"
+    # instance = "s12_m5000_k25_l7"
+    folder = "n1000_c0.05_e0" 
+    pth = f"simulation_study/input"
 
-    # gtpth = "test"
+    gtpth = "test"
 
 
 
-    # args = parser.parse_args([
+    args = parser.parse_args([
 
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "4",
-    #     "-D", f"{gtpth}/input_0.05/dcfs.txt",
-    #     "-T", f"{gtpth}/input_0.05/T_m.txt",
-    #     "-n", "3",
-    #     "-L",  "2",  "10", "20", "24",
-    #     "-s", "11",
-    #     # "--segment", "0",
-    #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-    #     "-J", f"{gtpth}/output_0.05_greedy/scores.csv",
-    #     "-P", f"{gtpth}/output_0.05_greedy/solution.pkl",
-    #     "-O", f"{gtpth}/output_0.05_greedy"
+        "-d", f"{pth}/{instance}/{folder}/data.pkl",
+        "-j", "4",
+        "-D", f"{gtpth}/input_0.05/dcfs.txt",
+        "-T", f"{gtpth}/input_0.05/T_m.txt",
+        "-n", "3",
+        # "-L",  "2",  "10", "20", "24",
+        "-s", "11",
+        # "--segment", "0",
+        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
+        "-J", f"{gtpth}/scores.csv",
+        "-P", f"{gtpth}/solution.pkl",
+        "--all-sol", f"{gtpth}/clonal_trees.pkl",
+        "-O", f"{gtpth}"
 
-    # ])
+    ])
 
     profiler = cProfile.Profile()
     profiler.enable()
