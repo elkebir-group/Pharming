@@ -1,7 +1,8 @@
 # Created by: L.L. Weber
 # Created on: 2024-03-13 18:02:44
 
-from data import Data, load_from_pickle
+from data import Data
+from utils  import load_pickled_object
 import argparse
 import umap
 import numpy as np 
@@ -16,7 +17,7 @@ def umap_projection(x, y):
     
 
 def main(args):
-    dat = load_from_pickle(args.data)
+    dat = load_pickled_object(args.data)
     embedding = umap_projection(dat.copy_x, dat.copy_y)
     # plt.scatter(
     # embedding[:, 0],
