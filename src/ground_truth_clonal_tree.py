@@ -53,29 +53,29 @@ if __name__ == "__main__":
         help="png or pdf of output tree")
 
 
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
 
-    instance = "s11_m5000_k25_l7"
-    # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.05_e0" 
-    pth = f"simulation_study/input"
-    opth = "test"
+    # instance = "s11_m5000_k25_l7"
+    # # instance = "s12_m5000_k25_l7"
+    # folder = "n1000_c0.05_e0" 
+    # pth = f"simulation_study/input"
+    # opth = "test"
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        # "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-d", f"{opth}/data.pkl",
-        "-g", f"{pth}/{instance}/node.tsv",
-        "-t", f"{pth}/{instance}/tree.tsv",
-        "-p", f"{pth}/{instance}/{folder}/cellAssignments.p0",
-        "-l", "1e3",
-        "-D", f"{opth}/dcfs.txt",
-        "-T", f"{opth}/gt.pkl",
-        "-P", f"{opth}/phi.pkl",
-        "--mut-cluster-tree", f"{opth}/Tm.txt",
-        "--draw", f"{opth}/gt.png"
-    ])
+    #     # "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-d", f"{opth}/data.pkl",
+    #     "-g", f"{pth}/{instance}/node.tsv",
+    #     "-t", f"{pth}/{instance}/tree.tsv",
+    #     "-p", f"{pth}/{instance}/{folder}/cellAssignments.p0",
+    #     "-l", "1e3",
+    #     "-D", f"{opth}/dcfs.txt",
+    #     "-T", f"{opth}/gt.pkl",
+    #     "-P", f"{opth}/phi.pkl",
+    #     "--mut-cluster-tree", f"{opth}/Tm.txt",
+    #     "--draw", f"{opth}/gt.png"
+    # ])
 
 
     
