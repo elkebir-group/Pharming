@@ -30,7 +30,10 @@ share/python-wheels/
 MANIFEST
 .DS_Store
 *.DS_Store
+.vscode/
+*.vscode/
 .vs_code/
+*.vs_code/
 *.Rhistory
 *.Rproj
 test/
