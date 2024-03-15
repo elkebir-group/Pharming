@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 from scipy.stats import binom
 from scipy.stats import beta
+import math
 
 EPSILON = -10e10
 from genotype import genotype, CNAgenotype
@@ -92,6 +93,8 @@ class GenotypeTree:
 
             v = self.dcf_to_v(dcf, cn_prop)
             # posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
+            if math.isnan(v): #added
+                return EPSILON
             posterior = max(binom.logpmf(a, d, v), EPSILON)
         return posterior
 
