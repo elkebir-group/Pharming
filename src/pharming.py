@@ -37,15 +37,15 @@ class Pharming:
             
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
-                all_trees =  self.enumerate_mutcluster_trees()
-                choices = self.rng.choice(len(all_trees), size=3)
-                sample_trees = [all_trees[i] for i in choices]
-                for i,t in enumerate(sample_trees):
+                # all_trees =  self.enumerate_mutcluster_trees()
+                # choices = self.rng.choice(len(all_trees), size=3)
+                # sample_trees = [all_trees[i] for i in choices]
+                # for i,t in enumerate(sample_trees):
                
-                    if len(set(T_m.edges).difference(t.edges))==0:
-                        print(f"sampled tree {i} is ground truth tree")
-                        raise Exception("sampled tree is ground truth tree")
-                self.scriptTm += sample_trees
+                #     if len(set(T_m.edges).difference(t.edges))==0:
+                #         print(f"sampled tree {i} is ground truth tree")
+                #         raise Exception("sampled tree is ground truth tree")
+                # self.scriptTm += sample_trees
 
             
             for T_m in self.scriptTm:
@@ -161,7 +161,7 @@ class Pharming:
         all_trees = []
         Tm_edges = list(T_m.edges)
         for S in cnatrees:
-            st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb)
+            st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb, ilp=False)
             trees = st.fit(self.data, ell)
             all_trees.append(trees)
         print(f"Segment {ell} complete!")
@@ -205,7 +205,7 @@ class Pharming:
             top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
             return top_trees
 
-    def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_seg=2, ninit_Tm=2):
+    def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_seg=3, ninit_Tm=1):
         '''
         @params Data data: the input data (C,A,D) to fit
         @params float lamb (float): a regularization parameter the cost function
@@ -231,7 +231,9 @@ class Pharming:
 
         
         if ninit_seg < len(segments):
-            init_segs = self.data.get_largest_segments( ninit_seg, min_cn_states=2)
+            init_segs = self.data.get_largest_segments( ninit_seg, min_cn_states=3)
+        else:
+            init_segs = segments
       
       
 
@@ -241,6 +243,7 @@ class Pharming:
         for i,Tm in enumerate(self.scriptTm):
             print(f"Starting inference for Tm_{i}")
             segtrees = self.segment_trees_inference(Tm, segments=init_segs)
+            pickle_object(segtrees, "test/segrees_ilp.pkl")
             top_trees = self.integrate(Tm, segtrees)
             best_cost = top_trees[0].cost
             print(f"Integration complete for tree Tm_{i}: {best_cost}")
@@ -259,22 +262,32 @@ class Pharming:
         
          #fit the remaining segment trees for each top Tm and integrate
         remaining_segs = set(segments) - set(init_segs)
+        remaining_segs = [ell for ell in remaining_segs if self.data.num_cn_states(ell) > 1]
         self.clonal_trees = []
         best_costs = []
-        # segtrees = []
-        for i in smallest_indices:
-            Tm = self.scriptTm[i]
-            segtrees = [list(init_trees[i])]
-            segtrees += self.segment_trees_inference(Tm, segments=remaining_segs)
-            top_trees = self.integrate(Tm.edges, segtrees)
-
-            best_cost = min(tr.cost for tr in top_trees)
-            best_costs.append(best_cost)
-            self.clonal_trees.append(top_trees)
-            print(f"Integration complete for tree Tm_{i}: {best_cost}")
-            # pickle_object(clonal_trees, "test/clonal_trees.pkl")
-        best_trees =  get_top_n(self.clonal_trees, self.top_n)
         
+        if len(remaining_segs) > 1:
+    
+            # segtrees = []
+            for i in smallest_indices:
+                Tm = self.scriptTm[i]
+                segtrees = [list(init_trees[i])]
+                segtrees += self.segment_trees_inference(Tm, segments=remaining_segs)
+                top_trees = self.integrate(Tm.edges, segtrees)
+
+                best_cost = min(tr.cost for tr in top_trees)
+                best_costs.append(best_cost)
+                self.clonal_trees.append(top_trees)
+                print(f"Integration complete for tree Tm_{i}: {best_cost}")
+                # pickle_object(clonal_trees, "test/clonal_trees.pkl")
+        
+        else:
+            self.clonal_trees = init_trees
+            best_costs = []
+        
+        best_trees =  get_top_n(self.clonal_trees, self.top_n)
+
+            
         self.post_process(best_trees)
         
         return  best_trees, best_costs

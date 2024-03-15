@@ -60,7 +60,7 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, S, Tm_edges, delta, lamb1 =5, niter=10) -> None:
+    def __init__(self, S, Tm_edges, delta, lamb1 =5, niter=10, ilp=False) -> None:
     
         T_m = nx.DiGraph(Tm_edges)
         nodes = list(S)
@@ -78,7 +78,7 @@ class STI:
             self.delta = delta
 
         self.lamb1 = lamb1
-     
+        self.ilp = ilp 
 
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
@@ -541,11 +541,11 @@ class STI:
              return np.Inf, solutions 
 
     # @timeit_decorator
-    def assign_cell_clusters(self,ct, snv_clusters, ilp=False ):
+    def assign_cell_clusters(self,ct, snv_clusters ):
 
     
         delta =self.delta
-        if not ilp:
+        if not self.ilp:
             return ct.assign_cells_by_likelihood(self.data, self.data.cells, self.lamb1)
         # _, _, cell_scores, nodes = ct.assign_cells(self.data, self.lamb1)
         cell_scores, nodes = ct.compute_node_likelihoods(self.data, self.data.cells, self.lamb1)
