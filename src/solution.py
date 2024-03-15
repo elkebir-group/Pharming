@@ -17,7 +17,7 @@ class Solution:
         if segments is None:
             segments = self.segments
 
-        self.ct.draw(fname,self.phi, segments=segments)
+        self.ct.draw(fname,self.phi, segments=segments, include_dcfs=True)
     
     def toJson(self, fname, segment_csv=None, snv_csv=None):
         self.ct.toJson(fname, segment_csv, snv_csv)
