@@ -97,8 +97,8 @@ if __name__ == "__main__":
 
 
   
-    ct.draw("test/phert.png", ca)
-    gt.draw("test/gt.png", phi)
+    # ct.draw("test/phert.png", ca)
+    # gt.draw("test/gt.png", phi)
     score = score_tree.score_tree(gt, phi, ct, ca, segments=[0])
     index = ['Row1']
     pd.DataFrame(score, index=index).to_csv(args.out, index=False)

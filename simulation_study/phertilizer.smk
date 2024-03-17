@@ -10,7 +10,7 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/read_counts.tsv",
+        expand("phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -48,30 +48,30 @@ rule phertilizer:
         err= "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.err.log"
     shell:
         "phertilizer -f {input.readcounts} --bin_count_data {input.umap} --no-umap "
-        "--tree_pickle {output.pickle} --tree {output.png} --tree_text --likelihood {output.like} "
-        " -n {output.predcell} - m {output.predmut}  --post_process -s {wildcards.s} "
+        "--tree_pickle {output.pickle} --tree {output.png} --tree_text {output.tree} --likelihood {output.like} "
+        " -n {output.predcell} -m {output.predmut}  --post_process -s {wildcards.s} "
         " > {log.std} 2> {log.err} "
 
 
     
-# rule eval_solutions:
-#     input:
-#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
-#         gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
-#         cellassign = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
-#         sol = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
-#     params:
-#         lamb = 1e3,
-#     output:
-#         scores = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
-#     log:
-#         std= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.log",
-#         err= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.err.log"
-#     shell:
-#         "python ../src/score_tree.py -d {input.data} -t {input.gt} -c {input.cellassign} "
-#         "-S {input.sol} "
-#         "-l {params.lamb} "
-#         "-o {output.scores} > {log.std} 2> {log.err} "
+rule eval_solutions:
+    input:
+        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pkl",
+        cellassign = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/phi.pkl",
+        phert =   "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/tree.pkl",
+    params:
+        lamb = 0
+    output:
+        scores = "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
+    log:
+        std= "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.log",
+        err= "phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/score.err.log"
+    shell:
+        "nice -n 10 python ../src/score_phertilizer.py -d {input.data} -t {input.gt} -c {input.cellassign} "
+        "-T {input.phert} "
+        "-l {params.lamb} "
+        "-o {output.scores} > {log.std} 2> {log.err} "
 
 
 
