@@ -837,8 +837,8 @@ class STI:
         # print(f"Total refinements: {len(refinements)}")
         merged_dcfs = self.cn_dcfs | self.delta
         max_iter = 0
-        ca = load_pickled_object("test/phi16.pkl")
-        ca.cell_mapping[9] = []
+        # ca = load_pickled_object("test/phi16.pkl")
+        # ca.cell_mapping[9] = []
         for f, T in enumerate(refinements):
 
      
@@ -847,8 +847,8 @@ class STI:
             snv_clusters = list({q for _,q in valid_group_snvclusts})
             
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega)
-            segment_tree.draw("test/seg16.png")
-            ca.update_clones(segment_tree.clones())
+            # segment_tree.draw("test/seg16.png")
+            # ca.update_clones(segment_tree.clones())
             # if len(segment_tree.get_all_muts()) > 199:
             #     print("here")
 
@@ -866,7 +866,7 @@ class STI:
             cost  = np.Inf
     
             for i in range(self.max_iterations):
-                # ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
+                ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
                 ca_cost = segment_tree.compute_likelihood(self.data, ca,self.lamb1)
                 if i > max_iter:
                     max_iter = i
