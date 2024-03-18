@@ -54,6 +54,7 @@ def eval_segtree(gt, gt_phi, sol, segment, dat, lamb=1e3):
 
 
     scores  = score_tree(gt, gt_phi, sol.ct, sol.phi, segments=[segment])
+    scores["nsnvs"] = len(snvs)
 
     return scores 
 
@@ -71,7 +72,14 @@ def compute_ari(alpha1, alpha2) -> float:
 
 
 
-
+def save_psi(gt, inf, fname):
+      gt_psi = pd.Series(gt.get_psi())
+      inf_psi = pd.Series(inf.get_psi())
+      df = pd.concat([gt_psi, inf_psi],axis=1)
+      df.reset_index(inplace=True)
+      df.columns = ["snv", "gt_psi", "inf_psi"]
+      print(df.head())
+      df.to_csv(fname, index=False)
 
 
 if __name__ == "__main__":
@@ -145,9 +153,48 @@ if __name__ == "__main__":
 
     cost = gt.compute_likelihood(dat, phi, lamb)
 
+    seg16map = {8:8, 4:3, 3:3, 0:0, 1:1, 2:2, 6:5, 7:6, 5:4 }
+    from copy import deepcopy
+    phi16 = deepcopy(phi)
+    phi16.relabel_clones(seg16map)
+    from utils import pickle_object
+    pickle_object(phi16, "test/phi16.pkl")
 
-    sol_list  = load_pickled_object(args.solutions)
 
+    
+
+
+    # sol_list  = load_pickled_object(args.solutions)
+    # results= []
+    # sol_dict =  load_pickled_object("test/segtree_solutions.pkl")
+    # mysegs = [16, 19, 12, 10, 8, 17]
+    # for ell in mysegs:
+    #     for i, sol in enumerate(sol_dict[ell]):
+    #         sol.png(f"test/seg{ell}_{i}.png")
+
+    # for ell, sol_list in sol_dict.items():
+    #       num_cn_states = dat.num_cn_states(ell)
+    #       gt_seg = deepcopy(gt)
+    #       for sol in sol_list:
+    #         scores = eval_segtree(gt_seg, phi, sol,ell, dat, lamb )
+    #         scores["num_cn_states"] = num_cn_states 
+    #         results.append(scores)
+    
+    # pd.DataFrame(results).to_csv("test/segtree_scores.csv", index=False)      
+
+    sol_list =   load_pickled_object("test/solution_ilp.pkl")
+    ell = 16
+    num_cn_states = dat.num_cn_states(ell)
+    results= []
+    gt_seg = deepcopy(gt)
+    seg_scores = []
+    gt.filter_snvs(dat.seg_to_snvs[ell])
+    save_psi(gt, sol_list[0].ct, "test/psi_comp.csv")
+    for sol in sol_list:
+        scores = eval_segtree(gt_seg, phi, sol,ell, dat, lamb )
+        scores["num_cn_states"] = num_cn_states 
+        results.append(scores)
+    pd.DataFrame(results).to_csv("test/segtree16_scores.csv", index=False)  
     # segtrees  = load_pickled_object("test/segrees_ilp.pkl")
     # seg_scores = []
     # for seglist in segtrees:
@@ -157,7 +204,7 @@ if __name__ == "__main__":
     # pd.DataFrame(seg_scores).to_csv("test/seg_scores_ilp.csv", index=False)
     # print("done")
 
-    seg_scores = []
+ 
     for i,best_sol in enumerate(sol_list):
             ell=2
 

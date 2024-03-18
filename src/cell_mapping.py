@@ -74,7 +74,13 @@ class CellAssign:
         self.update(new_phi)
 
     
-   
+    def relabel_clones(self, mapping):
+        phi = {}
+        for i, u in self.phi.items():
+            if u in mapping:
+                phi[i] = mapping[u]
+        self.update(phi)
+
         
          
 

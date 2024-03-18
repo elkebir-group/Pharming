@@ -171,16 +171,16 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "4",
+        "-j", "1",
         "-D", f"{gtpth}/input_0.05/dcfs.txt",
         "-T", f"{gtpth}/input_0.05/T_m.txt",
         "-n", "3",
-        "-L",  "2", # "10", "20", "24",
+        "-L",  "16", # "10", "20", "24",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
         "-J", f"{gtpth}/scores.csv",
-        "-P", f"{gtpth}/solution.pkl",
+        "-P", f"{gtpth}/solution_ilp.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "-O", f"{gtpth}"
 

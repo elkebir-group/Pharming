@@ -2,14 +2,15 @@ from clonal_tree import ClonalTree
 import gurobipy as gp 
 from gurobipy import GRB
 import numpy as np 
+from cell_mapping import CellAssign
 
 class ConstrainedCellAssign:
-    def __init__(self, tree, cell_scores, nodes, dcfs_lb, dcfs_ub, segment) -> None:
+    def __init__(self, tree, cell_scores, nodes, dcfs_lb, dcfs_ub=None) -> None:
               
         self.model = gp.Model("MIP")
 
     
-        cna_genos = tree.get_cna_genos()[segment]
+        # cna_genos = tree.get_cna_genos()[segment]
   
         self.clones = nodes 
 
@@ -35,6 +36,8 @@ class ConstrainedCellAssign:
 
     
                 self.model.addConstr( gp.quicksum(self.x[i,q] for i in self.cells for q in desc_indices) >= self.n *dcfs_lb[nodes[q]] )
+                if dcfs_ub is not None:
+                    self.model.addConstr( gp.quicksum(self.x[i,q] for i in self.cells for q in desc_indices) <= self.n *dcfs_ub[nodes[q]] )
 
 
     def solve(self, threads=1, timelimit=60):
@@ -64,5 +67,5 @@ class ConstrainedCellAssign:
                 if solution[i,q] > 0.5:
                     phi[i] =self.clones[q]
     
-        
-        return score, phi 
+ 
+        return score,  CellAssign(phi, set(self.clones))

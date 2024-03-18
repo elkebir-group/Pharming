@@ -14,6 +14,7 @@ from cell_mapping import CellAssign
 from tree_to_json import convertToJson
 from scipy.stats import binom
 from scipy.stats import beta
+import ipdb
 
 EPSILON = -1e5
 
@@ -258,31 +259,28 @@ class ClonalTree:
 
 
 
-    # def compute_dcfs(self, ca, segment):
-    #     counts = ca.get_cell_count()
-    #     total_cells = sum(counts[u] for u in counts)
-    #     cna_genos = self.get_cna_genos()[segment]
-    #     # cna_states = set(cna_genos[segment][v].to_tuple() for v in self.tree)
-    #     dcfs = {}
-    #     cell_counts = {n: 0 for n in self.tree}
-    #     res = []
-    #     for n in self.tree:
-    #         if len(self.mut_mapping[n]) > 0:
-    #             # snvs = self.mut_mapping[n]
-    #             # m = snvs[0]
-  
-    #             for u in self.preorder(source=n):
-    #                         count = counts[u]
-    #                         res.append([n, cna_genos[u].to_tuple(), count])
-    #                         cell_counts[n] += count
+    def relabel(self, mapping=None):
+        """
+        dict mapping: dictionary containing old labels as keys, new labels as values
+                        may be partial
+
+        Updates the nodes labels. If mapping is None, the nodes are labeled sequential
+        via a preorder traversal
+    
+        """
+        if mapping is None:
+            mapping = {n: i for i,n in enumerate(self.preorder())}
         
-    #     dcfs = {u: cell_counts[u]/total_cells for u in cell_counts}
-    #     df = pd.DataFrame(res, columns=["cluster",  "state", "count"])
-    #     dcf_by_state = df.groupby(["cluster", "state"]).sum("count")
-    #     print(dcf_by_state)
-    #     dcf_by_state = dcf_by_state/total_cells
-    #     print(dcf_by_state)
-    #     return dcfs, dcf_by_state
+        self.tree = nx.relabel_nodes(self.tree, mapping)
+        genotypes = {}
+        #TODO: check if new mapping will result in a collison 
+        for u in mapping:
+ 
+            genotypes[mapping[u]] = self.genotypes[u]
+        
+        self.genotypes = genotypes
+        self.update_mappings()
+        
         
 
 
@@ -828,6 +826,7 @@ class ClonalTree:
             return data.binomial_likelihood(cells, snvs,vafs )
     
     def compute_node_likelihoods(self, data, cells=None, lamb=0):
+
         if cells is None:
             cells = data.cells
         nodes = np.array(self.tree)
@@ -943,21 +942,25 @@ class ClonalTree:
             del self.genotypes[v][j]
     def update_genotype(self, node, j, snv_tree):
         cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
+        # if j == 68:
+        #     self.draw("test/segtree.png", segments=[2])
+        #     snv_tree.draw("test/snv_tree68.png", segments=[2])
 
         pres_nodes = []
         for u in sorted(nx.descendants(self.tree, node) | {node}):
             cn_geno = cna_geno[u]
             cn_state = cn_geno.to_tuple()
-            pres_nodes.append(u)
+      
             added = False
             for v in snv_tree.preorder():
                 geno = snv_tree.genotypes[v][j]
                 if (geno.x, geno.y) == cn_state and geno.z > 0:
                     self.genotypes[u][j] = genotype(*geno.to_tuple())
                     added = True
+                    pres_nodes.append(u)
                     break 
-            if added:
-                break  # Early termination if condition is met
+            # if added:
+            #     break  # Early termination if condition is met
         else:
             for u in sorted(self.clones().difference(pres_nodes)):
                 cn_state = cna_geno[u].to_tuple()
