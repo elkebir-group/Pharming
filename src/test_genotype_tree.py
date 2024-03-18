@@ -23,6 +23,7 @@ for i in range(len(genotype_trees)):
     v_plus = T.v_plus(cn_prop, v_minus)
     isvalid = v >= v_minus and v <= v_plus
     print(f"v: {v} v-: {v_minus} v+: {v_plus}, IS VALID: {isvalid}\n")
+    print(T.posterior_dcf(dcf, 5,10, cn_prop))
     
     
 

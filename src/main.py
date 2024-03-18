@@ -3,9 +3,9 @@
 # Created on: 2024-02-29 17:30:46
 
 import argparse
-from data import Data, load_from_pickle, load_from_files
+from data import Data
 from pharming import Pharming
-import os 
+# import os 
 from utils import load_pickled_object, pickle_object
 import networkx as nx
 
@@ -13,9 +13,9 @@ def main(args):
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
     
     if args.data is not None:
-        dat = load_from_pickle(args.data)
+        dat = load_pickled_object(args.data)
     elif args.file and args.copy_numbers is not None:
-        dat = load_from_files(args.file, args.copy_numbers )
+        dat = load_pickled_object(args.file, args.copy_numbers )
     else:
         IOError("Either both read counts and copy number files \
                 must be specified or alternatively, the path to the \
@@ -175,7 +175,7 @@ if __name__ == "__main__":
         "-D", f"{gtpth}/input_0.05/dcfs.txt",
         "-T", f"{gtpth}/input_0.05/T_m.txt",
         "-n", "3",
-        # "-L",  "2",  "10", "20", "24",
+        "-L",  "2", # "10", "20", "24",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",

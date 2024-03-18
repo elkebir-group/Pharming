@@ -149,6 +149,7 @@ class ClonalTree:
         self.cost = np.Inf
         self.snv_cost = np.Inf
         self.cna_cost = np.Inf
+    
 
         # self.snv_cost_func = self.compute_node_likelihoods
 
@@ -1117,13 +1118,16 @@ class ClonalTree:
         segs = [str(ell) for ell in segs ]
         if self.cost is not None:
             total_like = np.round(self.cost)
-            snv_cost = np.round(self.snv_cost)
-            cna_cost = np.round(self.cna_cost)
+            if hasattr(self, "snv_cost"):
+                snv_cost = np.round(self.snv_cost)
+                cna_cost = np.round(self.cna_cost)
+            else:
+                snv_cost = 0
+                cna_cost = 0
         
             # tree.graph_attr["label"] = f"Objective: {total_like}\nSegments: {','.join(segs)}\nn={cellAssign.n} cells\nm={len(self.get_all_muts())} SNVs"
             tree.graph_attr["label"] = f"Objective: {total_like}\nSNV:{snv_cost}, CNA:{cna_cost}\nSegments: {','.join(segs)}\nn={ncells} cells\nm={len(self.get_all_muts())} SNVs"
 
-        tree
  
         # colormap = cm.get_cmap(cmap)
         for n in self.tree:
