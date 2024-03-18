@@ -76,7 +76,7 @@ def main(args):
                 )
 
   
-    solutions, best_costs = ph.fit(dat,args.lamb, segments, cores=args.cores)
+    solutions, best_costs = ph.fit(dat,args.lamb, segments, cores=args.cores, ninit_segs=args.ninit_segs)
 
 
     if args.scores is not None:
@@ -136,6 +136,8 @@ if __name__ == "__main__":
                         help="optional filename of dcfs to use")
     parser.add_argument("--delta", type=float, nargs='+',
                         help="list of DCFs to use, ignored if dcf file is provided")
+    parser.add_argument("--ninit-segs", type=int, default=3,
+                        help="default number of segments for initialization of mutation cluster tree")
     parser.add_argument("-S", "--cnatrees",type=str,
                         help="optional filename of a pickled dictionary of CNA tree (nx.digraph) for each segment")
     parser.add_argument("--root_x", type=int, default=1,
@@ -159,7 +161,7 @@ if __name__ == "__main__":
     
 
 
-    instance = "s11_m5000_k25_l7"
+    instance = "s11_m5000_k25_l5"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
@@ -171,16 +173,16 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "1",
-        "-D", f"{gtpth}/input_0.05/dcfs.txt",
-        "-T", f"{gtpth}/input_0.05/T_m.txt",
+        "-j", "4",
+        "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
+        "-T", f"{pth}/{instance}/{folder}/Tm.txt",
         "-n", "3",
-        "-L",  "16", # "10", "20", "24",
+        # "-L",  "16", # "10", "20", "24",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
         "-J", f"{gtpth}/scores.csv",
-        "-P", f"{gtpth}/solution_ilp.pkl",
+        "-P", f"{gtpth}/solution.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "-O", f"{gtpth}"
 

@@ -19,7 +19,7 @@ from utils import get_top_n, pickle_object, load_pickled_object, draw
         
 class Pharming:
     def __init__(self, dcfs=None, cnatrees=None, k=3, T_m=None,
-                  start_state=(1,1), seed=102,verbose=False, top_n=3) -> None:
+                  start_state=(1,1), seed=102,verbose=False, top_n=3, ilp=False) -> None:
         self.verbose =verbose 
         self.rng = np.random.default_rng(seed)
 
@@ -37,15 +37,15 @@ class Pharming:
             
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
-                # all_trees =  self.enumerate_mutcluster_trees()
-                # choices = self.rng.choice(len(all_trees), size=3)
-                # sample_trees = [all_trees[i] for i in choices]
-                # for i,t in enumerate(sample_trees):
+                all_trees =  self.enumerate_mutcluster_trees()
+                choices = self.rng.choice(len(all_trees), size=2)
+                sample_trees = [all_trees[i] for i in choices]
+                for i,t in enumerate(sample_trees):
                
-                #     if len(set(T_m.edges).difference(t.edges))==0:
-                #         print(f"sampled tree {i} is ground truth tree")
-                #         raise Exception("sampled tree is ground truth tree")
-                # self.scriptTm += sample_trees
+                    if len(set(T_m.edges).difference(t.edges))==0:
+                        print(f"sampled tree {i} is ground truth tree")
+                        raise Exception("sampled tree is ground truth tree")
+                self.scriptTm += sample_trees
 
             
             for T_m in self.scriptTm:
@@ -66,6 +66,7 @@ class Pharming:
     
         self.start_state = start_state
         self.top_n = top_n
+        self.ilp = ilp
 
     def check_dcfs(self, T):
         for u in T:
@@ -161,7 +162,7 @@ class Pharming:
         all_trees = []
         Tm_edges = list(T_m.edges)
         for S in cnatrees:
-            st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb, ilp=False)
+            st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb, ilp=self.ilp)
             trees = st.fit(self.data, ell)
             all_trees.append(trees)
         print(f"Segment {ell} complete!")
@@ -205,7 +206,7 @@ class Pharming:
             top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
             return top_trees
 
-    def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_seg=3, ninit_Tm=1):
+    def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_segs=3, ninit_Tm=1):
         '''
         @params Data data: the input data (C,A,D) to fit
         @params float lamb (float): a regularization parameter the cost function
@@ -230,8 +231,8 @@ class Pharming:
         
 
         
-        if ninit_seg < len(segments):
-            init_segs = self.data.get_largest_segments( ninit_seg, min_cn_states=3)
+        if ninit_segs < len(segments):
+            init_segs = self.data.get_largest_segments( ninit_segs, min_cn_states=3)
         else:
             init_segs = segments
       

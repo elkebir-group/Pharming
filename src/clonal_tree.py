@@ -14,7 +14,7 @@ from cell_mapping import CellAssign
 from tree_to_json import convertToJson
 from scipy.stats import binom
 from scipy.stats import beta
-import ipdb
+
 
 EPSILON = -1e5
 
