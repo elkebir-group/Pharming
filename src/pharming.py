@@ -55,8 +55,8 @@ class Pharming:
                                          Each node label in the mutation cluster \
                                          tree must map to a unique value in [k] ")
             
-            for i, T_m in enumerate(self.scriptTm):
-                draw(T_m, f"test/Tm_{i}.png")
+            # for i, T_m in enumerate(self.scriptTm):
+            #     draw(T_m, f"test/Tm_{i}.png")
                 
         if cnatrees is None:
             self.cnatrees = {} 
@@ -243,7 +243,7 @@ class Pharming:
         for i,Tm in enumerate(self.scriptTm):
             print(f"Starting inference for Tm_{i}")
             segtrees = self.segment_trees_inference(Tm, segments=init_segs)
-            pickle_object(segtrees, "test/segrees_ilp.pkl")
+            # pickle_object(segtrees, "test/segrees_ilp.pkl")
             top_trees = self.integrate(Tm, segtrees)
             best_cost = top_trees[0].cost
             print(f"Integration complete for tree Tm_{i}: {best_cost}")

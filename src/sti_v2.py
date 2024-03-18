@@ -14,7 +14,7 @@ import pickle
 from copy import deepcopy
 from enumerate import Enumerate
 from solution import Solution
-
+from utils import load_pickled_object
 
 import timeit
 import functools
@@ -671,15 +671,27 @@ class STI:
         clust_costs = np.vstack(all_cluster_costs)
 
         snv_cluster_assign = clust_costs.argmin(axis=0)
-
+        moved_snvs = []
         for j,q in zip(self.snvs, snv_cluster_assign): 
             opt_clust = snv_clusters[q]
             if psi[j] != opt_clust:
+                moved_snvs.append(j)
+                # if j == 68:
+                #     print("68")
+                #     print(tree_assign[clust_groups[opt_clust]][j][0])
                 # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
                 
                 segtree.update_genotype(opt_clust, j,tree_assign[clust_groups[opt_clust]][j][0])
         
         segtree.update_mappings()
+        
+        if len(segtree.get_all_muts()) > len(self.snvs):
+            from collections import Counter
+            lst = segtree.get_all_muts()
+            counts = Counter(lst)
+            duplicates = [item for item, count in counts.items() if count > 1]
+            print(duplicates)
+            print( set(duplicates)  == set(moved_snvs))
         # if   len(segtree.mut_mapping[segtree.root]) > 0:
         #     segtree.draw("test/bad_ct.png", ca, segments = [self.ell])
 
@@ -825,7 +837,8 @@ class STI:
         # print(f"Total refinements: {len(refinements)}")
         merged_dcfs = self.cn_dcfs | self.delta
         max_iter = 0
- 
+        ca = load_pickled_object("test/phi16.pkl")
+        ca.cell_mapping[9] = []
         for f, T in enumerate(refinements):
 
      
@@ -834,6 +847,10 @@ class STI:
             snv_clusters = list({q for _,q in valid_group_snvclusts})
             
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega)
+            segment_tree.draw("test/seg16.png")
+            ca.update_clones(segment_tree.clones())
+            # if len(segment_tree.get_all_muts()) > 199:
+            #     print("here")
 
             all_shortest_paths = dict(nx.all_pairs_shortest_path(segment_tree.tree))
 
@@ -849,12 +866,15 @@ class STI:
             cost  = np.Inf
     
             for i in range(self.max_iterations):
-                ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
+                # ca_cost, ca = self.assign_cell_clusters(segment_tree, snv_clusters )
+                ca_cost = segment_tree.compute_likelihood(self.data, ca,self.lamb1)
                 if i > max_iter:
                     max_iter = i
                 if ca_cost is None:
                     break
                 segment_tree = self.assign_genotypes(segment_tree, ca, tree_assign, snv_clusters, has_path)
+                # if len(segment_tree.get_all_muts()) > 199:
+                #     print("here")
                 updated_cost = segment_tree.compute_likelihood(self.data, ca, lamb=self.lamb1)
                 if updated_cost < cost:
                     best_segtree = deepcopy(segment_tree)
@@ -862,6 +882,7 @@ class STI:
                     cost = updated_cost
                     if cost < opt_cost:
                         opt_cost = cost 
+                    break
                 else:
                     break
 
