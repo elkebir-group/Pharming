@@ -15,9 +15,10 @@ def make_clonal_tree(phert):
     tree = phert.tree
     genotypes = {u: {} for u in tree}
     snvs = set(phert.get_all_muts())
+    snvs = set(int(j) for j in snvs)
     for u in phert.tree:
         present = nx.ancestors(tree, u) | {u}
-        pres_snvs =set(j for v in present for j in phert.mut_mapping[v] )
+        pres_snvs =set(int(j) for v in present for j in phert.mut_mapping[v] )
         not_present = snvs - pres_snvs
         for j in pres_snvs:
             genotypes[u][j] = genotype(1,1,1,0)
@@ -69,8 +70,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    # instance = "s11_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
+    # instance = "s10_m10000_k25_l7"
+    # folder = "n500_c0.25_e0" 
     # ppth = f"simulation_study/input"
 
 
@@ -93,12 +94,15 @@ if __name__ == "__main__":
 
     ct  = make_clonal_tree(phert)
     ca = make_phi(phert)
+
+      
+    # ct.draw("test/phert.png", ca)
+    # gt.draw("test/gt.png", phi)
+
     ct.compute_likelihood(dat,ca, args.lamb )
 
 
-  
-    # ct.draw("test/phert.png", ca)
-    # gt.draw("test/gt.png", phi)
+
     score = score_tree.score_tree(gt, phi, ct, ca, segments=[0])
     index = ['Row1']
     pd.DataFrame(score, index=index).to_csv(args.out, index=False)

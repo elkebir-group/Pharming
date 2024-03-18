@@ -10,15 +10,16 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
-            s =seeds,
-            cells = config["cells"],
-            snvs = config["snvs"],
-            nsegs = config["nsegs"],
-            cov = config["cov"],
-            mclust = config['mclust'],
-            err = config["cerror"]
-        ),
+        # expand("phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
+        #     s =seeds,
+        #     cells = config["cells"],
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     cov = config["cov"],
+        #     mclust = config['mclust'],
+        #     err = config["cerror"]
+        # ),
+        "phertilizer/aggregate_scores.csv"
 
 
     
@@ -73,7 +74,55 @@ rule eval_solutions:
         "-l {params.lamb} "
         "-o {output.scores} > {log.std} 2> {log.err} "
 
+# def extract_wildcards(file_path):
+#     wildcards = {}
+#     parts = file_path.split("/")
+#     for part in parts:
+#         if part.startswith("s") or part.startswith("snvs") or 
+#             part.startswith("nsegs") or part.startswith("mclust") or 
+#             part.startswith("cells") or part.startswith("cov") or 
+#             part.startswith("err"):
+#             key, value = part.split("_")
+#             wildcards[key] = value
+#     return wildcards
 
+
+rule aggregate_scores:
+    input:
+        expand("phertilizer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/scores.csv",
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            err = config["cerror"]
+        ),
+    output:
+        "phertilizer/aggregate_scores.csv"
+    run:
+        # Read each CSV file, skipping missing files
+        dfs = []
+        for file in input:
+            if os.path.exists(file):
+                df = pd.read_csv(file)
+                wildcard_values = snakemake.wildcards
+                df["s"] = wildcard_values["s"]
+                df["snvs"] = wildcard_values["snvs"]
+                df["nsegs"] = wildcard_values["nsegs"]
+                df["mclust"] = wildcard_values["mclust"]
+                df["cells"] = wildcard_values["cells"]
+                df["cov"] = wildcard_values["cov"]
+                df["err"] = wildcard_values["err"]
+            else:
+                print(f"Warning: Input file {file} is missing. Skipping...")
+        
+        # Concatenate dataframes and save as CSV
+        if dfs:
+            result = pd.concat(dfs, ignore_index=True)
+            result.to_csv(output[0], index=False)
+        else:
+            print("No input files found. Skipping aggregation.")
 
 
 

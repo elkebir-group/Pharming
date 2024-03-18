@@ -7,7 +7,7 @@ import utils
 import itertools
 import numpy as np 
 
-from data import Data, load_from_pickle
+from data import Data
 
 
 
