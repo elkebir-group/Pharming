@@ -110,10 +110,15 @@ class GenotypeTree:
             posterior =  EPSILON
         else:
             
-
+            
             v = self.dcf_to_v(dcf, cn_prop)
+            if np.isnan(v):
+                return EPSILON
+            
+            else:
             # posterior = max(beta.logpdf(v, a+1, d-a + 1), self.EPSILON)
-            posterior = max(binom.logpmf(a,d,v),EPSILON)
+                posterior = max(binom.logpmf(a,d,v),EPSILON)
+
         return posterior
   
         
