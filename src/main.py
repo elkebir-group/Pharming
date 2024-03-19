@@ -27,6 +27,13 @@ def main(args):
     else:
         segments = args.segments
 
+    print("\t".join(["seg", "snvs", "cn states"] ))
+    print("-------------------------------------------")
+    for ell in segments:
+        print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}")
+    
+    segments = [ell for ell in segments if dat.num_snvs(ell) > 75]
+
 
     if args.delta is not None:
         dlist = {}

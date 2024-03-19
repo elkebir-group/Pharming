@@ -37,15 +37,15 @@ class Pharming:
             
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
-                all_trees =  self.enumerate_mutcluster_trees()
-                choices = self.rng.choice(len(all_trees), size=2)
-                sample_trees = [all_trees[i] for i in choices]
-                for i,t in enumerate(sample_trees):
+                # all_trees =  self.enumerate_mutcluster_trees()
+                # choices = self.rng.choice(len(all_trees), size=1)
+                # sample_trees = [all_trees[i] for i in choices]
+                # for i,t in enumerate(sample_trees):
                
-                    if len(set(T_m.edges).difference(t.edges))==0:
-                        print(f"sampled tree {i} is ground truth tree")
-                        raise Exception("sampled tree is ground truth tree")
-                self.scriptTm += sample_trees
+                #     if len(set(T_m.edges).difference(t.edges))==0:
+                #         print(f"sampled tree {i} is ground truth tree")
+                #         raise Exception("sampled tree is ground truth tree")
+                # self.scriptTm += sample_trees
 
             
             for T_m in self.scriptTm:
@@ -166,7 +166,9 @@ class Pharming:
             trees = st.fit(self.data, ell)
             all_trees.append(trees)
         print(f"Segment {ell} complete!")
-        return get_top_n(all_trees, self.top_n)
+        segtrees = get_top_n(all_trees, self.top_n)
+        pickle_object(segtrees, f"test/segtrees{ell}.pkl")
+        return segtrees
 
 
     def segment_trees_inference(self, Tm, segments):
@@ -232,7 +234,10 @@ class Pharming:
 
         
         if ninit_segs < len(segments):
-            init_segs = self.data.get_largest_segments( ninit_segs, min_cn_states=3)
+      
+            init_segs = sorted([ell for ell in segments if data.num_cn_states(ell) >= 3], reverse=True, key= lambda x: data.num_snvs(x))
+            if len(init_segs) > ninit_segs:
+                init_segs = init_segs[:ninit_segs]
         else:
             init_segs = segments
       
@@ -246,10 +251,14 @@ class Pharming:
             segtrees = self.segment_trees_inference(Tm, segments=init_segs)
             # pickle_object(segtrees, "test/segrees_ilp.pkl")
             top_trees = self.integrate(Tm, segtrees)
-            best_cost = top_trees[0].cost
-            print(f"Integration complete for tree Tm_{i}: {best_cost}")
-            costs.append(best_cost)
-            init_trees.append(top_trees)
+            if len(top_trees) > 0:
+                best_cost = top_trees[0].cost
+                print(f"Integration complete for tree Tm_{i}: {best_cost}")
+                costs.append(best_cost)
+                init_trees.append(top_trees)
+            else:
+                print(f"Integration failed for Tm_{i}")
+                costs.append(np.Inf)
 
       
         #identify the mutation cluster trees that yield minimum cost over the initial segments
