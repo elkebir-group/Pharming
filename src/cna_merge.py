@@ -41,9 +41,9 @@ class CNA_Merge:
         #     draw(self.T1, "test/T1.png")
         #     draw(self.T2, "test/T2.png")
         
-        for n in self.T2:
-            if n > 8 and n in self.T1:
-                print("here")
+        # for n in self.T2:
+        #     if n > 8 and n in self.T1:
+        #         print("here")
 
 
      
@@ -51,15 +51,15 @@ class CNA_Merge:
         # if self.verbose:
         #     draw(T, "test/current_tree.png")
 
-        if not all(n in T for n in self.all_nodes):
-            pickle_object(self, "test/cnmerge.pkl")
-            for n in self.all_nodes:
-                if n not in T:
-                     print(f" node {n} not in node mapping")
-            draw(T, "test/current_tree.png")
-            draw(self.T1, "test/T1.png")
-            draw(self.T2, "test/T2.png")
-        # assert all(n in T for n in self.all_nodes)
+        # if not all(n in T for n in self.all_nodes):
+        #     pickle_object(self, "test/cnmerge.pkl")
+        #     for n in self.all_nodes:
+        #         if n not in T:
+        #              print(f" node {n} not in node mapping")
+        #     draw(T, "test/current_tree.png")
+        #     draw(self.T1, "test/T1.png")
+        #     draw(self.T2, "test/T2.png")
+        assert all(n in T for n in self.all_nodes)
            
         # for n in T:
             # if T.in_degree[n] > 1:

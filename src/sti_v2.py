@@ -83,8 +83,8 @@ class STI:
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
         self.cn_states = {}
-        self.k = len(self.delta)
-        for i, u in enumerate(self.S):
+        self.k = max(self.delta)
+        for i, u in enumerate(nx.dfs_preorder_nodes(self.S, self.S_root)):
             self.cn_states[u] = self.k +i + 1 
         
         self.cn_states_inv = {val: key for key,val in self.cn_states.items()}
@@ -359,10 +359,10 @@ class STI:
 
     def identify_snv_cluster_trees(self,T):
         '''
-        Given a networkx tree labeled by (q, (x,y)),
+        Given a networkx DiGraph tree labeled by (q, (x,y)),
         return a set of tuples (q, g) where the SNV clusters are introduced
         '''
-  
+        rho = {}
         root = (-1, (self.S_root))
         sscn = {}
         children = {}
@@ -388,7 +388,9 @@ class STI:
                     #     groups[g].append(q)
                     # else:
                     #     groups[g] = [q]
-        return groups 
+        for g,q in groups:
+            rho[q] = self.T_SNVs[g]
+        return groups, rho 
     
 
     def cluster_snvs(self, snv_costs, valid_groups_snvclusts, tree_assign):
@@ -615,7 +617,6 @@ class STI:
                 return g
         return None
 
-    # @timeit_decorator
     def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters, has_path):
         # T=  deepcopy(segtree)
         cna_genos = segtree.get_cna_genos()[self.ell]
@@ -696,86 +697,6 @@ class STI:
         #     segtree.draw("test/bad_ct.png", ca, segments = [self.ell])
 
         return segtree 
-    # def assign_genotypes(self, segtree, ca, tree_assign, snv_clusters):
-    #     T=  deepcopy(segtree)
-    #     cna_genos = segtree.get_cna_genos()[self.ell]
-    #     cell_counts  = ca.get_cell_count()
-    #     clones  = segtree.clones()
-        
-    #     # def get_group(q):    
-    #     #     sscn = cna_genos[q].to_tuple()
-    #     #     children_states = []
-    #     #     for u in segtree.preorder(q):
-    #     #         if u !=q:
-    #     #             cn_state = cna_genos[u].to_tuple()
-    #     #             if cn_state not in children_states and cn_state != sscn:
-    #     #                 children_states.append(cn_state)
-    #     #     for g in self.group_desc:
-    #     #         if sscn == self.group_desc[g]['sscn']:
-    #     #             if set(children_states) == self.group_desc[g]['children']:
-    #     #                 return g
-  
-          
-    #     def get_vafs(q,j,snv_tree):
-    #         vafs = {}
-            
-    #         for u in clones:
-    #             if cell_counts[u] > 0:
-    #                 if nx.has_path(segtree.tree, u, q) and u !=q:
-    #                     vafs[u] =0
-    #                     continue
-    #                 if nx.has_path(segtree.tree, q,u):
-    #                     cn_state = cna_genos[u].to_tuple()
-    #                     added = False
-    #                     for v in snv_tree.preorder():
-    #                         geno = snv_tree.genotypes[v][j]
-    #                         if (geno.x, geno.y) == cn_state and geno.z > 0:
-    #                             vafs[u] = geno.vaf
-    #                             added = True
-    #                             break 
-    #                     if not added:
-    #                         vafs[u] =0 #loss occurred 
-    #                 else:
-    #                     vafs[u] =0
-    #         return vafs 
-        
-
-        
-    #     psi = segtree.get_psi()
-    #     for j in self.snvs:
-    #         # if j ==384:
-    #         #     print("here")
-    #         best_cost = np.Inf
-    #         vafs = {}
-    #         for q in snv_clusters:
-    #             #get group of q 
-    #             g = self.get_group(segtree.tree, cna_genos, q)
-    #             # g = get_group(q)
-    #             #get the optimal snv tree for snv j in group of q
-    #             snv_tree = tree_assign[g][j][0]
-    #             vafs = get_vafs(q, j, snv_tree)
-           
-    #             #get latent vaf of each node in nonempty clones
-    #             cost = 0
-    #             for u in ca.clones:
-    #                 if cell_counts[u] > 0:
-    #                     cells = ca.get_cells(u)
-    #                     cell_costs = self.data.binomial_likelihood(cells, [j], vafs[u])
-    #                     cost += cell_costs.sum()
-    #             if cost < best_cost:
-    #                 new_node = q 
-    #                 best_cost = cost 
-    #                 best_group = g
-    #         if psi[j] != new_node:
-    #             # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
-                
-    #             T.update_genotype(new_node, j,tree_assign[best_group][j][0])
-        
-    #     T.update_mappings()
-    #     if   len(T.mut_mapping[T.root]) > 0:
-    #         T.draw("test/bad_ct.png", ca, segments = [self.ell])
-
-    #     return T 
                 
     def get_cn_dcfs(self):
         obs_copy_x, obs_copy_y =  self.data.copy_profiles_by_seg([self.ell], self.data.cells)
@@ -842,7 +763,7 @@ class STI:
         for f, T in enumerate(refinements):
 
      
-            valid_group_snvclusts = self.identify_snv_cluster_trees(T)
+            valid_group_snvclusts, rho = self.identify_snv_cluster_trees(T)
             alpha_inv, omega = self.cluster_snvs(all_costs, valid_group_snvclusts, tree_assign)
             snv_clusters = list({q for _,q in valid_group_snvclusts})
             
@@ -882,7 +803,7 @@ class STI:
                     cost = updated_cost
                     if cost < opt_cost:
                         opt_cost = cost 
-                    break
+              
                 else:
                     break
 

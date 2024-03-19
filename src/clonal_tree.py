@@ -855,6 +855,110 @@ class ClonalTree:
         ca = CellAssign(phi, self.clones())
         self.cost = obj
         return obj, ca 
+    
+    
+    def get_path_map(self):
+            all_shortest_paths = dict(nx.all_pairs_shortest_path(self.tree))
+
+      
+            clones = self.clones()
+            has_path = {(u, v): v in all_shortest_paths[u] for u in clones for v in clones}
+            return has_path
+    
+    @staticmethod
+    def get_vafs(q, j, snv_tree, clones, cna_genos, has_path):
+        vafs = np.zeros(len(clones))
+
+        for idx, u in enumerate(clones):
+        
+            if has_path[u,q] and u != q:
+                continue
+            if has_path[q,u]:
+                cn_state = cna_genos[u].to_tuple()
+                for v in snv_tree.preorder():
+                    geno = snv_tree.genotypes[v][j]
+                    if (geno.x, geno.y) == cn_state and geno.z > 0:
+                        vafs[idx] = geno.vaf
+                        break
+        return vafs 
+    
+    def assign_genotypes(self, data, seg_to_snvs, ca, rho, snv_clusters):
+
+        has_path = self.get_path_map()
+        cell_counts  = ca.get_cell_count()
+        clones  = [u for u in self.clones() if cell_counts[u] >0]
+        psi = self.get_psi()
+
+      
+
+  
+            # clust_groups = {}
+            # all_cluster_costs = []
+            # for q in snv_clusters:
+            #     g = self.get_group(self.tree, cna_genos, q)
+            #     clust_groups[q] = g
+
+            #     vaf_list = []
+            #     for j in self.snvs:
+            #         snv_tree = tree_assign[g][j][0]
+            #         vafs = get_vafs(q, j, snv_tree)
+            #         vaf_list.append(vafs)
+        tree_assign = {}
+        for ell, snvs in self.seg_to_snvs:
+            cna_genos = self.get_cna_genos()[ell]
+            vaf_list = []
+            for q in snv_clusters:
+               all_tree_costs = []
+               for i,snv_tree in enumerate(rho[q]):
+            
+                    for j in self.snvs:
+           
+                        vafs = self.get_vafs(q, j, snv_tree, snv_clusters, cna_genos,has_path)
+                        vaf_list.append(vafs)
+
+                        all_vafs = np.vstack(vaf_list).T
+
+                        cluster_costs = np.zeros(shape= len(self.snvs))
+                        assert all_vafs.shape[0] == len(clones)
+
+                    for i,u in enumerate(clones):
+                        cells = ca.get_cells(u)
+                        clone_cost = self.data.binomial_likelihood(cells, self.snvs, all_vafs[i,:], axis=0)
+                        cluster_costs += clone_cost
+                
+                    all_tree_costs.append(cluster_costs)
+                #pick the best tree per each SNV and store the index
+                all_tree_costs
+            
+            
+            clust_costs = np.vstack(all_cluster_costs)
+
+            snv_cluster_assign = clust_costs.argmin(axis=0)
+            moved_snvs = []
+            for j,q in zip(self.snvs, snv_cluster_assign): 
+                opt_clust = snv_clusters[q]
+                if psi[j] != opt_clust:
+                    moved_snvs.append(j)
+                    # if j == 68:
+                    #     print("68")
+                    #     print(tree_assign[clust_groups[opt_clust]][j][0])
+                    # snv_tree.draw("test/snv_tree.png", segments=[self.ell])
+                    
+                    self.update_genotype(opt_clust, j,tree_assign[clust_groups[opt_clust]][j][0])
+            
+            self.update_mappings()
+            
+            if len(self.get_all_muts()) > len(self.snvs):
+                from collections import Counter
+                lst = self.get_all_muts()
+                counts = Counter(lst)
+                duplicates = [item for item, count in counts.items() if count > 1]
+                print(duplicates)
+                print( set(duplicates)  == set(moved_snvs))
+        # if   len(self..mut_mapping[self..root]) > 0:
+        #     self..draw("test/bad_ct.png", ca, segments = [self.ell])
+
+        # return self
 
     def compute_likelihood(self, data,  cellAssign, lamb=0):
 
@@ -943,7 +1047,7 @@ class ClonalTree:
     def update_genotype(self, node, j, snv_tree):
         cna_geno = self.get_cna_genos()[self.mut_to_seg[j]]
         # if j == 68:
-        #     self.draw("test/segtree.png", segments=[2])
+        #     self.draw("test/self..png", segments=[2])
         #     snv_tree.draw("test/snv_tree68.png", segments=[2])
 
         pres_nodes = []
