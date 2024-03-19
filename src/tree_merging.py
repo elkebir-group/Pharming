@@ -2,7 +2,7 @@
 import numpy as np
 from cna_merge import CNA_Merge
 import itertools
-from utils import get_top_n
+from utils import get_top_n, pickle_object
 import multiprocessing
 
 RANDOM = 'random'
@@ -66,6 +66,12 @@ class ClonalTreeMerging:
     def merge_parallel(self, tree1, tree2):
         cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
         merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+        # try:
+  
+        # except:
+        #     pickle_object(cnm, "test/cnm.pkl")
+        #     pickle_object(self.data, "test/data.pkl")
+            # assert False 
         return merged_tree_list
 
     def merge_helper(self, tree_list1, tree_list2):

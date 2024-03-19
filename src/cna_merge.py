@@ -17,7 +17,10 @@ class CNA_Merge:
         self.CT2 = T2
         self.T1 = T1.get_tree()
         self.T_m = nx.DiGraph(Tm_edges)
+        # draw(self.T_m, "test/Tm.png")
         self.T2 = T2.get_tree()
+        # draw(self.T1, "test/T1_pre.png")
+        # draw(self.T2, "test/T2_pre.png")
         self.genotypes1 = T1.get_genotypes()
         self.genotypes2 = T2.get_genotypes()
         self.snvs1 = T1.get_all_muts()
@@ -38,12 +41,12 @@ class CNA_Merge:
 
         self.verbose = verbose 
         # if self.verbose:
-        #     draw(self.T1, "test/T1.png")
-        #     draw(self.T2, "test/T2.png")
+        # draw(self.T1, "test/T1.png")
+        # draw(self.T2, "test/T2.png")
         
-        for n in self.T2:
-            if n > 8 and n in self.T1:
-                print("here")
+        # for n in self.T2:
+        #     if n > 8 and n in self.T1:
+        #         print("here")
 
 
      
@@ -132,6 +135,19 @@ class CNA_Merge:
         all_trees = self.enumerate_trees()
         all_results = []
         for tree in all_trees:
+            if not all(tree.in_degree[n] <=1 for n in tree):
+           
+                draw(tree, "test/tree.png")
+                draw(self.T1, "test/T1.png")
+                draw(self.T2, "test/T2.png")
+                draw(self.T_m, "test/Tm.png")
+                print("Warning: clonal trees are incompatible!")
+                continue
+                # dd = self.get_desc_dict()
+                # for key, val in dd.items():
+                #     print(f"{key}:{val}")
+                # foo = self.enumerate_trees()
+
             sol= self.construct_clonal_tree(tree, data, lamb)
             all_results.append(sol)
         
@@ -165,6 +181,7 @@ class CNA_Merge:
             tree = nx.compose_all(list(trees))
             all_trees.append(tree)
             # draw(tree, "test/tree.png")
+        
         return all_trees
         
     

@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
-from collections import Counter, defaultdict 
+from collections import Counter
 from itertools import product, chain, combinations
 import pickle 
 import pygraphviz as pgv
@@ -129,20 +129,6 @@ class ClonalTree:
         
         self.root= self.find_root()
 
-        #double check that all snvs have the same CNA copy number profile for each node
-        # for v in self.tree:
-        #     cna_genos =[self.genotypes[v][j].to_CNAgenotype().to_tuple() for j in self.genotypes[v]]
-        #     assert all(t == cna_genos[0] for t in cna_genos)
-
-        
-
-        # if cell_mapping is None:
-        #     self.cell_mapping = {}
-            
-        # else:    
-        #     self.cell_mapping = cell_mapping
-
-
         self.mut_mapping, self.mut_loss_mapping = self.get_mut_mapping()
         self.psi = self.get_psi()
 
@@ -151,8 +137,6 @@ class ClonalTree:
         self.snv_cost = np.Inf
         self.cna_cost = np.Inf
     
-
-        # self.snv_cost_func = self.compute_node_likelihoods
 
     
     def __str__(self) -> str:
@@ -502,11 +486,6 @@ class ClonalTree:
         for u in not_present:
             self.genotypes[u][j] =  self.cna_genotypes[seg][u].to_genotype(0,0)
         
-
-
-
-
-        
     
 
     def clones(self):
@@ -515,19 +494,12 @@ class ClonalTree:
     def is_leaf(self,node):
         return self.tree.out_degree[node] ==0
     
-    # def get_phi(self):
-    #      self.phi = {i : k  for k, cells in self.cell_mapping.items() for i in cells}
-    #      return self.phi
+
     
     def get_psi(self):
          self.psi = {m : k  for k, snvs in self.mut_mapping.items()  for m in snvs}
          return self.psi
 
-    # def phi_to_cell_mapping(self, phi):
-    #     self.phi = phi 
-    #     self.cell_mapping = {v: [] for v in self.tree}
-    #     for i, v in self.phi.items():
-    #         self.cell_mapping[v].append(i)
       
     
     def get_muts(self,node):
@@ -583,22 +555,10 @@ class ClonalTree:
     def get_key(self):
         return self.key 
 
-    # def has_loss(self):
-    #     return len(self.mut_loss_mapping) > 0
 
     def has_snvs(self, n):
         return len(self.mut_mapping[n]) > 0
     
-    # def set_cell_mapping(self, cell_mapping):
-    #     self.cell_mapping  = cell_mapping
-    #     # self.psi = self.get_psi()
-    #     self.phi = self.get_phi()
-    #     # print("Warning, cost is not automatically updated, ensure cost is manually set.")
-
-    # def clear_cell_mapping(self):
-    #     self.phi = {}
-    #     self.cell_mapping = {}
-    #     self.cost = np.Inf
 
     def prune(self, cellAssign):
         counts = cellAssign.get_cell_count()
@@ -667,17 +627,7 @@ class ClonalTree:
                             lost.add(j)
 
 
-                    # for m, geno in self.genotypes[v].items():
-                    # if m not in muts:
-                    #     muts.append(m)
-                    # # if m in [523, 792, 451,831]:
-                    # #     print(m)
-                    # if geno.z > 0 and m not in gained:
-                    #     mut_mapping[v].append(m)
-                    #     gained.append(m)
-                    # if m in gained and geno.z ==0 and m not in lost:
-                    #     mut_loss_mapping[v].append(m)
-                    #     lost.append(m)
+               
         missing= muts - (gained.union(lost))
         if len(missing) > 0:
             print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")

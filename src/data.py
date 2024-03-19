@@ -117,6 +117,9 @@ class Data:
         total = {cn: self.total[np.ix_(cells, snvs)].sum(axis=0) for cn,cells in cell_map.items()}
 
         return snvs, alt, total
+    
+    def num_snvs(self, ell):
+        return len(self.seg_to_snvs[ell])
 
     def count_cells_by_snv(self, seg):
         snvs = self.seg_to_snvs[seg]
@@ -183,12 +186,12 @@ class Data:
         return cn_props
         
 
-    def get_largest_segments(self,n =2,  min_cn_states=3):
-        cand_segments = [ell for ell in self.segments if self.num_cn_states(ell) >= min_cn_states ]
-        if len(cand_segments) < n:
-            return cand_segments
-        cand_segments = sorted(cand_segments, reverse=True, key=lambda x: len(self.seg_to_snvs[x]))
-        return cand_segments[:n]
+    # def get_largest_segments(self,n =2,  min_cn_states=3):
+    #     cand_segments = [ell for ell in self.segments if self.num_cn_states(ell) >= min_cn_states ]
+    #     if len(cand_segments) < n:
+    #         return cand_segments
+    #     cand_segments = sorted(cand_segments, reverse=True, key=lambda x: len(self.seg_to_snvs[x]))
+    #     return cand_segments[:n]
 
 
     def save(self, fname):

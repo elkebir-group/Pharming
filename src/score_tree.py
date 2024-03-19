@@ -12,8 +12,10 @@ from copy import deepcopy
 
 
 
-def score_tree(gt, gt_phi, inf,inf_phi, segments):
-      
+def score_tree(gt, gt_phi, inf,inf_phi, segments=None):
+        if segments is None:
+              segments = inf.get_segments()
+        gt.filter_snvs(inf.get_all_muts())
         scores = gt.score_snvs(inf)
         # scores["tree"] = i
         scores["segment"] = ":".join([str(ell) for ell in segments])
@@ -43,12 +45,13 @@ def compare_CNA_trees(gt, inf, segment):
 
 def eval_segtree(gt, gt_phi, sol, segment, dat, lamb=1e3):
     snvs = sol.ct.seg_to_muts[segment]
-    sol.ct.filter_snvs(snvs)
-    sol.ct.compute_likelihood(dat, sol.phi, lamb)
+    # sol.ct.filter_snvs(snvs)
+    # sol.ct.compute_likelihood(dat, sol.phi, lamb)
     gt.filter_snvs(snvs)
-    gt.prune(gt_phi)
-    cost = gt.compute_likelihood(dat, gt_phi, lamb)
-    # gt.draw(f"test/seg{segment}_gt.png", gt_phi, segments=[segment], include_dcfs=True)
+
+    # gt.prune(gt_phi)
+    _ = gt.compute_likelihood(dat, gt_phi, lamb)
+    gt.draw(f"test/seg{segment}_gt.png", gt_phi, segments=[segment], include_dcfs=True)
 
 
 
@@ -81,6 +84,13 @@ def save_psi(gt, inf, fname):
       print(df.head())
       df.to_csv(fname, index=False)
 
+def seg_score_wrapper(segtrees, ell):
+    seg_scores = []
+    segtrees[0].png(f"test/seg_inf{ell}.png")
+    for sol in segtrees:
+
+          seg_scores.append(eval_segtree(deepcopy(gt), phi, sol, ell, dat, lamb))
+    return seg_scores
 
 if __name__ == "__main__":
 
@@ -106,7 +116,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    instance = "s11_m5000_k25_l7"
+    instance = "s11_m5000_k25_l5"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
@@ -114,11 +124,11 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-t", f"{pth}/{instance}/gt.pkl",
-        "-c", f"{pth}/{instance}/{folder}/cellAssign.pkl",
+        "-t", f"{pth}/{instance}/{folder}/gt.pkl",
+        "-c", f"{pth}/{instance}/{folder}/phi.pkl",
         # "-s", "14",
         # "--segment", "0",
-        "-o", f"/Users/leah/Documents/Research/projects/Pharming/test/tree_scores.csv",
+        "-o", "test/tree_scores.csv",
         "-S", f"test/solution.pkl",
 
     ])
@@ -153,12 +163,21 @@ if __name__ == "__main__":
 
     cost = gt.compute_likelihood(dat, phi, lamb)
 
-    seg16map = {8:8, 4:3, 3:3, 0:0, 1:1, 2:2, 6:5, 7:6, 5:4 }
-    from copy import deepcopy
-    phi16 = deepcopy(phi)
-    phi16.relabel_clones(seg16map)
-    from utils import pickle_object
-    pickle_object(phi16, "test/phi16.pkl")
+    # mysegs = [0,1,2,11,13,14,18,24]
+    # all_scores = []
+    # for ell in mysegs:
+    #       segtrees = load_pickled_object(f"test/segtrees{ell}.pkl")
+    #       all_scores += seg_score_wrapper(segtrees, ell)
+
+    # pd.DataFrame(all_scores).to_csv("test/segtree_scores.csv", index=False)    
+
+
+    # seg16map = {8:8, 4:3, 3:3, 0:0, 1:1, 2:2, 6:5, 7:6, 5:4 }
+    # from copy import deepcopy
+    # phi16 = deepcopy(phi)
+    # phi16.relabel_clones(seg16map)
+    # from utils import pickle_object
+    # pickle_object(phi16, "test/phi16.pkl")
 
 
     
@@ -182,19 +201,20 @@ if __name__ == "__main__":
     
     # pd.DataFrame(results).to_csv("test/segtree_scores.csv", index=False)      
 
-    sol_list =   load_pickled_object("test/solution_ilp.pkl")
-    ell = 16
-    num_cn_states = dat.num_cn_states(ell)
-    results= []
-    gt_seg = deepcopy(gt)
-    seg_scores = []
-    gt.filter_snvs(dat.seg_to_snvs[ell])
-    save_psi(gt, sol_list[0].ct, "test/psi_comp.csv")
-    for sol in sol_list:
-        scores = eval_segtree(gt_seg, phi, sol,ell, dat, lamb )
-        scores["num_cn_states"] = num_cn_states 
-        results.append(scores)
-    pd.DataFrame(results).to_csv("test/segtree16_scores.csv", index=False)  
+
+    # ell = 16
+    # num_cn_states = dat.num_cn_states(ell)
+    # results= []
+    # gt_seg = deepcopy(gt)
+    # seg_scores = []
+    # gt.filter_snvs(dat.seg_to_snvs[ell])
+    # save_psi(gt, sol_list[0].ct, "test/psi_comp.csv")
+    # for sol in sol_list:
+    #     scores = eval_segtree(gt_seg, phi, sol,ell, dat, lamb )
+    #     scores["num_cn_states"] = num_cn_states 
+    #     results.append(scores)
+    # pd.DataFrame(results).to_csv("test/segtree16_scores.csv", index=False)  
+
     # segtrees  = load_pickled_object("test/segrees_ilp.pkl")
     # seg_scores = []
     # for seglist in segtrees:
@@ -204,18 +224,19 @@ if __name__ == "__main__":
     # pd.DataFrame(seg_scores).to_csv("test/seg_scores_ilp.csv", index=False)
     # print("done")
 
- 
+    sol_list =   load_pickled_object("test/top_trees.pkl")
     for i,best_sol in enumerate(sol_list):
-            ell=2
+ 
 
-            best_sol.png(f"test/seg{ell}_inf{i}.png")
-        # for ell in best_sol.ct.get_segments():
-            seg_scores.append(eval_segtree(deepcopy(gt), phi, deepcopy(best_sol), ell, dat, lamb))
-    pd.DataFrame(seg_scores).to_csv("test/seg_scores.csv", index=False)
+            best_sol.png(f"test/inf{i}.png")
+
+    #     # for ell in best_sol.ct.get_segments():
+    #         scores.append(eval_segtree(deepcopy(gt), phi, deepcopy(best_sol), ell, dat, lamb))
+    # pd.DataFrame(seg_scores).to_csv("test/seg_scores.csv", index=False)
 
           
 
-    score_results= [score_tree(gt, phi, sol.ct, sol.phi, segments=eval_segs) for sol in sol_list]
+    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
     pd.DataFrame(score_results).to_csv(args.out, index=False)
 
     print("done")
