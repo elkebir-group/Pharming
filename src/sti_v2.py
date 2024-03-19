@@ -83,7 +83,7 @@ class STI:
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
         self.cn_states = {}
-        self.k = max(self.delta)
+        self.k = len(self.delta)
         for i, u in enumerate(nx.dfs_preorder_nodes(self.S, self.S_root)):
             self.cn_states[u] = self.k +i + 1 
         
@@ -803,7 +803,7 @@ class STI:
                     cost = updated_cost
                     if cost < opt_cost:
                         opt_cost = cost 
-              
+                    # break
                 else:
                     break
 
