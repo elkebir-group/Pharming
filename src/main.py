@@ -5,7 +5,6 @@
 import argparse
 from data import Data
 from pharming import Pharming
-# import os 
 from utils import load_pickled_object, pickle_object
 import networkx as nx
 
@@ -83,7 +82,7 @@ def main(args):
                 )
 
   
-    solutions, best_costs = ph.fit(dat,args.lamb, segments, cores=args.cores, ninit_segs=args.ninit_segs)
+    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, ninit_segs=args.ninit_segs)
 
 
     if args.scores is not None:
@@ -101,9 +100,6 @@ def main(args):
         for i,sol in enumerate(solutions):
             sol.png(f"{args.out}/ct{i}.png")
 
-        with open(f"{args.out}/best_costs.txt", "w+") as file:
-            for b in best_costs:
-                file.write(f"{b}\n")
 
      
 
@@ -168,7 +164,7 @@ if __name__ == "__main__":
     
 
 
-    instance = "s11_m5000_k25_l5"
+    instance = "s11_m5000_k25_l7"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
@@ -184,12 +180,13 @@ if __name__ == "__main__":
         "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
         "-T", f"{pth}/{instance}/{folder}/Tm.txt",
         "-n", "3",
-        # "-L",  "16", # "10", "20", "24",
+        # "-L",  "16", "10", "20", "24",
+        "--ninit-segs", "2",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/scores.csv",
-        "-P", f"{gtpth}/solution.pkl",
+        "-J", f"{gtpth}/scores_test.csv",
+        "-P", f"{gtpth}/solution_test.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "-O", f"{gtpth}"
 

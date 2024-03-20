@@ -6,10 +6,11 @@ from utils import get_top_n, pickle_object
 import multiprocessing
 
 RANDOM = 'random'
-NSNVS = 'N_SNVS'
+NSNVS = 'nsnvs'
+INPLACE = "in place"
 
 class ClonalTreeMerging:
-    def __init__(self, rng=None, seed=1026, order = 'random', progressive=True, top_n=1,
+    def __init__(self, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
         n_orderings=5 ):
         
         if rng is not None:
@@ -23,7 +24,7 @@ class ClonalTreeMerging:
     
     
         
-        if order not in ['random', 'N_SNVS']:
+        if order not in [RANDOM, NSNVS, INPLACE]:
             self.order = RANDOM
         else:
             self.order = order 
@@ -53,13 +54,15 @@ class ClonalTreeMerging:
         if self.order == RANDOM:
             for _ in range(self.n_orderings):
                 permutated_order = self.rng.permutation(len(tree_list))
-                permutated_list = [tree_list[i] for i in permutated_order]
+                ordered_list = [tree_list[i] for i in permutated_order]
         
-                cand_merged_lists.append(self.merge(permutated_list))
         else:
-            #sort the trees according to other criteria, like number of SNVs or normalized costs
-            pass 
+                ordered_list = tree_list
 
+            
+            #sort the trees according to other criteria, like number of SNVs or normalized costs
+            # pass 
+        cand_merged_lists.append(self.merge(ordered_list))
         return  get_top_n(cand_merged_lists, self.top_n)
 
 
@@ -86,6 +89,8 @@ class ClonalTreeMerging:
                 for tree1, tree2 in itertools.product(tree_list1, tree_list2):
                     cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
                     merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+                    # for sol in merged_tree_list:
+                    #     sol.optimize(self.data, self.lamb)
                     candidates.append(merged_tree_list)
             else:
                 arguments = [(tree1, tree2) for tree1, tree2 in itertools.product(tree_list1, tree_list2)]
