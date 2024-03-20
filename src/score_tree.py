@@ -16,6 +16,7 @@ def score_tree(gt, gt_phi, inf,inf_phi, segments=None):
         if segments is None:
               segments = inf.get_segments()
         gt.filter_snvs(inf.get_all_muts())
+        _ = gt.compute_likelihood(dat, gt_phi, lamb)
         scores = gt.score_snvs(inf)
         # scores["tree"] = i
         scores["segment"] = ":".join([str(ell) for ell in segments])
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    instance = "s11_m5000_k25_l5"
+    instance = "s11_m5000_k25_l7"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
@@ -128,7 +129,7 @@ if __name__ == "__main__":
         "-c", f"{pth}/{instance}/{folder}/phi.pkl",
         # "-s", "14",
         # "--segment", "0",
-        "-o", "test/tree_scores.csv",
+        "-o", "test/tree_scores_all.csv",
         "-S", f"test/solution.pkl",
 
     ])
@@ -143,23 +144,23 @@ if __name__ == "__main__":
     dat = load_pickled_object(args.data)
 
 
-    if args.segment is None:
-        eval_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
-    else:
-        eval_segs = args.segment 
+    # if args.segment is None:
+    #     eval_segs = [ell for ell in dat.segments if dat.num_cn_states(ell) > 1]
+    # else:
+    #     eval_segs = args.segment 
 
-    snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in eval_segs]))
+    # snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in eval_segs]))
 
     gt = load_pickled_object(args.tree)
     phi = load(args.cell_assign)
 
-    gt.reindex_snvs(dat.mut_lookup)
+    # gt.reindex_snvs(dat.mut_lookup)
 
     phi.relabel(dat.cell_lookup)
     gt_dcfs = gt.compute_dcfs(phi)
     root = gt.root
 
-    gt.filter_snvs(snvs)
+    # gt.filter_snvs(snvs)
 
     cost = gt.compute_likelihood(dat, phi, lamb)
 
@@ -224,11 +225,10 @@ if __name__ == "__main__":
     # pd.DataFrame(seg_scores).to_csv("test/seg_scores_ilp.csv", index=False)
     # print("done")
 
-    sol_list =   load_pickled_object("test/top_trees.pkl")
-    for i,best_sol in enumerate(sol_list):
+    # for i,best_sol in enumerate(sol_list):
  
 
-            best_sol.png(f"test/inf{i}.png")
+    #         best_sol.png(f"test/inf{i}.png")
 
     #     # for ell in best_sol.ct.get_segments():
     #         scores.append(eval_segtree(deepcopy(gt), phi, deepcopy(best_sol), ell, dat, lamb))
@@ -236,6 +236,9 @@ if __name__ == "__main__":
 
           
 
+    sol_list =   load_pickled_object(args.solutions)
+    for sol in sol_list:
+          print(len(sol.ct.get_all_muts()))
     score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
     pd.DataFrame(score_results).to_csv(args.out, index=False)
 
