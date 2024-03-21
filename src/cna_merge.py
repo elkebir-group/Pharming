@@ -27,6 +27,7 @@ class CNA_Merge:
         self.snvs2 = T2.get_all_muts()
         self.old_to_new, self.new_to_old = {}, {}
         self.seg_to_snvs = T1.get_seg_to_muts() | T2.get_seg_to_muts()
+        self.rho = T1.rho | T2.rho
         self.k = max(self.T_m)
         # assert self.k <= 8
         starting_node = max(self.T1)
@@ -54,15 +55,15 @@ class CNA_Merge:
         # if self.verbose:
         #     draw(T, "test/current_tree.png")
 
-        if not all(n in T for n in self.all_nodes):
-            pickle_object(self, "test/cnmerge.pkl")
-            for n in self.all_nodes:
-                if n not in T:
-                     print(f" node {n} not in node mapping")
-            draw(T, "test/current_tree.png")
-            draw(self.T1, "test/T1.png")
-            draw(self.T2, "test/T2.png")
-        # assert all(n in T for n in self.all_nodes)
+        # if not all(n in T for n in self.all_nodes):
+        #     pickle_object(self, "test/cnmerge.pkl")
+        #     for n in self.all_nodes:
+        #         if n not in T:
+        #              print(f" node {n} not in node mapping")
+        #     draw(T, "test/current_tree.png")
+        #     draw(self.T1, "test/T1.png")
+        #     draw(self.T2, "test/T2.png")
+        assert all(n in T for n in self.all_nodes)
            
         # for n in T:
             # if T.in_degree[n] > 1:
@@ -120,7 +121,7 @@ class CNA_Merge:
                     genos[n][j] = genotype(*geno)
  
         
-        ct = ClonalTree(T, genos, self.seg_to_snvs.copy())
+        ct = ClonalTree(T, genos, self.seg_to_snvs.copy(), rho=self.rho)
 
                 
                 
