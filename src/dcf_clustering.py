@@ -6,10 +6,11 @@ import clonelib
 import networkx as nx
 import math
 import argparse
-from data import Data, load_from_pickle
+from data import Data
 from scipy.optimize import linear_sum_assignment
 import csv
 import pickle
+import pandas as pd
 
 TOLERANCE = 1e-03
 EPSILON = -1e40
@@ -291,9 +292,9 @@ class DCF_Clustering:
 
 def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts):
     print(data_path)
-    data = load_from_pickle(data_path)
+    data = pd.read_pickle(data_path)
     ground_truth = read_ground_truth_text_file(ground_truth_path)
-    k = len(ground_truth)
+    k = [len(ground_truth)]
     dec = DCF_Clustering(nrestarts=num_restarts, seed=21, verbose=True)
     all_results = dec.run(data, k_vals=k)
     dcfs = all_results[1]
@@ -339,7 +340,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the main function with provided arguments
-    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, num_restarts)
+    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, args.num_restarts)
 
 
      #load in pickled data object 

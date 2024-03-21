@@ -25,6 +25,9 @@ class Solution:
     def get_tree(self):
         return self.ct 
     
+    def optimize(self, data, lamb):
+        self.cost, self.phi = self.ct.optimize(data, lamb)
+    
     def prune(self):
         self.ct.prune(self.phi)
 
