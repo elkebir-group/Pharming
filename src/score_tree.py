@@ -234,7 +234,10 @@ if __name__ == "__main__":
     #         scores.append(eval_segtree(deepcopy(gt), phi, deepcopy(best_sol), ell, dat, lamb))
     # pd.DataFrame(seg_scores).to_csv("test/seg_scores.csv", index=False)
 
-          
+    res = []
+    for ell in sol_list[0].segments:
+          res.append([ell, dat.num_snvs(ell), dat.num_cn_states(ell)])
+    pd.DataFrame(res, columns=["segment", "nsnvs", "ncn_states"]).to_csv("test/segments.csv", index=False)
 
     score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
     pd.DataFrame(score_results).to_csv(args.out, index=False)
