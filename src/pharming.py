@@ -10,16 +10,17 @@ from sti_v2 import STI
 import itertools
 import clonelib
 import multiprocessing
-import cProfile
 from tree_merging import ClonalTreeMerging
-from utils import get_top_n, pickle_object, load_pickled_object, draw, timeit_decorator
+import utils
+
 
 
 
         
 class Pharming:
     def __init__(self, dcfs=None, cnatrees=None, k=3, T_m=None,
-                  start_state=(1,1), seed=102,verbose=False, top_n=3, ilp=False) -> None:
+                  start_state=(1,1), seed=102,verbose=False, top_n=3, ilp=False, collapse=False,
+                  cell_threshold=10) -> None:
         self.verbose =verbose 
         self.rng = np.random.default_rng(seed)
 
@@ -38,7 +39,7 @@ class Pharming:
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
                 # all_trees =  self.enumerate_mutcluster_trees()
-                # choices = self.rng.choice(len(all_trees), size=1)
+                # choices = self.rng.choice(len(all_trees), size=10)
                 # sample_trees = [all_trees[i] for i in choices]
                 # for i,t in enumerate(sample_trees):
                
@@ -67,6 +68,8 @@ class Pharming:
         self.start_state = start_state
         self.top_n = top_n
         self.ilp = ilp
+        self.collapse = collapse
+        self.cell_threshold = cell_threshold
 
     def check_dcfs(self, T):
         for u in T:
@@ -166,8 +169,9 @@ class Pharming:
             trees = st.fit(self.data, ell)
             all_trees.append(trees)
         print(f"Segment {ell} complete!")
-        segtrees = get_top_n(all_trees, self.top_n)
-        pickle_object(segtrees, f"test/segtrees{ell}.pkl")
+        segtrees = utils.concat_and_sort(all_trees)
+        # segtrees = get_top_n(all_trees, self.top_n)
+        # pickle_object(segtrees, f"test/segtrees{ell}.pkl")
         return segtrees
 
 
@@ -195,10 +199,11 @@ class Pharming:
         
         return segtrees
    
-    @timeit_decorator
+    @utils.timeit_decorator
     def integrate(self, Tm_edges, segtrees):
             print(f"All segment trees constructed, integrating trees...")
-            ctm = ClonalTreeMerging(self.rng, n_orderings=1, top_n=self.top_n)
+            ctm = ClonalTreeMerging(self.k, self.rng, n_orderings=1, top_n=self.top_n, 
+                                    collapse=self.collapse, cell_threshold=self.cell_threshold)
             
             Tm = nx.DiGraph(Tm_edges)
             #add the normal clone as the root
@@ -207,8 +212,8 @@ class Pharming:
             
             top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
 
-            for sol in top_trees:
-                sol.optimize(self.data, self.lamb)
+            # for sol in top_trees:
+            #     sol.optimize(self.data, self.lamb)
 
             return top_trees
     
@@ -232,7 +237,7 @@ class Pharming:
         place_segs = set([ell for ell in segments if self.data.num_cn_states(ell)==1])
         return init_segs, infer_segs, place_segs
       
-    @timeit_decorator
+    @utils.timeit_decorator
     def infer(self, Tm_list, seg_list, init_trees=None):
         """
         infer a clonal tree for a list of mutation cluster trees
@@ -262,7 +267,8 @@ class Pharming:
                 costs.append(np.Inf)
 
         return all_trees, costs 
-    
+        
+    @utils.timeit_decorator
     def place_snvs(self, solutions, segments):
         """
         Place SNVs that occur in segments with only a single copy number state
@@ -293,7 +299,7 @@ class Pharming:
             sol.ct.add_rho(rho)
     
    
-    @timeit_decorator
+    @utils.timeit_decorator
     def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_segs=3, ninit_Tm=3):
         '''
         @params Data data: the input data (C,A,D) to fit
@@ -333,7 +339,7 @@ class Pharming:
             
             self.clonal_trees, costs = self.infer(init_Tm, infer_segs, [init_trees[i] for i in smallest_indices] )
         
-        best_trees =  get_top_n(self.clonal_trees, self.top_n)
+        best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
 
             
         self.post_process(best_trees)
