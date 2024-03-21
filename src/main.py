@@ -79,6 +79,7 @@ def main(args):
                 start_state=(args.root_x, args.root_y), 
                 seed = args.seed,
                 top_n=  args.top_n,
+                collapse= args.collapse
                 )
 
   
@@ -147,6 +148,8 @@ if __name__ == "__main__":
                         help="starting state for maternal (x) allele")
     parser.add_argument("--root_y", type=int, default=1,
                         help="starting state for paternal (y) allele")
+    parser.add_argument("--collapse", action="store_true",
+                        help="whether linear chains of copy number events should be collapsed prior to integration")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")
     parser.add_argument("-P" ,"--pickle", required=False, type=str,
@@ -164,33 +167,35 @@ if __name__ == "__main__":
     
 
 
-    instance = "s11_m5000_k25_l7"
-    # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.05_e0" 
-    pth = f"simulation_study/input"
+    # instance = "s11_m5000_k25_l7"
+    # # instance = "s12_m5000_k25_l7"
+    # folder = "n1000_c0.05_e0" 
+    # pth = f"simulation_study/input"
 
-    gtpth = "test"
+    # gtpth = "test"
 
 
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "4",
-        "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-        "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-        "-n", "3",
-        # "-L",  "16", "10", "20", "24",
-        "--ninit-segs", "2",
-        "-s", "11",
-        # "--segment", "0",
-        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/scores_test.csv",
-        "-P", f"{gtpth}/solution_test.pkl",
-        "--all-sol", f"{gtpth}/clonal_trees.pkl",
-        "-O", f"{gtpth}"
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-j", "5",
+    #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
+    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+    #     "-n", "3",
+    #     # "-L",  "16", "10", "20", "24",
+    #     "--ninit-segs", "3",
+    #     "-s", "11",
+    #     # "--segment", "0",
+    #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
+    #     "-J", f"{gtpth}/scores_test.csv",
+    #     "-P", f"{gtpth}/solution_test.pkl",
+    #     "--all-sol", f"{gtpth}/clonal_trees.pkl",
+    #     "--profile", "test/profile.prof",
+    #     "--collapse",
+    #     "-O", f"{gtpth}"
 
-    ])
+    # ])
 
     profiler = cProfile.Profile()
     profiler.enable()

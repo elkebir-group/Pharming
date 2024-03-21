@@ -27,14 +27,21 @@ def draw(tree, fname):
     ptree.layout("dot")
     ptree.draw(fname)
 
+def concat_and_sort(mylist):
+        concat_list = list(chain(*mylist))
+        concat_list = sorted(concat_list, key=lambda x: x.cost)
+        return concat_list
+     
+
 def get_top_n(all_trees, top_n):
         '''
         @params all_trees: list of lists of Solution Objects 
         returns the top_n minimum costs trees
         '''
     
-        concat_list = list(chain(*all_trees))
-        concat_list = sorted(concat_list, key=lambda x: x.cost)
+        # concat_list = list(chain(*all_trees))
+        # concat_list = sorted(concat_list, key=lambda x: x.cost)
+        concat_list = concat_and_sort(all_trees)
         
         if len(concat_list) >= top_n:
             return concat_list[:top_n]
