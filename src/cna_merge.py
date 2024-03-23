@@ -7,7 +7,7 @@ from copy import deepcopy
 from clonal_tree import ClonalTree
 from genotype import genotype
 from solution import Solution
-
+import utils
 
 
 
@@ -49,41 +49,67 @@ class CNA_Merge:
         #     if n > 8 and n in self.T1:
         #         print("here")
 
+    def is_compatible(self):
+        Tm_nodes = set(self.T_m.nodes)
+        for u in self.T1:
+            if u not in Tm_nodes:
+                desc_u = nx.descendants(self.T1, u).intersection(Tm_nodes)
+                for v in self.T2:
+                    if v not in Tm_nodes:
+                        desc_v = nx.descendants(self.T2, v).intersection(Tm_nodes)
+                        if len(desc_u.intersection(desc_v)) > 0 and not (desc_u <= desc_v or desc_v <= desc_u):
+                                print("Warning: Trees are incompatible!")
+                                return False 
+        return True
 
-     
+
+
+
+
+    # @utils.timeit_decorator     
     def construct_clonal_tree(self, T, data, lamb):
-        # if self.verbose:
-        #     draw(T, "test/current_tree.png")
 
-        # if not all(n in T for n in self.all_nodes):
-        #     pickle_object(self, "test/cnmerge.pkl")
-        #     for n in self.all_nodes:
-        #         if n not in T:
-        #              print(f" node {n} not in node mapping")
-        #     draw(T, "test/current_tree.png")
-        #     draw(self.T1, "test/T1.png")
-        #     draw(self.T2, "test/T2.png")
-        assert all(n in T for n in self.all_nodes)
+        if not all(n in T for n in self.all_nodes):
+            utils.pickle_object(self, "test/cnmerge.pkl")
+            utils.draw(T, "test/bad_T.png")
+            utils.draw(self.T1, "test/T1.png")
+            utils.draw(self.T2, "test/T2.png")
            
-        # for n in T:
-            # if T.in_degree[n] > 1:
-            #     print(n)
 
 
-  
+        cache = {}
+
         def get_predecessor(u, T_orig):
             '''
-            get the predessor of node u in T that is also in T_orig
+            Get the predecessor of node u in T that is also in T_orig
             '''
+            if (u, id(T_orig)) in cache:
+                return cache[(u, id(T_orig))]
+            
             parent = list(T.predecessors(u))
-            if len(parent) ==0:
-                return u  #it must the be root 
-            else:
+            while parent:
                 parent = parent[0]
-            if parent in T_orig:
-                return parent 
-            else:
-                return get_predecessor(parent, T_orig)
+                if parent in T_orig:
+                    cache[(u, id(T_orig))] = parent
+                    return parent
+                parent = list(T.predecessors(parent))
+            
+            result = u  # It must be the root if no predecessor in T_orig is found
+            cache[(u, id(T_orig))] = result
+            return result
+        # def get_predecessor(u, T_orig):
+        #     '''
+        #     get the predessor of node u in T that is also in T_orig
+        #     '''
+        #     parent = list(T.predecessors(u))
+        #     if len(parent) ==0:
+        #         return u  #it must the be root 
+        #     else:
+        #         parent = parent[0]
+        #     if parent in T_orig:
+        #         return parent 
+        #     else:
+        #         return get_predecessor(parent, T_orig)
             
         genos = {u: {} for u in T}
         root = [u for u in T if T.in_degree[u]==0][0] 
@@ -102,6 +128,7 @@ class CNA_Merge:
                     v = parent 
                 else:
                     v = self.new_to_old[parent]
+                    # genos[n].update({j: self.genotypes2[parent][j] for j in self.snvs2})
                 for j in self.snvs2:
                     
                     geno = self.genotypes2[v][j].to_tuple()
@@ -110,12 +137,9 @@ class CNA_Merge:
             
             else:  #n is in T2
                 parent = get_predecessor(n, self.T1)
-                # if n > 8 and n not in self.new_to_old:
-                #     print(f" node {n} not in node mapping")
-                #     draw(T, "test/current_tree.png")
-                #     draw(self.T1, "test/T1.png")
-                #     draw(self.T2, "test/T2.png")
+    
                 genos[n] = deepcopy(self.genotypes2[self.new_to_old[n]])
+                # genos[n].update({j: self.genotypes1[parent][j] for j in self.snvs1})
                 for j in self.snvs1:
                     geno = self.genotypes1[parent][j].to_tuple()
                     genos[n][j] = genotype(*geno)
@@ -123,27 +147,31 @@ class CNA_Merge:
         
         ct = ClonalTree(T, genos, self.seg_to_snvs.copy(), rho=self.rho)
 
-                
-                
-            
+    
         cost , ca = ct.assign_cells_by_likelihood(data, lamb=lamb)
 
         return Solution(cost, ct, ca)
 
 
-
+    @utils.timeit_decorator
     def fit(self, data, lamb, top_n=3):
-        all_trees = self.enumerate_trees()
+        # self.data = data
+        # self.lamb = lamb
+        # utils.pickle_object(self, "test/cnmerge.pkl")
         all_results = []
+        if not self.is_compatible():
+            return all_results
+        all_trees = self.enumerate_trees()
+    
         for tree in all_trees:
             if not all(tree.in_degree[n] <=1 for n in tree):
-           
-                draw(tree, "test/tree.png")
-                draw(self.T1, "test/T1.png")
-                draw(self.T2, "test/T2.png")
-                draw(self.T_m, "test/Tm.png")
-                print("Warning: clonal trees are incompatible!")
                 continue
+                # draw(tree, "test/tree.png")
+                # draw(self.T1, "test/T1.png")
+                # draw(self.T2, "test/T2.png")
+                # draw(self.T_m, "test/Tm.png")
+                # print("Warning: clonal trees are incompatible!")
+        
                 # dd = self.get_desc_dict()
                 # for key, val in dd.items():
                 #     print(f"{key}:{val}")
@@ -162,7 +190,7 @@ class CNA_Merge:
 
 
 
-
+    # @utils.timeit_decorator
     def enumerate_trees(self):
         desc_nodes   = self.get_desc_dict()
         if self.verbose:
@@ -417,7 +445,7 @@ class CNA_Merge:
 
                     # Create a subgraph containing the subtree rooted at node `u`
                     subtree = tr.subgraph(descendants)
-                    tree = nx.compose(G, subtree)
+                    G = nx.compose(G, subtree)
         
             for n1 in cn_node_lists[0]:
                 for n2 in cn_node_lists[1]:
@@ -428,7 +456,7 @@ class CNA_Merge:
                 
             new_trees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
             for tr in new_trees:
-                tree_list.append((tree, {}))
+                tree_list.append((tr, {}))
      
 
 

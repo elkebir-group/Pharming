@@ -665,6 +665,7 @@ class ClonalTree:
             print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
             for m in missing:
                 print(f"{m}: {self.mut_to_seg[m]}")
+            # self.draw("test/bad_tree.png", segments=self.get_segments())
         for m in missing:
             mut_mapping[self.root].append(m)
         return mut_mapping, mut_loss_mapping 
@@ -717,7 +718,7 @@ class ClonalTree:
      
     
     def get_latent_cna_genos(self, latent_genos):
-        return  {m: geno.to_CNAgenotype() for m, geno in latent_genos.items()}    
+        return  {m: (geno.x, geno.y) for m, geno in latent_genos.items()}    
 
   
 
@@ -733,8 +734,8 @@ class ClonalTree:
                seg_geno[seg] = latent_cna_genos[key]
         latent_x, latent_y = [], []
         for seg,cna_geno in seg_geno.items():
-            latent_x.append(cna_geno.x)
-            latent_y.append(cna_geno.y)
+            latent_x.append(cna_geno[0])
+            latent_y.append(cna_geno[1])
         
         latent_x = np.array(latent_x).reshape(1,-1)
         latent_y = np.array(latent_y).reshape(1,-1)
@@ -746,37 +747,37 @@ class ClonalTree:
         y_diff = np.abs(obs_copy_y - latent_y).sum(axis=1)
         return x_diff + y_diff
  
-    def node_snv_cost(self,  v, cells, data, latent_genos):
+    # def node_snv_cost(self,  v, cells, data, latent_genos):
 
-        snvs = self.get_all_muts()
-        latent_vafs =self.get_latent_vafs(latent_genos)
-        lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
-        snvs = list(latent_vafs.keys())
-        #dims = cells by snvs
-        obs_vafs = data.obs_vafs(cells, snvs)
+    #     snvs = self.get_all_muts()
+    #     latent_vafs =self.get_latent_vafs(latent_genos)
+    #     lvafs = np.array(list(latent_vafs.values())).reshape(1,-1)
+    #     snvs = list(latent_vafs.keys())
+    #     #dims = cells by snvs
+    #     obs_vafs = data.obs_vafs(cells, snvs)
 
-        cell_scores = np.nansum(np.abs(obs_vafs - lvafs), axis=1)
+    #     cell_scores = np.nansum(np.abs(obs_vafs - lvafs), axis=1)
 
 
-        return cell_scores
+    #     return cell_scores
     
-    def pooled_node_snv_cost(self, v, cells, data, latent_genos):
+    # def pooled_node_snv_cost(self, v, cells, data, latent_genos):
 
  
-        latent_vafs = self.get_latent_vafs(latent_genos)
-        lvafs = np.array(list(latent_vafs.values()))
-        snvs = list(latent_vafs.keys())
-        #dims = cells by snvs
-        obs_vafs = data.compute_vafs(cells, snvs)
+    #     latent_vafs = self.get_latent_vafs(latent_genos)
+    #     lvafs = np.array(list(latent_vafs.values()))
+    #     snvs = list(latent_vafs.keys())
+    #     #dims = cells by snvs
+    #     obs_vafs = data.compute_vafs(cells, snvs)
 
-        comp_df =  pd.DataFrame({'obs_vafs': obs_vafs, 'latent_vafs': lvafs, 'snvs': snvs})
-        comp_df["node"] = v
-        comp_df["ncells"] = len(cells)
-        self.all_dfs[v]=comp_df
-        cell_scores = np.nansum(np.abs(obs_vafs - lvafs))
+    #     comp_df =  pd.DataFrame({'obs_vafs': obs_vafs, 'latent_vafs': lvafs, 'snvs': snvs})
+    #     comp_df["node"] = v
+    #     comp_df["ncells"] = len(cells)
+    #     self.all_dfs[v]=comp_df
+    #     cell_scores = np.nansum(np.abs(obs_vafs - lvafs))
 
 
-        return cell_scores
+    #     return cell_scores
 
 
 
@@ -800,27 +801,63 @@ class ClonalTree:
 
     #     return cell_scores, nodes
     
-    def node_likelihood(self, u, data, cells, vaf):
+
+    def node_likelihood(self, data, cells, vaf):
 
   
             snvs = list(vaf.keys())
-            vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
-        
-            return data.binomial_likelihood(cells, snvs,vafs )
-    
-    def compute_node_likelihoods(self, data, cells=None, lamb=0):
+            vafs = np.array([vaf[j] for j in snvs])
+   
+            unique_values, indices = np.unique(vafs, return_inverse=True)
 
+            # Create a dictionary to map each unique value to its indices
+            indices_map = {}
+            for vaf in unique_values:
+                indices_map[vaf] = np.where(vafs==vaf)[0].tolist()
+            cell_scores = data.compute_cell_likelihoods(indices_map, cells=cells)
+        
+        
+            return cell_scores.sum()
+    
+    # @utils.timeit_decorator
+    # def test_likelihood(self,  data,  vaf):
+
+  
+    #         snvs = list(vaf.keys())
+    #         vafs = np.array([vaf[j] for j in snvs]).reshape(-1,1)
+        
+    #         return data.binomial_likelihood(data.cells, snvs,vafs )
+    
+
+    def compute_node_likelihoods(self, data, cells=None, lamb=0):
+        #use vectorization to compute all logpmfs at the same time
+        #mask values where total=0, use sparse matrix?
+        
         if cells is None:
             cells = data.cells
         nodes = np.array(self.tree)
         node_cell_likes = []
         node_cna_scores = []
+    
         for u in nodes:
             latent_genos = self.get_latent_genotypes(u)
             latent_vaf = self.get_latent_vafs(latent_genos)
-            node_cell_likes.append(self.node_likelihood(u, data, cells,latent_vaf))
-            node_cna_scores.append(self.node_cna_cost(u, cells, data, latent_genos))
+            snvs = list(latent_vaf.keys())
+            vafs = np.array([latent_vaf[j] for j in snvs])
+            unique_values, indices = np.unique(vafs, return_inverse=True)
 
+            # Create a dictionary to map each unique value to its indices
+            indices_map = {}
+            for vaf in unique_values:
+                indices_map[vaf] = np.where(vafs==vaf)[0].tolist()
+        
+            cell_scores = data.compute_cell_likelihoods(indices_map)
+            node_cell_likes.append(cell_scores)
+   
+
+            # node_cell_likes.append(self.node_likelihood(u, data, cells,latent_vaf))
+            # self.test_likelihood(data, latent_vaf)
+            node_cna_scores.append(self.node_cna_cost(u, cells, data, latent_genos))
         cell_scores = np.vstack(node_cell_likes)
         cell_cna_scores = np.vstack(node_cna_scores)
         cell_scores += lamb * cell_cna_scores
@@ -850,7 +887,7 @@ class ClonalTree:
             return has_path
     
     @staticmethod
-    def get_vafs(q, j, snv_tree, clones, cna_genos, has_path):
+    def get_vafs(q, snv_tree, clones, cna_genos, has_path):
         vafs = np.zeros(len(clones))
         root= [n for n in snv_tree if snv_tree.in_degree[n] ==0][0]
         
@@ -935,7 +972,7 @@ class ClonalTree:
            
                 all_tree_costs = []
                 for snv_tree in snv_cluster_mapping[q]:
-                    all_vafs = np.vstack([self.get_vafs(q, j, snv_tree, clones, cna_genos, has_path) for j in snvs]).T
+                    all_vafs =self.get_vafs(q,  snv_tree, clones, cna_genos, has_path)
 
                     # vaf_list = []
                 
@@ -953,7 +990,8 @@ class ClonalTree:
 
                     for i,u in enumerate(clones):
                         cells = phi.get_cells(u)
-                        clone_cost = dat.binomial_likelihood(cells, snvs, all_vafs[i,:], axis=0)
+                        # clone_cost = dat.binomial_likelihood(cells, snvs, all_vafs[i,:], axis=0)
+                        clone_cost = dat.compute_snv_likelihoods(all_vafs[i], snvs, cells)
                         cluster_costs += clone_cost
                 
                     all_tree_costs.append(cluster_costs)
@@ -999,6 +1037,7 @@ class ClonalTree:
         self.snv_node_cost = {}
         self.cna_node_cost = {}
         self.cost = 0
+        
         for v in self.tree:
                 cells = cellAssign.get_cells(v)
                 if len(cells) ==0:
@@ -1006,7 +1045,7 @@ class ClonalTree:
 
                 else:
                     lat_genos = self.get_latent_genotypes(v)
-                    self.snv_node_cost[v] = self.node_likelihood(v,data, cells, self.get_latent_vafs(lat_genos)).sum()
+                    self.snv_node_cost[v] = self.node_likelihood(data, cells, self.get_latent_vafs(lat_genos))
                     self.cna_node_cost[v] = self.node_cna_cost(v, cells, data,lat_genos ).sum()
                     self.node_cost[v]=  self.snv_node_cost[v] + lamb * self.cna_node_cost[v]
              
@@ -1021,30 +1060,30 @@ class ClonalTree:
         return self.cost 
 
 
-    def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
+    # def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
 
-        nodes = np.array(self.tree)
-        if cna_only:
-            cell_scores =0
-            lamb=1
-        else:
-            cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+    #     nodes = np.array(self.tree)
+    #     if cna_only:
+    #         cell_scores =0
+    #         lamb=1
+    #     else:
+    #         cell_scores = np.vstack([self.node_snv_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
 
-        if lamb > 0:
-            cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
-            cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
-        assignments = np.argmin(cell_scores, axis=0)
-        self.cost = np.nansum(np.nanmin(cell_scores,axis=0)).sum()
+    #     if lamb > 0:
+    #         cell_cna_scores = np.vstack([self.node_cna_cost(v, data.cells, data, self.get_latent_genotypes(v)) for v in nodes])
+    #         cell_scores = lamb_vaf*cell_scores + lamb*cell_cna_scores
+    #     assignments = np.argmin(cell_scores, axis=0)
+    #     self.cost = np.nansum(np.nanmin(cell_scores,axis=0)).sum()
         
         
-        phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
+    #     phi = {i: v for i,v in zip(data.cells, nodes[assignments])}
   
-        # self.phi_to_cell_mapping(self.phi)
-        return CellAssign(phi, self.clones()), self.cost, cell_scores, nodes   
-        # self.cell_mapping = defaultdict(list)
-        # for i, v in self.phi.items():
-        #     self.cell_mapping[v].append(i)
-        # self.cell_mapping = dict(self.cell_mapping)
+    #     # self.phi_to_cell_mapping(self.phi)
+    #     return CellAssign(phi, self.clones()), self.cost, cell_scores, nodes   
+    #     # self.cell_mapping = defaultdict(list)
+    #     # for i, v in self.phi.items():
+    #     #     self.cell_mapping[v].append(i)
+    #     # self.cell_mapping = dict(self.cell_mapping)
 
     def filter_snvs(self, snvs_to_keep):
         snvs_to_remove = set(self.get_all_muts()) - set(snvs_to_keep)

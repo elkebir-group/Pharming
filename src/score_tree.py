@@ -117,7 +117,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    instance = "s11_m5000_k25_l7"
+    instance = "s11_m5000_k25_l5"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
     pth = f"simulation_study/input"
@@ -129,8 +129,8 @@ if __name__ == "__main__":
         "-c", f"{pth}/{instance}/{folder}/phi.pkl",
         # "-s", "14",
         # "--segment", "0",
-        "-o", "test/tree_scores_all.csv",
-        "-S", f"test/solution.pkl",
+        "-o", "test/scores.csv",
+        "-S", f"test/solution_test.pkl",
 
     ])
 
@@ -142,6 +142,7 @@ if __name__ == "__main__":
 
     lamb = args.lamb
     dat = load_pickled_object(args.data)
+    dat.precompute_likelihood()
 
 
     # if args.segment is None:
