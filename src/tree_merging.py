@@ -74,6 +74,8 @@ class ClonalTreeMerging:
 
     def merge_parallel(self, tree1, tree2):
         cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
+
+ 
         merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
         # try:
   
@@ -104,9 +106,9 @@ class ClonalTreeMerging:
             segs2 = tree_list2[0].segments
             
             candidates = []
-
+            sol_list1 = tree_list1[:self.top_n]
             while len(candidates) ==0 and len(tree_list2) > 0:
-                sol_list1 = tree_list1[:self.top_n]
+              
                 sol_list2 = tree_list2[:self.top_n]
       
                 if len(tree_list2) > self.top_n:
@@ -122,26 +124,27 @@ class ClonalTreeMerging:
                 if self.cores <= 1:
             
                     for sol1, sol2 in itertools.product(sol_list1, sol_list2):
-                        
+                        merged_tree_list = self.merge_parallel(sol1, sol2)
+                        candidates.append(merged_tree_list)
 
-                        cnm = CNA_Merge(sol1.get_tree(), sol2.get_tree(), self.T_m.edges, verbose=False)
-                        merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+                        # cnm = CNA_Merge(sol1.get_tree(), sol2.get_tree(), self.T_m.edges, verbose=False)
+                        # merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
                         # for sol in merged_tree_list:
                         #     sol.optimize(self.data, self.lamb)
-                        candidates.append(merged_tree_list)
+               
                 else:
                     arguments = [(tree1, tree2) for tree1, tree2 in itertools.product(sol_list1, sol_list2)]
-        
-                    pool = multiprocessing.Pool(processes=self.cores)
-                    candidates = pool.starmap(self.merge_parallel, arguments)
+                    with multiprocessing.Pool(processes=self.cores) as pool:
+                        candidates = pool.starmap(self.merge_parallel, arguments, chunksize=3)
             
+                candidates = concat_and_sort(candidates)
             if len(candidates) ==0:
                 print(f"Warning, integration failed for segments {segs2}, skipping..")
                 self.segment_failures.union(segs2)
                 candidates = tree_list1
            
-            else:
-                candidates = concat_and_sort(candidates)
+            # else:
+            #     candidates = concat_and_sort(candidates)
             return candidates
       
 

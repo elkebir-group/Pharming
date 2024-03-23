@@ -15,6 +15,7 @@ from copy import deepcopy
 from enumerate import Enumerate
 from solution import Solution
 from utils import load_pickled_object, timeit_decorator
+from genotype_tree import GenotypeTree
 
 
 
@@ -39,22 +40,17 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, S, Tm_edges, delta, lamb1 =5, niter=10, ilp=False) -> None:
+    def __init__(self, ell, S, delta, lamb1 =5, niter=10, ilp=False) -> None:
     
-        T_m = nx.DiGraph(Tm_edges)
+        self.ell = ell 
         nodes = list(S)
         if len(nodes) == 0:
                  raise ValueError("CNA Tree S is not valid!")
         else:
             self.S = S 
+        self.delta = delta
     
-        if len(delta) != len(T_m):
-                 raise ValueError("Mutation cluster tree must \
-                                  match the number of DCFs")
-        
-        else:
-            self.T_m = T_m
-            self.delta = delta
+  
 
         self.lamb1 = lamb1
         self.ilp = ilp 
@@ -224,28 +220,118 @@ class STI:
         
         return obj, ct, ca
     
-    # @timeit_decorator
-    def compute_snv_cluster_tree_cost(self):
-        all_costs = []
-        tree_assign = {}
+    #TODO: FIX THIS!!!!!
+    @timeit_decorator
+    def precompute_costs(self, data):
+        self.snvs = data.seg_to_snvs[self.ell]
+        self.cn_props = data.cn_proportions(self.ell)
+        if self.S_root not in self.cn_props:
+            self.cn_props[self.S_root] = 0.0
+        self.data  = data
 
+        self.tree_assign = {}
+
+        self.cost2 = {}
+        alt = data.var[:, self.snvs].sum(axis=0)
+        total =data.total[:, self.snvs].sum(axis=0)
+        jg_list = []
+        self.all_costs = []
         for g, trees in enumerate(self.T_SNV_groups):
-            tree_assign[g] = {}
+     
+            self.tree_assign[g] = {}
+            # jg_cost = np.full(len(self.snvs), fill_value=np.Inf)
+ 
             for j in self.snvs:
                 jg_cost = np.Inf
                 for p, t in enumerate(trees):
+                    # gt = GenotypeTree(t.edges)
+        
                     cost, ct, ca = self.compute_tree_cost(j, t)
                     if cost < jg_cost:
-                        tree_assign[g][j] = (ct, ca)
+                        self.tree_assign[g][j] = (ct, ca)
                         jg_cost = cost
+                        # if cost < jg_cost[idx]:
+                        #     self.tree_assign[g][j] = (ct, ca)
+                        #     jg_cost[idx] = cost
+         
+            for j, a,d in zip(self.snvs, alt, total):
+                for q, dcf in self.delta.items():
+                    ct = self.tree_assign[g][j][0]
+                    post_dcf = -1*ct.posterior_dcf(j, dcf, a,d, self.cn_props)
+                    self.all_costs.append({"snv": j, "snv_clust": q,  "group": g, "cost": cost, "posterior_dcf": post_dcf})
 
-                    
-                    for q, dcf in self.delta.items():
-                        alt_total = self.data.var[:, j].sum(), self.data.total[:, j].sum()
-                        post_dcf = -1*ct.posterior_dcf(j, dcf, *alt_total, self.cn_props)
-                        all_costs.append({"snv": j, "snv_clust": q,  "group": g, "cost": cost, "posterior_dcf": post_dcf, "total": cost+ post_dcf})
+            # for snv_tree in trees:
+            #     gt = GenotypeTree(snv_tree.edges)
 
-        return all_costs, tree_assign
+                # for q, dcf in self.delta.items():
+                #     post_dcf = -1*gt.vectorized_posterior(dcf, alt, total, self.cn_prop)
+         
+        # self.all_costs = all_costs
+            
+
+
+            
+        #     jg_list.append(jg_cost.reshape(1,-1))
+        # self.cost1 = np.vstack(jg_list)
+
+
+  
+
+        # return all_costs, tree_assign
+    # def precompute_costs(self, data):
+    #     self.snvs = data.seg_to_snvs[self.ell]
+    #     self.cn_props = data.cn_proportions(self.ell)
+    #     if self.S_root not in self.cn_props:
+    #         self.cn_props[self.S_root] = 0.0
+    #     self.data  = data
+
+    #     self.tree_assign = {}
+
+    #     self.cost2 = {}
+    #     alt = data.var[:, self.snvs].sum(axis=0)
+    #     total =data.total[:, self.snvs].sum(axis=0)
+    #     jg_list = []
+
+    #     for g, trees in enumerate(self.T_SNV_groups):
+     
+    #         self.tree_assign[g] = {}
+    #         jg_cost = np.full(len(self.snvs), fill_value=np.Inf)
+
+    #         for p, t in enumerate(trees):
+    #             gt = GenotypeTree(t.edges)
+            
+    #             for idx, j in enumerate(self.snvs):
+
+    
+    #                 cost, ct, ca = self.compute_tree_cost(j, t)
+    #                 if cost < jg_cost[idx]:
+    #                     self.tree_assign[g][j] = (ct, ca)
+    #                     jg_cost[idx] = cost
+         
+            
+    #             for q, dcf in self.delta.items():
+    #                 post_dcf = -1*gt.vectorized_posterior(dcf, alt, total, self.cn_props)
+    #                 for j,post in zip( self.snvs, post_dcf):
+    #                     self.cost2[g,q,p,j] = post 
+
+
+            
+    #         jg_list.append(jg_cost.reshape(1,-1))
+    #     self.cost1 = np.vstack(jg_list)
+
+
+    #             # all_costs.append({"snv": j, "snv_clust": q,  "group": g, "cost": cost, "posterior_dcf": post_dcf})
+
+    #         # for snv_tree in trees:
+    #         #     gt = GenotypeTree(snv_tree.edges)
+
+    #             # for q, dcf in self.delta.items():
+    #             #     post_dcf = -1*gt.vectorized_posterior(dcf, alt, total, self.cn_prop)
+         
+    #                 # post_dcf = -1*ct.posterior_dcf(j, dcf, *alt_total, self.cn_props)
+    #     # self.all_costs = all_costs
+
+    #     # return all_costs, tree_assign
 
    
 
@@ -279,10 +365,32 @@ class STI:
         for g,q in groups:
             rho[self.ell][q] = self.T_SNV_groups[g]
         return groups, rho 
-    
 
-    def cluster_snvs(self, snv_costs, valid_groups_snvclusts, tree_assign):
-        filtered_costs = [cost for cost in snv_costs if (cost["group"], cost["snv_clust"]) in valid_groups_snvclusts]
+
+    # def cluster_snvs(self, valid_groups_snvclusts):
+    #     groups = list( set(g for g, _ in valid_groups_snvclusts))
+    #     group_to_clust = {g: [q for g1, q in valid_groups_snvclusts if g1==g ] for g in groups}
+    #     group_costs = self.cost1[groups, :]
+    #     group_assign = np.argmin(group_costs, axis=0)
+    #     omega = {}
+    #     psi = {}
+    #     for j, idx in zip(self.snvs, group_assign):
+    #         g= groups[idx]
+    #         bestval = np.Inf 
+    #         omega[j] = self.tree_assign[g][j]
+    #         for q in group_to_clust[g]:
+    #             for p,t in enumerate(self.T_SNV_groups[g]):
+    #                 if self.cost2[g,q,p,j] < bestval:
+    #                     bestq = q 
+    #                     bestval = self.cost2[g,q,p,j] 
+    #         psi[j] = bestq
+ 
+    #     return self.to_inverse_dict(psi), omega
+
+
+
+    def cluster_snvs(self, valid_groups_snvclusts):
+        filtered_costs = [cost for cost in self.all_costs if (cost["group"], cost["snv_clust"]) in valid_groups_snvclusts]
         sorted_costs = sorted(filtered_costs, key=lambda x: (x["cost"], x["posterior_dcf"]))
         
         first_rows = {}
@@ -291,7 +399,7 @@ class STI:
                 first_rows[cost["snv"]] = cost
         
         psi = {row["snv"]: row["snv_clust"] for row in first_rows.values()}
-        omega = {row["snv"]: tree_assign[row["group"]][row["snv"]] for row in first_rows.values()}
+        omega = {row["snv"]: self.tree_assign[row["group"]][row["snv"]] for row in first_rows.values()}
 
         return self.to_inverse_dict(psi), omega
     
@@ -380,7 +488,7 @@ class STI:
              print("warning: model infeasible!")
              return np.Inf, solutions 
 
-    # @timeit_decorator
+
     def assign_cell_clusters(self,ct, snv_clusters ):
 
     
@@ -498,7 +606,11 @@ class STI:
         
      
     @timeit_decorator
-    def fit(self, data, segment):
+    def fit(self, Tm_edges, data, segment):
+        self.T_m = nx.DiGraph(Tm_edges)
+        if len(self.delta) != len(self.T_m):
+                 raise ValueError("Mutation cluster tree must \
+                                  match the number of DCFs")
         self.data = data
         self.ell = segment
         self.snvs = self.data.seg_to_snvs[segment]
@@ -507,9 +619,9 @@ class STI:
         refinements = Enumerate( self.T_m, self.S,).solve()
         
         #TODO: fix to account for errors in observed cn states
-        self.cn_props = self.data.cn_proportions(self.ell)
 
-        all_costs, tree_assign = self.compute_snv_cluster_tree_cost()
+
+        # all_costs, tree_assign = self.compute_snv_cluster_tree_cost()
    
         results = []
 
@@ -519,8 +631,8 @@ class STI:
 
      
             valid_group_snvclusts, rho = self.identify_snv_cluster_trees(T)
-            alpha_inv, omega = self.cluster_snvs(all_costs, valid_group_snvclusts, tree_assign)
-            snv_clusters = list({q for _,q in valid_group_snvclusts})
+            alpha_inv, omega = self.cluster_snvs(valid_group_snvclusts)
+            # snv_clusters = list({q for _,q in valid_group_snvclusts})
             
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega, rho)
             if not self.check_dcfs(segment_tree.tree, merged_dcfs):
