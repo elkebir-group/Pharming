@@ -55,21 +55,42 @@ class Data:
 
 
     def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001, axis=1):
-  
-        if isinstance(vaf, float) or isinstance(vaf, int):
-            vaf = np.array(vaf)
+        vaf = np.atleast_1d(vaf)
 
-        var =  self.var[np.ix_(cells, snvs)]
-        total =self.total[np.ix_(cells, snvs)]
-     
+        cells = np.asarray(cells)  # Convert to NumPy array
+        if cells.ndim != 1:
+            raise ValueError("Cells must be a 1-dimensional array")
+        var = self.var[cells[:, np.newaxis], snvs]
+        total = self.total[cells[:, np.newaxis], snvs]
 
-        adj_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+        adj_vaf = vaf * (1 - alpha) + (1 - vaf) * (alpha / 3)
         adj_vaf = adj_vaf.reshape(1, -1)
-        cellprobs= -1*binom.logpmf(var, total, p=adj_vaf)
-            
+        cellprobs = -binom.logpmf(var, total, p=adj_vaf)
+
         cellprobs = np.nansum(cellprobs, axis=axis)
+ 
 
         return cellprobs
+    # def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001, axis=1):
+  
+    #     # if isinstance(vaf, float) or isinstance(vaf, int):
+    #     #     vaf = np.array(vaf)
+
+    #     vaf = np.atleast_1d(vaf)
+
+    #     # var =  self.var[np.ix_(cells, snvs)]
+    #     # total =self.total[np.ix_(cells, snvs)]
+    #     var = self.var[cells[:, None], snvs]
+    #     total = self.total[cells[:, None], snvs]
+     
+
+    #     adj_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
+    #     adj_vaf = adj_vaf.reshape(1, -1)
+    #     cellprobs= -1*binom.logpmf(var, total, p=adj_vaf)
+            
+    #     cellprobs = np.nansum(cellprobs, axis=axis)
+
+    #     return cellprobs
     
     def compute_vafs(self, cells=None, snvs=None):
         if cells is None:
