@@ -130,7 +130,7 @@ if __name__ == "__main__":
         # "-s", "14",
         # "--segment", "0",
         "-o", "test/scores.csv",
-        "-S", f"test/solution_test.pkl",
+        "-S", f"test/solutions.pkl",
 
     ])
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     lamb = args.lamb
     dat = load_pickled_object(args.data)
-    dat.precompute_likelihood()
+
 
 
     # if args.segment is None:
@@ -162,8 +162,20 @@ if __name__ == "__main__":
     root = gt.root
 
     # gt.filter_snvs(snvs)
-
+    Tm = gt.mutation_cluster_tree()
+    
+    draw(Tm, "test/Tm.png")
     cost = gt.compute_likelihood(dat, phi, lamb)
+    seg2 = deepcopy(gt)
+    seg2.filter_segments([2])
+    cost2 = seg2.compute_likelihood(dat, phi, lamb)
+    seg2.draw("test/gt_seg2.png", phi, segments=[2], include_dcfs=True)
+
+    sol_list =   load_pickled_object(args.solutions)
+    for i,sol in enumerate(sol_list):
+          sol.png(f"test/ct{i}_seg2_0.png")
+    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
+    pd.DataFrame(score_results).to_csv(args.out, index=False)
 
     # mysegs = [0,1,2,11,13,14,18,24]
     # all_scores = []
@@ -237,11 +249,7 @@ if __name__ == "__main__":
 
           
 
-    sol_list =   load_pickled_object(args.solutions)
-    for sol in sol_list:
-          print(len(sol.ct.get_all_muts()))
-    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
-    pd.DataFrame(score_results).to_csv(args.out, index=False)
+
 
     print("done")
     # sol_list[0].png("test/opt_tree.png")

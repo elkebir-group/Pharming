@@ -1,11 +1,7 @@
 import networkx as nx 
-
 from itertools import product
 from utils import powerset, draw, merge_lists, pickle_object
-
-from copy import deepcopy
 from clonal_tree import ClonalTree
-from genotype import genotype
 from solution import Solution
 import utils
 
@@ -15,6 +11,7 @@ class CNA_Merge:
     def __init__(self, T1, T2, Tm_edges, verbose=False):
         self.CT1 = T1 
         self.CT2 = T2
+
         self.T1 = T1.get_tree()
         self.T_m = nx.DiGraph(Tm_edges)
         # draw(self.T_m, "test/Tm.png")
@@ -26,14 +23,13 @@ class CNA_Merge:
         self.snvs1 = T1.get_all_muts()
         self.snvs2 = T2.get_all_muts()
         self.old_to_new, self.new_to_old = {}, {}
-        self.seg_to_snvs = T1.get_seg_to_muts() | T2.get_seg_to_muts()
+        self.mut_to_segs = T1.mut_to_seg.copy() | T2.mut_to_seg.copy()
         self.rho = T1.rho | T2.rho
         self.k = max(self.T_m)
         # assert self.k <= 8
         starting_node = max(self.T1)
         for i,u in enumerate(self.T2):
             if u not in self.T_m:
-            # if (u in self.T1 and u not in self.T_m) or :
                 self.old_to_new[u] = starting_node+ i + 1
                 self.new_to_old[starting_node+i +1]  =u
 
@@ -45,6 +41,15 @@ class CNA_Merge:
         # draw(self.T1, "test/T1.png")
         # draw(self.T2, "test/T2.png")
         
+        # if self.CT2.get_segments() == {19}:
+        #     print("Here")
+        # if not self.CT1.check_genotypes():
+        #     self.CT1.png("test/CT1.png")
+        #     print(self.CT1.get_segments())
+        
+        # if not self.CT2.check_genotypes():
+        #     self.CT2.png("test/CT2.png")
+        #     print(self.CT2.get_segments())
         # for n in self.T2:
         #     if n > 8 and n in self.T1:
         #         print("here")
@@ -68,12 +73,13 @@ class CNA_Merge:
 
     # @utils.timeit_decorator     
     def construct_clonal_tree(self, T, data, lamb):
-
-        if not all(n in T for n in self.all_nodes):
-            utils.pickle_object(self, "test/cnmerge.pkl")
-            utils.draw(T, "test/bad_T.png")
-            utils.draw(self.T1, "test/T1.png")
-            utils.draw(self.T2, "test/T2.png")
+        # utils.draw(T, "test/T.png")
+        assert all(n in T for n in self.all_nodes)
+        # if not all(n in T for n in self.all_nodes):
+        #     utils.pickle_object(self, "test/cnmerge.pkl")
+        #     utils.draw(T, "test/bad_T.png")
+        #     utils.draw(self.T1, "test/T1.png")
+        #     utils.draw(self.T2, "test/T2.png")
            
 
 
@@ -97,19 +103,7 @@ class CNA_Merge:
             result = u  # It must be the root if no predecessor in T_orig is found
             cache[(u, id(T_orig))] = result
             return result
-        # def get_predecessor(u, T_orig):
-        #     '''
-        #     get the predessor of node u in T that is also in T_orig
-        #     '''
-        #     parent = list(T.predecessors(u))
-        #     if len(parent) ==0:
-        #         return u  #it must the be root 
-        #     else:
-        #         parent = parent[0]
-        #     if parent in T_orig:
-        #         return parent 
-        #     else:
-        #         return get_predecessor(parent, T_orig)
+ 
             
         genos = {u: {} for u in T}
         root = [u for u in T if T.in_degree[u]==0][0] 
@@ -119,10 +113,10 @@ class CNA_Merge:
             #it's a mutation cluster node so concatentae genotypes
             if n in self.T1 and n in self.T2:
             
-                genos[n] = deepcopy(self.genotypes1[n]) | deepcopy(self.genotypes2[n])
+                genos[n] = self.genotypes1[n].copy()| self.genotypes2[n].copy()
           
             elif n in self.T1:
-                genos[n] = deepcopy(self.genotypes1[n])
+                genos[n] = self.genotypes1[n].copy()
                 parent =get_predecessor(n, self.T2)
                 if parent in self.T_m:
                     v = parent 
@@ -130,42 +124,67 @@ class CNA_Merge:
                     v = self.new_to_old[parent]
                     # genos[n].update({j: self.genotypes2[parent][j] for j in self.snvs2})
                 for j in self.snvs2:
+                    genos[n][j] = self.genotypes2[v][j]
                     
-                    geno = self.genotypes2[v][j].to_tuple()
-                    genos[n][j] = genotype(*geno)
+                    # geno = self.genotypes2[v][j].to_tuple()
+                    # genos[n][j] = genotype(*geno)
           
             
             else:  #n is in T2
                 parent = get_predecessor(n, self.T1)
     
-                genos[n] = deepcopy(self.genotypes2[self.new_to_old[n]])
+                genos[n] = self.genotypes2[self.new_to_old[n]].copy()
                 # genos[n].update({j: self.genotypes1[parent][j] for j in self.snvs1})
                 for j in self.snvs1:
-                    geno = self.genotypes1[parent][j].to_tuple()
-                    genos[n][j] = genotype(*geno)
+                    genos[n][j] =self.genotypes1[parent][j]
+                    # geno = self.genotypes1[parent][j].to_tuple()
+                    # genos[n][j] = genotype(*geno)
  
         
-        ct = ClonalTree(T, genos, self.seg_to_snvs.copy(), rho=self.rho)
+        ct = ClonalTree(T, genos, utils.inverse_dict(self.mut_to_segs), rho=self.rho)
+        assert ct.check_genotypes()
+            # print("fail")
+            # gt = ct.get_genotypes()
+            # utils.pickle_object(self, "test/cnmerge19.pkl")
+            # utils.pickle_object(data, "test/data19.pkl")
+            # utils.pickle_object(T, "test/T19.png")
+        
 
-    
-        cost , ca = ct.assign_cells_by_likelihood(data, lamb=lamb)
+
+        cost , ca = ct.optimize(data, lamb=lamb)
 
         return Solution(cost, ct, ca)
 
 
-    @utils.timeit_decorator
+    # @utils.timeit_decorator
     def fit(self, data, lamb, top_n=3):
-        # self.data = data
-        # self.lamb = lamb
-        # utils.pickle_object(self, "test/cnmerge.pkl")
+
         all_results = []
         if not self.is_compatible():
             return all_results
         all_trees = self.enumerate_trees()
     
         for tree in all_trees:
-            if not all(tree.in_degree[n] <=1 for n in tree):
-                continue
+
+            sol= self.construct_clonal_tree(tree, data, lamb)
+       
+            all_results.append(sol)
+
+        all_results = sorted(all_results, key= lambda x: x.cost)
+        if top_n <= len(all_results):
+            return all_results[:top_n]
+        else:
+            return all_results
+        
+                # self.data = data
+        # self.lamb = lamb
+        # utils.pickle_object(self, "test/cnmerge.pkl")
+
+            # print(k)
+            # utils.draw(tree, "test/int_tree.png")
+            # assert all(tree.in_degree[n] <=1 for n in tree)
+
+                # continue
                 # draw(tree, "test/tree.png")
                 # draw(self.T1, "test/T1.png")
                 # draw(self.T2, "test/T2.png")
@@ -177,14 +196,15 @@ class CNA_Merge:
                 #     print(f"{key}:{val}")
                 # foo = self.enumerate_trees()
 
-            sol= self.construct_clonal_tree(tree, data, lamb)
-            all_results.append(sol)
+
+            # sol.png("test/pre_collapse.png")
+            # sol.collapse(5)
+            # sol.png("test/post_collapse.png")
         
-        all_results = sorted(all_results, key= lambda x: x.cost)
-        if top_n <= len(all_results):
-            return all_results[:top_n]
-        else:
-            return all_results
+        
+
+        # if len(all_results) ==0:
+        #     print("pause")
 
         
 
@@ -199,17 +219,13 @@ class CNA_Merge:
 
         trees_by_node = {u: self.construct_subgraphs(u, desc_nodes)  for u in desc_nodes }
         
-        # mynodes  = [8, 6,5,0] 
-        # for n in mynodes:
-        #     for tree in trees_by_node[n]:
-        #         draw(tree, f"test/node_tree{n}.png")
-        
+
         all_tree_lists = [trees_by_node[u] for u in trees_by_node]
         all_trees = []
         for trees in product(*all_tree_lists):
             tree = nx.compose_all(list(trees))
             all_trees.append(tree)
-            # draw(tree, "test/tree.png")
+
         
         return all_trees
         
@@ -230,7 +246,8 @@ class CNA_Merge:
         return nodes_to_return
 
     def construct_subgraphs(self, u, dict):
-
+        # if u == 1:
+        #     print("here")
         all_subgraphs  = []
         prev_key = None
         # if u in [6]:
@@ -244,6 +261,15 @@ class CNA_Merge:
             return [tree]
         all_keys = set(dict[u].keys())
         for key, cn_lists in dict[u].items():
+
+            # if u ==1:
+            #     if key == (3,2):
+            #         print("here")
+            #     print(key)
+            #     print(prev_key)
+            #     for tr, par_dict in all_subgraphs:
+            #         utils.draw(tr, "test/tr.png")
+            #         print(par_dict)
             all_keys.remove(key)
             tree_list = self.enumerate_partial_trees(u, key, cn_lists)
             if prev_key is None and tree_list is not None:
@@ -273,6 +299,7 @@ class CNA_Merge:
                     # if u == 3:
                     #     draw(tree, "test/start.png")
                     for T, par_dict2 in tree_list:
+                        new_par_dict = par_dict.copy()
                         # if u ==3:
                         #     draw(T, "test/subtree.png")
                 
@@ -295,6 +322,7 @@ class CNA_Merge:
                             # if u ==3:
                             #     draw(tree_comp, "test/tree_comp.png")
                             #     draw(tree, "test/tree.png")
+                    
                             for v in key:
                                 tree_comp.add_edge(par_dict[v], new_root)
                             
@@ -302,12 +330,12 @@ class CNA_Merge:
                                 if all(w != v for k in all_keys for w in k if k !=key):
                                     tree_comp.add_edge(par_dict2[v], v)
                                 else:
-                                    par_dict[v] = par_dict2[v]
+                                    new_par_dict[v] = par_dict2[v]
                     
                         # if u==3:
                         
                         #     draw(tree_comp, "test/subtree.png")
-                        new_subgraphs.append((tree_comp, par_dict))
+                        new_subgraphs.append((tree_comp, new_par_dict))
                 all_subgraphs = new_subgraphs
                     # par_dict = par_dict | par_dict2
             else:

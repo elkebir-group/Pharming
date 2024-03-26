@@ -109,8 +109,11 @@ def main(args):
     if args.all_sol is not None:
         pickle_object(ph.clonal_trees, args.all_sol)
 
-
-    print("\nPharming complete...let's go sell our trees at the local Pharmer's Market!")
+    if len(solutions) > 0:
+        print(f"\nPharming complete with objective value: {solutions[0].cost}!\n")
+        print("Let's go sell our trees at the local Pharmer's Market!")
+    else:
+        print("Error: no trees inferred, check input data and try again!")
 
 import cProfile
 
@@ -181,17 +184,17 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "4",
+        "-j", "1",
         "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
         "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-        "-n", "3",
-        # "-L",  "0", "14", "22",
-        "--ninit-segs", "2",
+        "-n", "10",
+        # "-L",  "2", #"0", "14", "22", #"19",
+        "--ninit-segs", "3",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/scores_test.csv",
-        "-P", f"{gtpth}/solution_test.pkl",
+        "-J", f"{gtpth}/scores.csv",
+        "-P", f"{gtpth}/solutions.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "--profile", "test/profile.prof",
         "--collapse",

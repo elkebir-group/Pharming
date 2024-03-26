@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import pickle 
 import pandas as pd 
+import numpy as np
 import argparse 
 from sklearn.metrics.cluster import adjusted_rand_score
 
@@ -13,7 +14,7 @@ class CellAssign:
     def __post_init__(self):
 
         self.cell_mapping = self.to_mapping()
-        self.n = len(self.get_all_cells())
+        self.n = len(self.phi)
 
     def update(self, phi):
         self.phi = phi
@@ -30,15 +31,18 @@ class CellAssign:
         if node in self.clones:
             cur_node = self.phi[cell]
             self.phi[cell] = node 
-            self.cell_mapping[cur_node].remove(cell)
-            self.cell_mapping[node].append(cell)
+            arr = self.cell_mapping[cur_node]
+            self.cell_mapping[cur_node] =arr[arr != cell]
+            self.cell_mapping[node] = np.append(self.cell_mapping[node], cell)
         else:
             print("Warning: node does not exist. Cell not moved")
+            
     def to_mapping(self):
 
         cell_mapping = {v: [] for v in self.clones}
         for i, v in self.phi.items():
             cell_mapping[v].append(i)
+        cell_mapping = {v: np.array(val) for v, val in cell_mapping.items()}
         return cell_mapping
     
     def from_mapping(self, cell_mapping):
@@ -53,14 +57,14 @@ class CellAssign:
         else:
             return self.cell_mapping[node]
     
-    def get_all_cells(self):
-        all_cells = []
-        for n in self.cell_mapping:
-            all_cells += self.cell_mapping[n]
-        return set(all_cells)
+    # def get_all_cells(self):
+    #     all_cells = []
+    #     for n in self.cell_mapping:
+    #         all_cells += self.cell_mapping[n]
+    #     return set(all_cells)
     
     def get_cell_count(self):
-         return {n : len(self.cell_mapping[n]) for n in self.clones if n in self.cell_mapping}
+         return {n : self.cell_mapping[n].shape[0] for n in self.clones if n in self.cell_mapping}
         
 
     def save(self, path):

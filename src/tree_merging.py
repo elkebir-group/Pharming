@@ -77,6 +77,11 @@ class ClonalTreeMerging:
 
  
         merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
+        # if len(merged_tree_list) ==0:
+        #     pickle_object(tree1, "test/tree1_fail.pkl")
+        #     pickle_object(tree2, "test/tree2_fail.pkl")
+        #     pickle_object(cnm, "test/cnm_fail.pkl")
+        #     pickle_object(self.data, "tset/cnm_data_fail.pkl")
         # try:
   
         # except:
@@ -135,7 +140,7 @@ class ClonalTreeMerging:
                 else:
                     arguments = [(tree1, tree2) for tree1, tree2 in itertools.product(sol_list1, sol_list2)]
                     with multiprocessing.Pool(processes=self.cores) as pool:
-                        candidates = pool.starmap(self.merge_parallel, arguments, chunksize=3)
+                        candidates = pool.starmap(self.merge_parallel, arguments, chunksize=1)
             
                 candidates = concat_and_sort(candidates)
             if len(candidates) ==0:
