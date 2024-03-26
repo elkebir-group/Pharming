@@ -33,6 +33,7 @@ class Pharming:
 
         if T_m is None:
             self.scriptTm = self.enumerate_mutcluster_trees()
+            # utils.pickle_object(self.scriptTm, "test/scriptTm.pkl")
 
         else:
             
@@ -162,20 +163,35 @@ class Pharming:
         #     cnatrees = self.enumerate_cna_trees(cn_states)
         # else:
         #     cnatrees = [self.cnatrees[ell]]
+        print(f"Starting segment {ell}...")
+        
         all_trees = []
         Tm_edges = list(T_m.edges)
         for st in stis:
             trees = st.fit(Tm_edges, self.data, ell)
+            if len(trees) > 0:
+                all_trees.append(trees)
+            # if len(trees) ==0:
+            #     print(f"Segment {ell} failed")
+            #     utils.pickle_object(st, f"test/st{ell}.pkl")
+            #     utils.pickle_object(Tm_edges, f"test/sti_Tm{Tm_edges}.pkl")
         # for S in cnatrees:
         #     st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb, ilp=self.ilp)
             # trees = st.fit(self.data, ell)
-            all_trees.append(trees)
+            # else:
+          
+            
+        if len(all_trees) ==0:
+            print(f"Segment {ell} failed for {Tm_edges}!")
+        else:
+            segtrees = utils.concat_and_sort(all_trees)
+
         print(f"Segment {ell} complete!")
-        segtrees = utils.concat_and_sort(all_trees)
+
        
         return segtrees
 
-
+    @utils.timeit_decorator
     def segment_trees_inference(self, Tm, stis):
         """
         nx:DiGraph Tm: a mutation cluster tree
@@ -190,6 +206,7 @@ class Pharming:
             for ell in stis:
                 # try:
                     if self.data.num_cn_states(ell,self.start_state) > 1:
+                
                         segtrees.append(self.fit_segment(ell, Tm, stis[ell]))
                         
         else:
@@ -299,23 +316,59 @@ class Pharming:
             sol.ct.assign_genotypes(self.data, sol.phi, rho, seg_to_snvs, states)
             sol.ct.add_rho(rho)
 
-    def preprocess(self, seg_list):
+    @utils.timeit_decorator
+    def preprocess_helper(self, ell):
         #TODO parallelize
-        stis = {ell: [] for ell in seg_list}
-        for ell in seg_list:
-            cn_states, counts = self.data.cn_states_by_seg(ell)
+        # stis = {ell: [] for ell in seg_list}
+        stis =[]
+        cn_states, counts = self.data.cn_states_by_seg(ell)
 
-            if len(self.cnatrees) == 0 or ell not in self.cnatrees:
-                cnatrees = self.enumerate_cna_trees(cn_states)
-            else:
-                cnatrees = [self.cnatrees[ell]]
+        if len(self.cnatrees) == 0 or ell not in self.cnatrees:
+            cnatrees = self.enumerate_cna_trees(cn_states)
+        else:
+            cnatrees = [self.cnatrees[ell]]
 
             # Tm_edges = list(T_m.edges)
-            for S in cnatrees:
-                st =STI(ell, S, self.delta, lamb1=self.lamb, ilp=self.ilp)
-                st.precompute_costs(self.data)
-                stis[ell].append(st)
+        for S in cnatrees:
+            st =STI(ell, S, self.delta, lamb1=self.lamb, ilp=self.ilp)
+            st.precompute_costs(self.data)
+            stis.append(st)
+        return ell, stis
+    
+    def preprocess(self, seg_list):
+
+        if self.cores <= 1:
+            stis = {}
+            dictlist = []
+            for ell in seg_list:
+                _, stis[ell]  = self.preprocess_helper(ell)
+           
+        else:
+            
+            with multiprocessing.Pool(self.cores) as pool:
+                dictlist = pool.map(self.preprocess_helper, seg_list)
+            
+            stis = {ell: vals for ell, vals in dictlist}
         return stis
+       
+        # stis = {k: v for d in dictlist for k, v in d.items()}
+        # return stis
+        # #TODO parallelize
+        # stis = {ell: [] for ell in seg_list}
+        # for ell in seg_list:
+        #     cn_states, counts = self.data.cn_states_by_seg(ell)
+
+        #     if len(self.cnatrees) == 0 or ell not in self.cnatrees:
+        #         cnatrees = self.enumerate_cna_trees(cn_states)
+        #     else:
+        #         cnatrees = [self.cnatrees[ell]]
+
+        #     # Tm_edges = list(T_m.edges)
+        #     for S in cnatrees:
+        #         st =STI(ell, S, self.delta, lamb1=self.lamb, ilp=self.ilp)
+        #         st.precompute_costs(self.data)
+        #         stis[ell].append(st)
+        # return stis
    
 
     @utils.timeit_decorator
@@ -333,7 +386,7 @@ class Pharming:
         ''' 
         
         self.data = data
-        self.data.precompute_likelihood()
+
 
         self.lamb = lamb 
         self.cores = cores 
@@ -346,6 +399,8 @@ class Pharming:
         init_segs, infer_segs, place_segs = self.partition_segments(segments, ninit_segs, min_cn_states=2)
         stis = self.preprocess(init_segs)
         init_trees, costs = self.infer(self.scriptTm, stis)
+        self.clonal_trees = init_trees
+        return utils.concat_and_sort(init_trees)
 
         #identify the mutation cluster trees that yield minimum cost over the initial segments
         sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
@@ -492,6 +547,7 @@ class Pharming:
         for sol in sol_list:
             sol.prune()
             sol.optimize(self.data, self.lamb)
+            sol.ct.update_mappings()
 
             # ct = sol.ct 
             # for ell in self.data.segments:

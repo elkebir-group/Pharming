@@ -32,6 +32,7 @@ class Data:
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
     cell_lookup : pd.Series # an n length series mapping internal cell index to input cell label
     mut_lookup : pd.Series #an m length series mapping interal SNV index to input SNV label
+    alpha : float = 0.001 #per base sequencing error rate 
 
     def __post_init__(self):
         self.nseg = len(self.seg_to_snvs)
@@ -40,6 +41,7 @@ class Data:
         self.segments.sort()
         self.cells = np.arange(self.N)
         self.muts = np.arange(self.M)
+        self.likelihood_dict = self.precompute_likelihood(self.alpha)
 
 
         # Create the multi-index
@@ -87,16 +89,19 @@ class Data:
     def compute_cell_likelihoods(self, vaf_to_snvs, cells=None):
         if cells is None:
             cells = self.cells
+        
         cell_likes = np.zeros(len(cells))
         for v, snvs in vaf_to_snvs.items():
-            cell_likes += self.likelihood_dict[v][np.ix_(cells,snvs) ].sum(axis=1)
+            snvs = np.array(snvs)
+            cell_likes += self.likelihood_dict[v][cells[:, np.newaxis], snvs].sum(axis=1)
 
         return cell_likes
     
     def compute_snv_likelihoods(self, v, snvs, cells=None):
         if cells is None:
-            cells = self.cells
-        return self.likelihood_dict[v][np.ix_(cells, snvs)].sum(axis=0)
+            return self.likelihood_dict[v][:,snvs].sum(axis=0)
+        
+        return self.likelihood_dict[v][cells[:, np.newaxis],snvs].sum(axis=0)
       
     
   
@@ -127,14 +132,14 @@ class Data:
             self.likelihood_dict[vaf[i]][nonzero_indices] =  -1 * binom.logpmf( var, total, p=v)
             self.likelihood_dict[vaf[i]] = self.likelihood_dict[vaf[i]].toarray()
 
-        
+        return self.likelihood_dict
         
 
         #     # Update the likelihood matrices for each VAF
         #     for k, v in enumerate(self.vafs):
         #         likelihood_dict[v][i, j] = logpmf_entries_per_vaf[k]
 
-        # return likelihood_dict
+
         
          
   
@@ -267,13 +272,12 @@ class Data:
         return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
     def copy_profiles_by_seg(self, segments, cells=None):
-        '''
-        returns a pandas dataframe  with cols ['x','y' ]subsetted to specified segment and cell set
-        '''
         if cells is None:
-            return self.copy_x[:,segments], self.copy_y[:,segments]
+            return self.copy_x[:, segments], self.copy_y[:, segments]
         else:
-            return self.copy_x[np.ix_(cells,segments)], self.copy_y[np.ix_(cells,segments)]
+            segments = np.array(segments)
+   
+            return self.copy_x[cells[:, np.newaxis], segments], self.copy_y[cells[:, np.newaxis], segments]
         # if cells is None:
         #     return self.copy_numbers.loc[segment]
         # else:
