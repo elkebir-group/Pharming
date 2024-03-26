@@ -316,7 +316,7 @@ class Pharming:
             sol.ct.assign_genotypes(self.data, sol.phi, rho, seg_to_snvs, states)
             sol.ct.add_rho(rho)
 
-    @utils.timeit_decorator
+    # @utils.timeit_decorator
     def preprocess_helper(self, ell):
         #TODO parallelize
         # stis = {ell: [] for ell in seg_list}
@@ -330,7 +330,7 @@ class Pharming:
 
             # Tm_edges = list(T_m.edges)
         for S in cnatrees:
-            st =STI(ell, S, self.delta, lamb1=self.lamb, ilp=self.ilp)
+            st =STI(ell, S, self.delta, lamb=self.lamb, ilp=self.ilp)
             st.precompute_costs(self.data)
             stis.append(st)
         return ell, stis
@@ -400,7 +400,8 @@ class Pharming:
         stis = self.preprocess(init_segs)
         init_trees, costs = self.infer(self.scriptTm, stis)
         self.clonal_trees = init_trees
-        return utils.concat_and_sort(init_trees)
+
+        # return utils.concat_and_sort(init_trees)
 
         #identify the mutation cluster trees that yield minimum cost over the initial segments
         sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
@@ -409,6 +410,11 @@ class Pharming:
             smallest_indices = sorted_indices[:ninit_Tm]
         else:
             smallest_indices  =sorted_indices
+        
+
+        print(f"SMALLEST INDICES: {smallest_indices}")
+        for i in smallest_indices:
+            print(f"{i}: {list(self.scriptTm[i].edges)}")
         
         if len(infer_segs) > 0:
             init_Tm = [self.scriptTm[i] for i in smallest_indices]
@@ -545,9 +551,10 @@ class Pharming:
         """
 
         for sol in sol_list:
-            sol.prune()
             sol.optimize(self.data, self.lamb)
-            sol.ct.update_mappings()
+            # sol.prune()
+       
+
 
             # ct = sol.ct 
             # for ell in self.data.segments:

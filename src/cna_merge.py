@@ -151,7 +151,7 @@ class CNA_Merge:
         
 
 
-        cost , ca = ct.optimize(data, lamb=lamb)
+        cost , ca = ct.assign_cells_by_likelihood(data, lamb=lamb)
 
         return Solution(cost, ct, ca)
 

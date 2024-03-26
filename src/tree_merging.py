@@ -11,7 +11,7 @@ INPLACE = "in place"
 
 class ClonalTreeMerging:
     def __init__(self, k, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
-        n_orderings=5, collapse = False, cell_threshold=10 ):
+        n_orderings=5, collapse = False, cell_threshold=10, inter_opt=False ):
         
         self.k = k
         if rng is not None:
@@ -41,6 +41,7 @@ class ClonalTreeMerging:
   
         self.cell_threshold = cell_threshold
         self.segment_failures = set()
+        self.inter_opt = inter_opt
    
     
     def fit(self, tree_list, T_m, data, lamb, cores=1):
@@ -134,8 +135,8 @@ class ClonalTreeMerging:
 
                         # cnm = CNA_Merge(sol1.get_tree(), sol2.get_tree(), self.T_m.edges, verbose=False)
                         # merged_tree_list = cnm.fit(self.data, self.lamb, self.top_n)
-                        # for sol in merged_tree_list:
-                        #     sol.optimize(self.data, self.lamb)
+                    # for sol in merged_tree_list:
+                    #     sol.optimize(self.data, self.lamb)
                
                 else:
                     arguments = [(tree1, tree2) for tree1, tree2 in itertools.product(sol_list1, sol_list2)]
@@ -143,13 +144,21 @@ class ClonalTreeMerging:
                         candidates = pool.starmap(self.merge_parallel, arguments, chunksize=1)
             
                 candidates = concat_and_sort(candidates)
+
             if len(candidates) ==0:
                 print(f"Warning, integration failed for segments {segs2}, skipping..")
                 self.segment_failures.union(segs2)
                 candidates = tree_list1
            
-            # else:
-            #     candidates = concat_and_sort(candidates)
+            elif self.inter_opt:
+                num = min(self.top_n, candidates)
+                # if len(candidates) > self.top_n:
+                #     num = self.top_n
+                # else:
+                #     num = len(candidates)
+                
+                for i in range(num):
+                    candidates[i].optimize(self.data, self.lamb)
             return candidates
       
 

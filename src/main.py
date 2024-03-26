@@ -184,7 +184,7 @@ if __name__ == "__main__":
     args = parser.parse_args([
 
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "1",
+        "-j", "4",
         "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
         "-T", f"{pth}/{instance}/{folder}/Tm.txt",
         "-n", "10",
@@ -193,8 +193,8 @@ if __name__ == "__main__":
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/scores.csv",
-        "-P", f"{gtpth}/solutions.pkl",
+        "-J", f"{gtpth}/scores_full.csv",
+        "-P", f"{gtpth}/solutions_full.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "--profile", "test/profile.prof",
         "--collapse",

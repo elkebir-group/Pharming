@@ -495,7 +495,7 @@ class STI:
     def fit(self, Tm_edges, data, segment):
 
         # if self.cost1 is None or self.cost2 is None:
-        self.precompute_costs(data)
+        # self.precompute_costs(data)
         # self.precompute_costs_old(data)
    
         T_m = nx.DiGraph(Tm_edges)
