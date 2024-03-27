@@ -31,7 +31,17 @@ def concat_and_sort(mylist):
         concat_list = list(chain(*mylist))
         concat_list = sorted(concat_list, key=lambda x: x.cost)
         return concat_list
-     
+
+def inverse_dict(mydict):
+    rev = {}
+    for key,val in mydict.items():
+        if val in rev:
+            rev[val].append(key)
+        else:
+            rev[val] = [key]
+    return rev
+        
+          
 
 def get_top_n(all_trees, top_n):
         '''

@@ -5,6 +5,8 @@ import pickle
 import argparse
 from collections import defaultdict, Counter
 from scipy.stats import binom
+import utils 
+from scipy.sparse import lil_matrix
 
 '''
 N = number of cells
@@ -13,6 +15,7 @@ G = number of segments
 '''
 #we expect some observed VAFs to be np.NaN due to d_{ij} =0 in ulc coverage data
 np.seterr(invalid='ignore')
+from scipy.sparse import csr_matrix
 
 @dataclass
 class Data:
@@ -29,6 +32,7 @@ class Data:
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
     cell_lookup : pd.Series # an n length series mapping internal cell index to input cell label
     mut_lookup : pd.Series #an m length series mapping interal SNV index to input SNV label
+    alpha : float = 0.001 #per base sequencing error rate 
 
     def __post_init__(self):
         self.nseg = len(self.seg_to_snvs)
@@ -37,6 +41,7 @@ class Data:
         self.segments.sort()
         self.cells = np.arange(self.N)
         self.muts = np.arange(self.M)
+        self.likelihood_dict = self.precompute_likelihood(self.alpha)
 
 
         # Create the multi-index
@@ -52,6 +57,120 @@ class Data:
     def __str__(self):
         mystr= f"Input data contains: {self.N} cells, {self.M} SNVs and {self.nseg} segments"
         return mystr
+
+    def to_sparse(self):
+ 
+
+        # Assuming var and total are numpy arrays
+        # Find the indices where total is nonzero
+        nonzero_indices = np.nonzero(self.total)
+
+        # Extract the non-zero elements and their corresponding row and column indices
+        total_nonzero = self.total[nonzero_indices]
+        var_nonzero = self.var[nonzero_indices]
+
+        # Create a sparse matrix using csr_matrix
+        self.total_sparse = csr_matrix((total_nonzero, nonzero_indices), shape=self.total.shape)
+
+        # Repeat the same for the var matrix if needed
+        self.var_sparse = csr_matrix((var_nonzero, nonzero_indices), shape=self.var.shape)
+    
+
+    def unique_vafs(self):
+        all_vals  = self.copy_x + self.copy_y
+        copy_numbers = np.unique(all_vals)
+        vafs = []
+        for total in copy_numbers[copy_numbers > 0]:
+            for alt in range(total+1):
+                vafs.append(alt/total)
+   
+        self.vafs = set(vafs)
+    
+    def compute_cell_likelihoods(self, vaf_to_snvs, cells=None):
+        if cells is None:
+            cells = self.cells
+        
+        cell_likes = np.zeros(len(cells))
+        for v, snvs in vaf_to_snvs.items():
+            cell_likes += self.likelihood_dict[v][cells[:, np.newaxis], snvs].sum(axis=1)
+
+        return cell_likes
+    
+    def compute_snv_likelihoods(self, v, snvs, cells=None):
+        if cells is None:
+            return self.likelihood_dict[v][:,snvs].sum(axis=0)
+        
+        return self.likelihood_dict[v][cells[:, np.newaxis],snvs].sum(axis=0)
+      
+    
+  
+
+    def precompute_likelihood(self, alpha=0.001):
+        self.to_sparse()
+        self.unique_vafs()
+
+        # Initialize a dictionary to store likelihood matrices
+        self.likelihood_dict = {}
+        nonzero_indices = self.total_sparse.nonzero()
+
+        # Convert VAF array to numpy array
+        vaf = np.array([v for v in self.vafs])
+        adj_vaf = vaf * (1 - alpha) + (1 - vaf) * (alpha / 3)
+        for v in self.vafs:
+            self.likelihood_dict[v] = lil_matrix(self.total_sparse.shape, dtype=float)
+        var, total = [], []
+        for i, j in zip(*self.total_sparse.nonzero()):
+            var.append(self.var[i,j])
+            total.append(self.total[i,j])
+        
+        
+    
+            # Compute the logpmf for the current entry
+
+        for i,v in enumerate(adj_vaf):
+            self.likelihood_dict[vaf[i]][nonzero_indices] =  -1 * binom.logpmf( var, total, p=v)
+            self.likelihood_dict[vaf[i]] = self.likelihood_dict[vaf[i]].toarray()
+
+        return self.likelihood_dict
+        
+
+        #     # Update the likelihood matrices for each VAF
+        #     for k, v in enumerate(self.vafs):
+        #         likelihood_dict[v][i, j] = logpmf_entries_per_vaf[k]
+
+
+        
+         
+  
+
+# # If needed, convert the result back to a sparse matrix
+# logpmf_sparse = csr_matrix((logpmf_values, nonzero_indices), shape=total.shape)
+            
+#             # Compute logpmf for each entry (var[i, j], total[i, j])
+#             logpmf_entry = binom.logpmf(self.var_sparse, self.total_sparse, p=adj_vaf)
+            
+        #     # Append the logpmf values for the current vaf_value
+        #     logpmf_values.append(logpmf_entry)
+
+        # # Convert the list of logpmf values to a numpy array
+        # logpmf_values_array = np.array(logpmf_values)
+        # print("done")
+
+
+
+
+
+ 
+    # def binomial_likelihood2(self, snvs, vaf, alpha=0.001):
+    #      vaf = np.atleast_1d(vaf)
+    #      var = self.var[:, snvs]
+    #      total = self.total[:,snvs]
+    #      var = var[:, np.newaxis, :]
+    #      total = total[:, np.newaxis, :]
+    #      adj_vaf = vaf * (1 - alpha) + (1 - vaf) * (alpha / 3)
+    #      logpmf_values= -binom.logpmf(var, total, p=adj_vaf)
+    #      cell_probs = np.sum(logpmf_values, axis=2)
+    #      return cell_probs
 
 
     def binomial_likelihood(self, cells, snvs, vaf, alpha=0.001, axis=1):
@@ -78,10 +197,10 @@ class Data:
 
     #     vaf = np.atleast_1d(vaf)
 
-    #     # var =  self.var[np.ix_(cells, snvs)]
-    #     # total =self.total[np.ix_(cells, snvs)]
-    #     var = self.var[cells[:, None], snvs]
-    #     total = self.total[cells[:, None], snvs]
+    #     var =  self.var[np.ix_(cells, snvs)]
+    #     total =self.total[np.ix_(cells, snvs)]
+    #     # var = self.var[cells[:, None], snvs]
+    #     # total = self.total[cells[:, None], snvs]
      
 
     #     adj_vaf =  vaf*(1- alpha) + (1-vaf)*(alpha/3)
@@ -152,13 +271,12 @@ class Data:
         return np.count_nonzero(self.total[:,snvs],axis=0), cells_by_snvs
     
     def copy_profiles_by_seg(self, segments, cells=None):
-        '''
-        returns a pandas dataframe  with cols ['x','y' ]subsetted to specified segment and cell set
-        '''
         if cells is None:
-            return self.copy_x[:,segments], self.copy_y[:,segments]
+            return self.copy_x[:, segments], self.copy_y[:, segments]
         else:
-            return self.copy_x[np.ix_(cells,segments)], self.copy_y[np.ix_(cells,segments)]
+            segments = np.array(segments)
+   
+            return self.copy_x[cells[:, np.newaxis], segments], self.copy_y[cells[:, np.newaxis], segments]
         # if cells is None:
         #     return self.copy_numbers.loc[segment]
         # else:

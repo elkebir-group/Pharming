@@ -20,6 +20,8 @@ def main(args):
                 must be specified or alternatively, the path to the \
                 preprocessed pharming data object!")
     
+
+
     if args.segments is None:
         segments = dat.segments
     
@@ -31,8 +33,6 @@ def main(args):
     for ell in segments:
         print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}")
     
-    segments = [ell for ell in segments if dat.num_snvs(ell) > 75]
-
 
     if args.delta is not None:
         dlist = {}
@@ -107,8 +107,11 @@ def main(args):
     if args.all_sol is not None:
         pickle_object(ph.clonal_trees, args.all_sol)
 
-
-    print("\nPharming complete...let's go sell our trees at the local Pharmer's Market!")
+    if len(solutions) > 0:
+        print(f"\nPharming complete with objective value: {solutions[0].cost}!\n")
+        print("Let's go sell our trees at the local Pharmer's Market!")
+    else:
+        print("Error: no trees inferred, check input data and try again!")
 
 import cProfile
 
@@ -167,35 +170,35 @@ if __name__ == "__main__":
     
 
 
-    # instance = "s11_m5000_k25_l7"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/input"
+    instance = "s11_m5000_k25_l5"
+    # instance = "s12_m5000_k25_l7"
+    folder = "n1000_c0.05_e0" 
+    pth = f"simulation_study/input"
 
-    # gtpth = "test"
+    gtpth = "test"
 
 
 
-    # args = parser.parse_args([
+    args = parser.parse_args([
 
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "5",
-    #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-    #     "-n", "3",
-    #     # "-L",  "16", "10", "20", "24",
-    #     "--ninit-segs", "3",
-    #     "-s", "11",
-    #     # "--segment", "0",
-    #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-    #     "-J", f"{gtpth}/scores_test.csv",
-    #     "-P", f"{gtpth}/solution_test.pkl",
-    #     "--all-sol", f"{gtpth}/clonal_trees.pkl",
-    #     "--profile", "test/profile.prof",
-    #     "--collapse",
-    #     "-O", f"{gtpth}"
+        "-d", f"{pth}/{instance}/{folder}/data.pkl",
+        "-j", "4",
+        "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
+        # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+        "-n", "6",
+        "-L", "18", "3", "2", "24", "5", "13", #"0", "14", "22", #"19",
+        "--ninit-segs", "3",
+        "-s", "11",
+        # "--segment", "0",
+        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
+        # "-J", f"{gtpth}/scores4.csv",
+        "-P", f"{gtpth}/solutions_full.pkl",
+        "--all-sol", f"{gtpth}/clonal_trees.pkl",
+        "--profile", "test/profile.prof",
+        "--collapse",
+        "-O", f"{gtpth}"
 
-    # ])
+    ])
 
     profiler = cProfile.Profile()
     profiler.enable()
