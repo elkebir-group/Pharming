@@ -9,7 +9,6 @@ from utils import load_pickled_object
 import argparse 
 import pandas as pd 
 import networkx as nx
-from genotype import genotype
 
 
 
@@ -28,7 +27,7 @@ def genotypes_prep(genotypes_fname, genotypes):
                 m = row[4]
                 mut_to_seg[m] = row[1]
     
-                g= genotype(row[2], row[3], row[5], row[6])
+                g= (row[2], row[3], row[5], row[6])
                 genotypes[row[0]][m] = g
     return mut_to_seg
     

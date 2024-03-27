@@ -6,9 +6,9 @@ sys.path.append("../src")
 
 
 rule all:
-    # noinspection PyInterpreter
     input:
-        expand("input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+            inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -21,9 +21,9 @@ rule all:
 
 rule pharming:
     input:
-        dcfs = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        tm = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+        dcfs = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        tm = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
+        data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
 
     params:
         lamb = 1e3,
@@ -47,38 +47,13 @@ rule pharming:
         "--profile {output.profile} "
         "-P {output.sol} > {log.std} 2> {log.err} "
 
-# rule pharming_ilp:
-#     input:
-#         dcfs = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/dcfs.txt",
-#         tm = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_cluster_tree.txt",
-#         data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",        
-#     params:
-#         lamb = 1e3,
-#         topn = 3,
-#         opath = "./pharming/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}"
-#     threads: 7
-#     output:
-#         sol = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
-#         profile = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/run.prof",
-#     benchmark:"pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/benchmark.log"
-#     log:
-#         std= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.log",
-#         err= "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/inf.err.log"
-#     shell:
-#         "python ../src/main.py -d {input.data} -T {input.tm}  -D {input.dcfs} "
-#         "-s {wildcards.s} "
-#         "-l {params.lamb} "
-#         "-n {params.topn} "
-#         "-j {threads} "
-#         "-O {params.opath} "
-#         "--profile {output.profile} "
-#         "-P {output.sol} > {log.std} 2> {log.err} "
+
     
 rule eval_solutions:
     input:
-        data= "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
-        gt = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
-        cellassign = "input/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
+        data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/data.pkl",
+        gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/gt.pkl",
+        cellassign = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
         sol = "pharming_ilp/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/solution.pkl",
     params:
         lamb = 1e3,
@@ -98,9 +73,9 @@ rule eval_solutions:
 
 # rule score_tree:
 #     input:
-#         gt_cell ="input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
-#         gt_mut= "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/gt_mut_g{g}.csv",
-#         gt_tree = "input/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
+#         gt_cell ="{inpath}/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/cellclust_gt.csv",
+#         gt_mut= "{inpath}/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/gt_mut_g{g}.csv",
+#         gt_tree = "{inpath}/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/true_tree.txt",
 #         pred_cell = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/pred_mut_g{g}.csv",
 #         pred_mut = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/pred_mut_g{g}.csv",
 #         pred_tree = "pharming/s{seed}_n{cells}_m{mutations}_c{clones}_p{prob}_l{loss}/SegTrees/tree__g{g}.txt",
