@@ -171,10 +171,14 @@ class CNA_Merge:
             all_results.append(sol)
 
         all_results = sorted(all_results, key= lambda x: x.cost)
-        if top_n <= len(all_results):
-            return all_results[:top_n]
+        if len(all_results) > 0:
+            return [all_results[0]]
         else:
-            return all_results
+            return []
+        # if top_n <= len(all_results):
+        #     return all_results[:top_n]
+        # else:
+        #     return all_results
         
                 # self.data = data
         # self.lamb = lamb
