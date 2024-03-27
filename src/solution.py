@@ -28,6 +28,9 @@ class Solution:
     def optimize(self, data, lamb):
         self.cost, self.phi = self.ct.optimize(data, lamb)
     
+    def collapse(self, k, cell_threshold=10):
+        self.ct.collapse(self.phi, k, cell_threshold)
+    
     def prune(self):
         self.ct.prune(self.phi)
 
