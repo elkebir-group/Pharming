@@ -7,11 +7,12 @@ import multiprocessing
 
 RANDOM = 'random'
 NSNVS = 'nsnvs'
-INPLACE = "in place"
+INPLACE = "in-place"
+WRANDOM = "weighted-random"
 
 class ClonalTreeMerging:
     def __init__(self, k, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
-        n_orderings=5, collapse = False, cell_threshold=10, inter_opt=False ):
+         collapse = False, cell_threshold=10, inter_opt=False ):
         
         self.k = k
         if rng is not None:
@@ -21,13 +22,14 @@ class ClonalTreeMerging:
 
         self.top_n = top_n
 
-        self.n_orderings = n_orderings
     
     
         
-        if order not in [RANDOM, NSNVS, INPLACE]:
+        if order not in [RANDOM, NSNVS, INPLACE, WRANDOM]:
+            print("Warning: specified order param not valid, using random instead.")
             self.order = RANDOM
         else:
+           
             self.order = order 
 
         if progressive:
@@ -42,6 +44,7 @@ class ClonalTreeMerging:
         self.cell_threshold = cell_threshold
         self.segment_failures = set()
         self.inter_opt = inter_opt
+
    
     
     def fit(self, tree_list, T_m, data, lamb, cores=1):
@@ -57,19 +60,29 @@ class ClonalTreeMerging:
         cand_merged_lists = []
         if len(tree_list) <= 0:
                 raise ValueError("List must contain at least one tree.")
-        
-        if self.order == RANDOM:
-            for _ in range(self.n_orderings):
-                permutated_order = self.rng.permutation(len(tree_list))
-                ordered_list = [tree_list[i] for i in permutated_order]
-        
-        else:
-                ordered_list = tree_list
+        #remove any segments that have no inferrred segment trees 
+        tree_list =[lst for lst in tree_list if len(lst) > 0]
 
+        if self.order == RANDOM:
+            ordering = self.rng.permutation(len(tree_list))
             
-            #sort the trees according to other criteria, like number of SNVs or normalized costs
-            # pass 
+        
+        elif self.order == WRANDOM:
+
+            weights = [sol[0].m for sol in tree_list]
+            weights = weights/np.sum(weights)
+            ordering = self.rng.choice(len(tree_list), size=len(tree_list), replace=False, p=weights)
+
+        elif self.order == NSNVS:
+            nsnvs = [sol[0].m for sol in tree_list]
+            ordering = np.argsort(nsnvs)[::-1]
+            
+        else:    
+            ordering = [i for i in range(len(tree_list))]
+        
+        ordered_list = [tree_list[i] for i in ordering]
         cand_merged_lists.append(self.merge(ordered_list))
+        
         return  get_top_n(cand_merged_lists, self.top_n)
 
 

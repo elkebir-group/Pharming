@@ -1,4 +1,3 @@
-
 # Created by: L.L. Weber
 # Created on: 2024-02-29 17:30:46
 
@@ -79,11 +78,15 @@ def main(args):
                 start_state=(args.root_x, args.root_y), 
                 seed = args.seed,
                 top_n=  args.top_n,
-                collapse= args.collapse
+                collapse= args.collapse,
+                order = args.order,
+                ninit_segs = args.ninit_segs,
+                ninit_Tm = args.ninit_tm,
+                cell_threshold= args.cell_threshold,
                 )
 
   
-    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, ninit_segs=args.ninit_segs)
+    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
 
 
     if args.scores is not None:
@@ -143,8 +146,12 @@ if __name__ == "__main__":
                         help="optional filename of dcfs to use")
     parser.add_argument("--delta", type=float, nargs='+',
                         help="list of DCFs to use, ignored if dcf file is provided")
-    parser.add_argument("--ninit-segs", type=int, default=3,
-                        help="default number of segments for initialization of mutation cluster tree")
+    parser.add_argument("--ninit-segs", type=int,
+                        help="number of segments for initialization of mutation cluster tree")
+    parser.add_argument("--ninit-tm", type=int,
+                        help="number of mutation cluster trees to consider after pruning with initial segs")
+    parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
+                        help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
     parser.add_argument("-S", "--cnatrees",type=str,
                         help="optional filename of a pickled dictionary of CNA tree (nx.digraph) for each segment")
     parser.add_argument("--root_x", type=int, default=1,
@@ -153,6 +160,8 @@ if __name__ == "__main__":
                         help="starting state for paternal (y) allele")
     parser.add_argument("--collapse", action="store_true",
                         help="whether linear chains of copy number events should be collapsed prior to integration")
+    parser.add_argument("--cell-threshold", type=int,
+                        help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")
     parser.add_argument("-P" ,"--pickle", required=False, type=str,
@@ -173,7 +182,7 @@ if __name__ == "__main__":
     instance = "s11_m5000_k25_l5"
     # instance = "s12_m5000_k25_l7"
     folder = "n1000_c0.05_e0" 
-    pth = f"simulation_study/input"
+    pth = f"simulation_study/test"
 
     gtpth = "test"
 
@@ -184,10 +193,13 @@ if __name__ == "__main__":
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
         "-j", "4",
         "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-        # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+        "-T", f"{pth}/{instance}/{folder}/Tm.txt",
         "-n", "6",
-        "-L", "18", "3", "2", "24", "5", "13", #"0", "14", "22", #"19",
+        "-L", "18", "3", #"2", "24", "5", "13", #"0", "14", "22", #"19",
         "--ninit-segs", "3",
+        "--ninit-tm", "3",
+        "--cell-threshold", "15",
+        "--order", "weighted-random",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
