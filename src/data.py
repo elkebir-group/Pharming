@@ -92,7 +92,6 @@ class Data:
         
         cell_likes = np.zeros(len(cells))
         for v, snvs in vaf_to_snvs.items():
-            snvs = np.array(snvs)
             cell_likes += self.likelihood_dict[v][cells[:, np.newaxis], snvs].sum(axis=1)
 
         return cell_likes

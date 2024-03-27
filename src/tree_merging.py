@@ -108,7 +108,7 @@ class ClonalTreeMerging:
             tree_list1 = sorted(tree_list1, key=lambda x: x.cost )
             tree_list2 =  sorted(tree_list2, key=lambda x: x.cost )
         
-            segs1 = tree_list1[0].segments
+
             segs2 = tree_list2[0].segments
             
             candidates = []
@@ -174,6 +174,8 @@ class ClonalTreeMerging:
         
         # Merge every other tree in the list with the current merged_tree
         for i in range(2, len(tree_list)):
+            if i % 5 ==0:
+                print(f"Integrating tree list {i} of {len(tree_list)}")
             merged_tree_list=  self.merge_helper(merged_tree_list, tree_list[i])
 
 

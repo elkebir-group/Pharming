@@ -9,7 +9,8 @@ import numpy as np
 
 from data import Data
 from copy import deepcopy
-
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 def score_tree(gt, gt_phi, inf,inf_phi, segments=None):
@@ -129,8 +130,8 @@ if __name__ == "__main__":
         "-c", f"{pth}/{instance}/{folder}/phi.pkl",
         # "-s", "14",
         # "--segment", "0",
-        "-o", "test/scores.csv",
-        "-S", f"test/solutions.pkl",
+        "-o", "test/scores4.csv",
+        "-S", f"test/solutions4.pkl",
 
     ])
 
@@ -161,21 +162,45 @@ if __name__ == "__main__":
     gt_dcfs = gt.compute_dcfs(phi)
     root = gt.root
 
-    # gt.filter_snvs(snvs)
-    Tm = gt.mutation_cluster_tree()
+    mysegs = [18, 3, 2, 24, 5, 13]
+    # mysegs = [2]
+    gt.filter_segments(mysegs)
+    gt.compute_likelihood(dat, phi, lamb)
     
-    draw(Tm, "test/Tm.png")
-    cost = gt.compute_likelihood(dat, phi, lamb)
-    seg2 = deepcopy(gt)
-    seg2.filter_segments([2])
-    cost2 = seg2.compute_likelihood(dat, phi, lamb)
-    seg2.draw("test/gt_seg2.png", phi, segments=[2], include_dcfs=True)
+    gt.update_mappings()
+
 
     sol_list =   load_pickled_object(args.solutions)
-    for i,sol in enumerate(sol_list):
-          sol.png(f"test/ct{i}_seg2_0.png")
+    sol = sol_list[0]
+    sol.ct.filter_segments(mysegs)
+
+    inf_cost = sol.ct.compute_likelihood(dat, sol.phi, lamb=1e3)
+    sol.png("test/ct0.png")
+    gt_cost =gt.compute_likelihood(dat, phi, lamb=1e3)
+    print(f"{inf_cost} vs {gt_cost}")
+
     score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
     pd.DataFrame(score_results).to_csv(args.out, index=False)
+    # sns.histplot(total)
+
+    # gt.draw("test/gt_testsegs.png", phi, segments = mysegs)
+    # gt.filter_snvs(snvs)
+#     Tm = gt.mutation_cluster_tree()
+    
+#     draw(Tm, "test/Tm.png")
+#     cost = gt.compute_likelihood(dat, phi, lamb)
+# #     seg2 = deepcopy(gt)
+# #     seg2.filter_segments([2])
+# #     cost2 = seg2.compute_likelihood(dat, phi, lamb)
+# #     seg2.draw("test/gt_seg2.png", phi, segments=[2], include_dcfs=True)
+
+
+#     sol = sol_list[0]
+#     sol.png("test/best_tree.png")
+#     # score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi)]
+# #     for i,sol in enumerate(sol_list):
+# #           sol.png(f"test/ct{i}_seg2_0.png")
+
 
     # mysegs = [0,1,2,11,13,14,18,24]
     # all_scores = []

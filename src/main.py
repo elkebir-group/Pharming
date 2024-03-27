@@ -33,8 +33,6 @@ def main(args):
     for ell in segments:
         print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}")
     
-    # segments = [ell for ell in segments if dat.num_snvs(ell) > 75]
-
 
     if args.delta is not None:
         dlist = {}
@@ -186,14 +184,14 @@ if __name__ == "__main__":
         "-d", f"{pth}/{instance}/{folder}/data.pkl",
         "-j", "4",
         "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-        "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-        "-n", "10",
-        # "-L",  "2", #"0", "14", "22", #"19",
+        # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+        "-n", "6",
+        "-L", "18", "3", "2", "24", "5", "13", #"0", "14", "22", #"19",
         "--ninit-segs", "3",
         "-s", "11",
         # "--segment", "0",
         # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        "-J", f"{gtpth}/scores_full.csv",
+        # "-J", f"{gtpth}/scores4.csv",
         "-P", f"{gtpth}/solutions_full.pkl",
         "--all-sol", f"{gtpth}/clonal_trees.pkl",
         "--profile", "test/profile.prof",

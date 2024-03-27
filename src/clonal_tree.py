@@ -566,13 +566,13 @@ class ClonalTree:
         self.rho = self.rho | rho
 
     
-    def get_psi(self):
-         self.update_mappings()
+    # def get_psi(self):
+    #      self.update_mappings()
       
-         return self.psi
+    #      return self.psi
 
       
-    def get_psi_test(self):
+    def get_psi(self):
         psi = {}
 
         for v in self.preorder():
@@ -583,6 +583,11 @@ class ClonalTree:
             for j, g in self.genotypes[v].items(): 
                 if  self.mut_copies(g_par[j] ) ==0 and self.mut_copies(g) >0 and j not in psi:
                     psi[j] = v 
+  
+        for j in self.get_all_muts():
+            if j not in psi:
+                print(f"warning SNV {j} never introduced, appending to root")
+                psi[j] = self.root
         self.psi = psi 
         return psi
             
@@ -752,7 +757,7 @@ class ClonalTree:
 
     
     def update_mappings(self):
-        self.psi = self.get_psi_test()
+        self.psi = self.get_psi()
         self.mut_mapping = {n: [] for n in self.tree}
         self.mut_loss_mapping =  {n: [] for n in self.tree}
         for j,q in self.psi.items():
@@ -920,21 +925,38 @@ class ClonalTree:
 
     #     return cell_scores, nodes
     
-
-    def node_likelihood(self, data, cells, vaf):
-
-  
-            snvs = list(vaf.keys())
-            vafs = [vaf[j] for j in snvs]
+    @staticmethod
+    def get_indices_map(vaf):
+            snvs = np.array(list(vaf.keys()))
+            vafs = np.array([vaf[j] for j in snvs])
             unique_values = list(set(vafs))
    
             # unique_values, indices = np.unique(vafs, return_inverse=True)
 
             # Create a dictionary to map each unique value to its indices
             indices_map = {}
-            vafs = np.array(vafs)
+           
             for vaf in unique_values:
-                indices_map[vaf] = np.where(vafs==vaf)[0]
+                indices_map[vaf] = snvs[np.where(vafs==vaf)[0]]
+            
+            return indices_map
+    
+    def node_likelihood(self, data, cells, vaf):
+
+  
+            # snvs = np.array(list(vaf.keys()))
+            # vafs = [vaf[j] for j in snvs]
+            # unique_values = list(set(vafs))
+   
+            # # unique_values, indices = np.unique(vafs, return_inverse=True)
+
+            # # Create a dictionary to map each unique value to its indices
+            # indices_map = {}
+            # vafs = np.array(vafs)
+            # for vaf in unique_values:
+               
+            #     indices_map[vaf] = snvs[np.where(vafs==vaf)[0]]
+            indices_map = self.get_indices_map(vaf)
             cell_scores = data.compute_cell_likelihoods(indices_map, cells=cells)
         
         
@@ -964,16 +986,8 @@ class ClonalTree:
         for u in nodes:
             latent_genos = self.get_latent_genotypes(u)
             latent_vaf = self.get_latent_vafs(latent_genos)
-            snvs = list(latent_vaf.keys())
-            vafs = [latent_vaf[j] for j in snvs]
-            unique_values = list(set(vafs))
-            vafs = np.array(vafs)
-
-            # Create a dictionary to map each unique value to its indices
-            indices_map = {}
-            for vaf in unique_values:
-                indices_map[vaf] = np.where(vafs==vaf)[0]
         
+            indices_map = self.get_indices_map(latent_vaf)
             cell_scores = data.compute_cell_likelihoods(indices_map)
             node_cell_likes.append(cell_scores)
    
@@ -1040,7 +1054,7 @@ class ClonalTree:
 
         has_path = self.get_path_map()
         
-        self.psi = self.get_psi_test()
+        self.psi = self.get_psi()
         if not rho and self.rho is not None:
             rho = self.rho 
         if not rho:
