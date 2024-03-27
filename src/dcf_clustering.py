@@ -49,6 +49,8 @@ def scalar_obj_new(dcf, tree_assignments, snvs_in_cluster, alt, total, deciferOb
     for snv in snvs_in_cluster:
         seg = deciferObject.data.snv_to_seg[snv]
         cn_prob = deciferObject.data.cn_proportions(seg)
+        if (1,1) not in cn_prob:
+            cn_prob[(1,1)] = 0
         tree = tree_assignments[seg][snv]
         alt_summed = sum(alt)
         total_summed = sum(total)
@@ -96,6 +98,9 @@ class DCF_Clustering:
     def optimize_cluster_and_tree_assignments(self, tree_id_to_indices, dcfs, alt, total, ell):
         snvs = self.data.seg_to_snvs[ell]
         cn_prob = self.data.cn_proportions(ell)
+        if (1,1) not in cn_prob:
+            cn_prob[(1,1)] = 0
+
         # get a_vec and d_vec for the snvs
         a_vec = alt.sum(axis=0)
         d_vec = total.sum(axis=0)
@@ -181,6 +186,8 @@ class DCF_Clustering:
         cn_props ={}
         for ell in self.segments:
              cn_props[ell] = self.data.cn_proportions(ell)
+             if (1,1) not in cn_props[ell]:
+                 cn_props[ell][(1,1)] = 0
 
              #find all copy number states (x,y) and proportions in segment ell
              states = set(cn_props[ell].keys())

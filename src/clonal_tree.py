@@ -15,6 +15,7 @@ from tree_to_json import convertToJson
 from scipy.stats import binom
 from scipy.stats import beta
 from copy import deepcopy
+import utils
 
 
 EPSILON = -1e5
@@ -198,7 +199,7 @@ class ClonalTree:
         return self.genotypes.copy()
 
     def get_seg_to_muts(self):
-        return self.seg_to_muts.copy()
+        return self.seg_to_muts
     
     def get_segments(self):
         return set(self.seg_to_muts.keys())
@@ -564,6 +565,32 @@ class ClonalTree:
     def has_snvs(self, n):
         return len(self.mut_mapping[n]) > 0
     
+    def collapse(self, phi, k, cell_threshold=10):
+        cell_counts = phi.get_cell_count()
+        candidates = [n for n in cell_counts if cell_counts[n] < cell_threshold and 
+                      n > k and n != self.root and self.tree.out_degree[n] == 1]
+        chain_dict = {}
+        for n in self.preorder():
+            if len(candidates) == 0:
+                break 
+            if n in candidates:
+                chain_dict[n] = []
+                candidates.remove(n)
+       
+                for u in self.preorder(n):
+                        if u in candidates and self.tree.out_degree[u] ==1:
+                            chain_dict[n].append(u)
+                            candidates.remove(u)
+                        else:
+                            break
+
+        for keep, remove in chain_dict.items():
+            for u in remove:
+                if cell_counts[u] > 0:
+                    for i in phi.get_cells(u):
+                        phi.move(i, keep)
+                self.prune_tree(u, phi)
+
 
     def prune(self, cellAssign):
         counts = cellAssign.get_cell_count()
@@ -800,6 +827,7 @@ class ClonalTree:
         return cell_scores, nodes
 
 
+
     def assign_cells_by_likelihood(self, data, cells=None, lamb=1000):
         cell_scores, nodes = self.compute_node_likelihoods(data, cells,lamb)
         node_assign = np.argmin(cell_scores, axis=0)
@@ -859,6 +887,7 @@ class ClonalTree:
         _ = self.compute_likelihood(dat, best_ca, lamb)
         return opt_cost, best_ca 
 
+
     def assign_genotypes(self, dat, phi, rho=None, seg_to_snvs=None, states=None):
         """
         For a given cell assignment phi and observed data dat=(C,A,D), find the optimal
@@ -887,14 +916,16 @@ class ClonalTree:
         cell_counts  = phi.get_cell_count()
         clones  = [u for u in self.clones() if cell_counts[u] >0]
         psi = self.get_psi()
+        cna_genos_all = self.get_cna_genos()
 
       
         for ell, snvs in seg_to_snvs.items():
-            snv_clusters = list(rho[ell].keys())
+            snv_cluster_mapping = rho[ell]
+            snv_clusters = list(snv_cluster_mapping.keys())
             
-            cna_genos = self.get_cna_genos()
-            if ell in cna_genos:
-                cna_genos = cna_genos[ell]
+       
+            if ell in cna_genos_all:
+                cna_genos = cna_genos_all[ell]
             else:
                 cna_genos = {v: CNAgenotype(*states[ell]) for v in self.tree}
 
@@ -903,17 +934,19 @@ class ClonalTree:
             for q in snv_clusters:
            
                 all_tree_costs = []
-                for snv_tree in rho[ell][q]:
-                    vaf_list = []
+                for snv_tree in snv_cluster_mapping[q]:
+                    all_vafs = np.vstack([self.get_vafs(q, j, snv_tree, clones, cna_genos, has_path) for j in snvs]).T
+
+                    # vaf_list = []
                 
-                    for j in snvs:
-                        # if j in [3588, 1029,2055]:
-                        #     print("here")
+                    # for j in snvs:
+                    #     # if j in [3588, 1029,2055]:
+                    #     #     print("here")
 
-                        vafs = self.get_vafs(q, j, snv_tree, clones, cna_genos,has_path)
-                        vaf_list.append(vafs)
+                    #     vafs = self.get_vafs(q, j, snv_tree, clones, cna_genos,has_path)
+                    #     vaf_list.append(vafs)
 
-                    all_vafs = np.vstack(vaf_list).T
+                    # all_vafs = np.vstack(vaf_list).T
 
                     cluster_costs = np.zeros(shape= len(snvs))
                     assert all_vafs.shape[0] == len(clones)
@@ -935,7 +968,7 @@ class ClonalTree:
             clust_costs = np.vstack(all_cluster_costs)
 
             snv_cluster_assign = clust_costs.argmin(axis=0)
-            moved_snvs = []
+      
             for j,q in zip(snvs, snv_cluster_assign): 
                 # if j in [3588, 1029,2055]:
                 #     print("here")
@@ -950,8 +983,7 @@ class ClonalTree:
     
                     self.update_genotype(opt_clust, j,snv_cluster_tree[j,opt_clust], cna_geno=cna_genos)
                 
-                elif  psi[j] != opt_clust:
-                    moved_snvs.append(j)        
+                elif  psi[j] != opt_clust:     
                     self.update_genotype(opt_clust, j,snv_cluster_tree[j,opt_clust])
             
         self.update_mappings()
