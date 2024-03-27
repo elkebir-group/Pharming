@@ -1,4 +1,4 @@
-configfile: "config.yml"
+configfile: "test.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
 # seeds = [11]
 import sys 
@@ -10,7 +10,7 @@ ruleorder:  simulate > generatesinglecells
 rule all:
     input:
         expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/sparse.p0",
-            inpath = config["input"],
+            inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -20,7 +20,7 @@ rule all:
             err = config["cerror"]
         ),
         expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pkl",
-            inpath = config["input"],
+            inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -43,7 +43,8 @@ rule simulate:
         cp_thresh = 0.05,
         purity = 0.99,
         sample = 1,
-        alpha= 0.001,
+        dirch = config["dirch"],
+        alpha= config["alpha"],
         truncalSegs = 2,
         simout_dir = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}",
     log:
@@ -53,6 +54,7 @@ rule simulate:
         "{params.pth} -r -S {input} "
         " -purity {params.purity} -minProp {params.cp_thresh} "
         " -kk {params.truncalSegs} -f "
+        "-dirich_param {params.dirch} "
         "-s {wildcards.s}  -l {wildcards.mclust} "
         "-k {wildcards.nsegs} -n {wildcards.snvs} -m {params.sample} "
         "-output_file_dir {params.simout_dir}  > {log.std} 2> {log.err}  "
@@ -78,7 +80,7 @@ rule generatesinglecells:
         std ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/run.log", 
         err ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/err.log" 
     shell:
-     "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} -k {wildcards.nsegs} "
+     "{params.pth} -num_cells {wildcards.cells} -read_depth {wildcards.cov} -k {wildcards.nsegs}  "
      "-alpha_fp {params.alpha} -out_dir {params.scout_dir} -in_dir {params.simout_dir} -e {wildcards.err} "
      " -m {params.sample} > {log.std} 2> {log.err} "
 
