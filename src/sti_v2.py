@@ -240,7 +240,7 @@ class STI:
   
 
         # return all_costs, tree_assign
-    @timeit_decorator
+
     def precompute_costs(self, data):
         self.snvs = data.seg_to_snvs[self.ell]
         self.cn_props = data.cn_proportions(self.ell)
