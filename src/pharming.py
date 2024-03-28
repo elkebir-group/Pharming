@@ -25,7 +25,8 @@ class Pharming:
                   ninit_segs = None,
                   ninit_Tm = None,
                   cell_threshold=10) -> None:
-        self.verbose =verbose 
+        self.verbose =verbose
+        self.verbose = True 
         self.rng = np.random.default_rng(seed)
 
         if dcfs is not None:
@@ -139,10 +140,10 @@ class Pharming:
 
         T_CNAS = [convert_to_CNAtree(tree) for tree in trees]
         
-        if self.verbose:
-            print(f"Enumerated CNA trees for {cn_states}")
-            for T in T_CNAS:
-                print(T)
+        # if self.verbose:
+        #     print(f"Enumerated CNA trees for {cn_states}")
+        #     for T in T_CNAS:
+        #         print(T)
         
         return T_CNAS
 
@@ -376,7 +377,7 @@ class Pharming:
             segments = data.segments
 
         init_segs, infer_segs, place_segs = self.partition_segments(segments, min_cn_states=2)
-        print(f"\Segment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
+        print(f"Segment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
         
         print("Plowing the field.... ")
         stis = self.preprocess(init_segs)

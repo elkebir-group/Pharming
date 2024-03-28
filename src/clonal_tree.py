@@ -1157,7 +1157,8 @@ class ClonalTree:
                     cluster_costs = np.vstack([dat.compute_snv_likelihoods(all_vafs[i], snvs, phi.get_cells(u)) for i,u in enumerate(clones)])
                     all_tree_costs.append(cluster_costs.sum(axis=0))
                
-                
+      
+                    raise Exception(f"No valid SNV trees for cluster {q} in segment {ell}.")
                 tree_costs= np.vstack(all_tree_costs)
                 tree_assign[q] = tree_costs.argmin(axis=0)
                 all_cluster_costs.append(tree_costs.min(axis=0))

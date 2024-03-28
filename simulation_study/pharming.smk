@@ -50,7 +50,7 @@ rule pharming:
         "-n {wildcards.topn} "
         "-j {threads} "
         "--ninit-segs {wildcards.nsegs} "
-        "--ninit_tm {wildcards.tm} "
+        "--ninit-tm {wildcards.tm} "
         "--cell-threshold {params.cell_thresh} "
         "--root_x {params.root_x} --root_y {params.root_y} " 
         "--collapse "
