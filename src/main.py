@@ -89,12 +89,7 @@ def main(args):
     solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
 
 
-    if args.scores is not None:
-            print("Saving cost values...")
-            with open(args.scores, "w+") as file:
-                for sol in solutions:
-                    file.write(f"{sol.cost}\n")
-    
+
     if args.pickle is not None:
          print("Pickling solutions...")
          pickle_object(solutions, args.pickle)
@@ -140,8 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("-T", "--Tm", type=str,  
                         help="optional filename of  mutation cluster tree")
     parser.add_argument("-k", "--snv-clusters", type=int, default=5,
-                        help="number of SNV clusters, if dcfs are also specified, k defaults to the \
-                        of specified DCFs")
+                        help="number of SNV clusters, if dcfs are also specified, k defaults to the number of specified DCFs")
     parser.add_argument("-D", "--dcfs", type=str, 
                         help="optional filename of dcfs to use")
     parser.add_argument("--delta", type=float, nargs='+',
@@ -168,8 +162,6 @@ if __name__ == "__main__":
                         help="directory where the pickled solution list of top n trees should be saved")
     parser.add_argument("-O" ,"--out", required=False, type=str,
                         help="directory where output files should be written")
-    parser.add_argument("-J", "--scores", type=str,
-        help = "filename of tree scores")
     parser.add_argument( "--all-sol", type=str,
         help = "filename of object to pickle all top clonal trees inferred from each mutation cluster tree")
     parser.add_argument("--profile", type=str)
@@ -179,43 +171,42 @@ if __name__ == "__main__":
     
 
 
-    instance = "s11_m5000_k25_l5"
-    # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.05_e0" 
-    pth = f"simulation_study/test"
+    # instance = "s11_m5000_k25_l5"
+    # # instance = "s12_m5000_k25_l7"
+    # folder = "n1000_c0.05_e0" 
+    # pth = f"simulation_study/test"
 
-    gtpth = "test"
+    # gtpth = "test"
 
 
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "4",
-        "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-        "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-        "-n", "6",
-        "-L", "18", "3", #"2", "24", "5", "13", #"0", "14", "22", #"19",
-        "--ninit-segs", "3",
-        "--ninit-tm", "3",
-        "--cell-threshold", "15",
-        "--order", "weighted-random",
-        "-s", "11",
-        # "--segment", "0",
-        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        # "-J", f"{gtpth}/scores4.csv",
-        "-P", f"{gtpth}/solutions_full.pkl",
-        "--all-sol", f"{gtpth}/clonal_trees.pkl",
-        "--profile", "test/profile.prof",
-        "--collapse",
-        "-O", f"{gtpth}"
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-j", "4",
+    #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
+    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+    #     "-n", "6",
+    #     "-L", "18", "3", #"2", "24", "5", "13", #"0", "14", "22", #"19",
+    #     "--ninit-segs", "3",
+    #     "--ninit-tm", "3",
+    #     "--cell-threshold", "15",
+    #     "--order", "weighted-random",
+    #     "-s", "11",
+    #     # "--segment", "0",
+    #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
+    #     # "-J", f"{gtpth}/scores4.csv",
+    #     "-P", f"{gtpth}/solutions_full.pkl",
+    #     "--all-sol", f"{gtpth}/clonal_trees.pkl",
+    #     "--profile", "test/profile.prof",
+    #     "--collapse",
+    #     "-O", f"{gtpth}"
 
-    ])
+    # ])
 
     profiler = cProfile.Profile()
     profiler.enable()
 
-    # Call your main function here with the parsed arguments
     main(args)
 
     profiler.disable()
