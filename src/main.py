@@ -176,28 +176,33 @@ if __name__ == "__main__":
     # folder = "n1000_c0.05_e0" 
     # pth = f"simulation_study/test"
 
-    # gtpth = "test"
+    gtpth = "test"
+
+    # instance = "s13_m5000_k25_l5"
+    # # instance = "s12_m5000_k25_l7"
+    # folder = "n1000_c0.25_e0" 
+    # pth = f"simulation_study/test"
 
 
 
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "4",
+    #     "-j", "1",
     #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-    #     "-n", "6",
-    #     "-L", "18", "3", #"2", "24", "5", "13", #"0", "14", "22", #"19",
+    #     "-n", "5",
+    #      "-L", "24", # "18", 
     #     "--ninit-segs", "3",
-    #     "--ninit-tm", "3",
-    #     "--cell-threshold", "15",
+    #     "--ninit-tm", "4",
+    #     "--cell-threshold", "5",
     #     "--order", "weighted-random",
-    #     "-s", "11",
+    #     "-s", "13",
     #     # "--segment", "0",
     #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
     #     # "-J", f"{gtpth}/scores4.csv",
     #     "-P", f"{gtpth}/solutions_full.pkl",
-    #     "--all-sol", f"{gtpth}/clonal_trees.pkl",
+    #     # "--all-sol", f"{gtpth}/clonal_trees.pkl",
     #     "--profile", "test/profile.prof",
     #     "--collapse",
     #     "-O", f"{gtpth}"

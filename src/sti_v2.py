@@ -155,6 +155,7 @@ class STI:
         
         tree_clusters = [[] for _ in clusters]
         for tree in self.T_SNVs:
+            added = False
             for u in tree:
                 parent = list(tree.predecessors(u))
                 if len(parent) > 0:
@@ -174,7 +175,10 @@ class STI:
             for index, clust in clusters.items():
                 if clust['sscn'] == sscn and clust['children'] == children_states:
                     tree_clusters[index].append(tree)
+                    added = True
                     break
+            if not added:
+                print(u)
             
         return tree_clusters, clusters
 
@@ -317,6 +321,9 @@ class STI:
         for g,q in groups:
             rho[self.ell][q] = self.T_SNV_groups[g]
         
+        if any(len(rho[self.ell][q])== 0 for q in self.delta ):
+            print(groups)
+            draw(T,"test/T.png")
         # if len(groups) ==0:
         #     print(self.ell)
             # draw(T, "test/no_valid_clusters.png")
