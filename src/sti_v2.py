@@ -320,10 +320,18 @@ class STI:
 
         for g,q in groups:
             rho[self.ell][q] = self.T_SNV_groups[g]
+            if len(self.T_SNV_groups[g]) == 0:
+                print(f"Warning, empty snv tree for cluster {q}")
+                print("segment tree:")
+                print(list(T.edges))
+
+           
         
-        if any(len(rho[self.ell][q])== 0 for q in self.delta ):
-            print(groups)
-            draw(T,"test/T.png")
+        # if any(len(rho[self.ell][q])== 0 for q in self.delta ):
+   
+                 
+            # draw(T,"test/T.png")
+            # print("error")
         # if len(groups) ==0:
         #     print(self.ell)
             # draw(T, "test/no_valid_clusters.png")
