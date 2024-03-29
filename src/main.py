@@ -176,11 +176,11 @@ if __name__ == "__main__":
     # folder = "n1000_c0.05_e0" 
     # pth = f"simulation_study/test"
 
-    gtpth = "test"
+    # gtpth = "test"
 
-    # instance = "s13_m5000_k25_l5"
+    # instance = "s10_m5000_k25_l5"
     # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.25_e0" 
+    # folder = "n1000_c0.05_e0" 
     # pth = f"simulation_study/test"
 
 
@@ -192,12 +192,12 @@ if __name__ == "__main__":
     #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
     #     "-n", "5",
-    #      "-L", "24", # "18", 
+    #      "-L", "0", # "18", 
     #     "--ninit-segs", "3",
     #     "--ninit-tm", "4",
     #     "--cell-threshold", "5",
     #     "--order", "weighted-random",
-    #     "-s", "13",
+    #     "-s", "10",
     #     # "--segment", "0",
     #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
     #     # "-J", f"{gtpth}/scores4.csv",
