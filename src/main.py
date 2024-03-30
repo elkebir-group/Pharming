@@ -171,16 +171,12 @@ if __name__ == "__main__":
     
 
 
-    # instance = "s11_m5000_k25_l5"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/test"
 
     # gtpth = "test"
-
-    # instance = "s10_m5000_k25_l5"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
+    # seed = 13
+    # cov = 0.05
+    # instance = f"s{seed}_m5000_k25_l5"
+    # folder = f"n1000_c{cov}_e0" 
     # pth = f"simulation_study/test"
 
 
@@ -190,14 +186,14 @@ if __name__ == "__main__":
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
     #     "-j", "1",
     #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+    #     # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
     #     "-n", "5",
-    #      "-L", "0", # "18", 
+    #      "-L", "24", # "18", 
     #     "--ninit-segs", "3",
-    #     "--ninit-tm", "4",
+    #     "--ninit-tm", "1",
     #     "--cell-threshold", "5",
     #     "--order", "weighted-random",
-    #     "-s", "10",
+    #     "-s", f"{seed}",
     #     # "--segment", "0",
     #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
     #     # "-J", f"{gtpth}/scores4.csv",
