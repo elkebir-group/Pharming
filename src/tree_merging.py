@@ -63,6 +63,10 @@ class ClonalTreeMerging:
         #remove any segments that have no inferrred segment trees 
         tree_list =[lst for lst in tree_list if len(lst) > 0]
 
+        if len(tree_list) ==0:
+            print("Warning, no trees to integrate!")
+            return cand_merged_lists
+
         if self.order == RANDOM:
             ordering = self.rng.permutation(len(tree_list))
             

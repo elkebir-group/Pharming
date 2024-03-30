@@ -71,6 +71,12 @@ class STI:
         self.T_SNVs = [nx.DiGraph(edges) for edges in snv_tree_edgelists]
         self.T_SNV_groups, self.group_desc = self.group_snv_trees()
 
+        for g in self.group_desc:
+            if len(self.T_SNV_groups[g])==0:
+                print(f"Missing additional SNV trees for group {g}: {self.group_desc[g]}")
+                # self.T_SNV_groups[g] = self.generate_snv_trees(g)
+
+
                 
         self.cn_delta = {}
         self.cost1, self.cost2 = None, None
@@ -82,7 +88,91 @@ class STI:
         #         draw(tree, f"test/group{g}_{idx}.png")
 
 
+    def generate_snv_trees(self, group):
+        #TODO: add SNV loss 
+        sscn = self.group_desc[group]["sscn"] 
+        children = list(self.group_desc[group]["children"])
+        # print(sscn)
+        # print(children)
 
+        def propagate(T, node, allele):
+            mapping = {}
+           
+          
+            for u in sorted(nx.descendants(T, node)):
+                new_label = list(u)
+                new_label[allele+2] = u[allele]
+                mapping[u] = tuple(new_label)
+            
+            T= nx.relabel_nodes(T, mapping=mapping)
+
+            return T
+    
+        def propagate_loss(T,node, allele):
+            mapping = {}
+           
+            loss = False 
+            for u in nx.dfs_preorder_nodes(T, node):
+                parent = list(T.predecessors(u))[0]
+                new_label = list(u)
+                if parent[allele] > u[allele] and not loss:
+                    loss = True
+                    # new_label[allele+2] = 0
+                    #        mapping[u] = tuple(new_label)
+                    continue
+             
+ 
+                if max(parent[2], parent[3])  > 0:
+                    new_label[allele+2] = u[allele]
+                    mapping[u] = tuple(new_label)
+
+            if loss:   
+                T= nx.relabel_nodes(T, mapping=mapping)
+                return T
+           
+
+          
+            
+        trees = []
+        base_tree_edges = [((*u, 0, 0), (*v, 0,0)) for u,v in self.S.edges]
+        base_tree =  nx.DiGraph(base_tree_edges)
+        # draw(base_tree, "test/base_tree.png")
+        u= sscn
+        for i, allele in enumerate(u):
+            if allele > 0:
+                T = base_tree.copy()
+                if i ==0:
+                    mut_node = (*u, 1,0 )
+                else:
+                    mut_node = (*u, 0,1 )
+                
+                T.add_edge((*u,0,0), mut_node)
+                for v in children:
+                        T.remove_edge((*u, 0,0),(*v, 0, 0))
+                        T.add_edge( mut_node, (*v, 0, 0))
+                
+       
+                T_gain = propagate(T, mut_node, i)
+                # draw(T_gain, "test/gain_tree.png")
+                T_loss = propagate_loss(T,mut_node, i)
+                trees.append(T_gain)
+                if T_loss is not None:
+                    # draw(T_loss, "test/loss_tree.png")
+                    trees.append(T_loss)
+   
+        return trees
+                        
+                       
+                            
+                            
+
+
+
+
+
+
+
+        
     
     @staticmethod
     def to_inverse_dict(mydict):
@@ -292,13 +382,15 @@ class STI:
     def identify_snv_cluster_trees(self,T):
         '''
         Given a networkx DiGraph tree labeled by (q, (x,y)),
-        return a set of tuples (q, g) where the SNV clusters are introduced
+        return a set of tuples (q, g) where g is the group (sscn, children) in which 
+        SNV cluster q was introduced 
         '''
         rho = {self.ell: {}}
         root = (-1, (self.S_root))
         sscn = {}
         children = {}
         groups = []
+
         for v in nx.dfs_preorder_nodes(T, source=root):
             if v != root:
                 v_q, v_cn  = v
@@ -317,14 +409,9 @@ class STI:
                         g_children = self.group_desc[g]['children']
                         if sscn[v_q] == g_sscn and set(children[v_q]) == set(g_children):
                             groups.append((g,v_q))
+                            rho[self.ell][v_q] = self.T_SNV_groups[g]
 
-        for g,q in groups:
-            rho[self.ell][q] = self.T_SNV_groups[g]
-            if len(self.T_SNV_groups[g]) == 0:
-                print(f"Warning, empty snv tree for cluster {q}")
-                print("segment tree:")
-                print(list(T.edges))
-
+        return groups, rho 
            
         
         # if any(len(rho[self.ell][q])== 0 for q in self.delta ):
@@ -336,7 +423,7 @@ class STI:
         #     print(self.ell)
             # draw(T, "test/no_valid_clusters.png")
             # pickle_object(self, "test/no_valid_clusters.pkl")
-        return groups, rho 
+
 
      
 

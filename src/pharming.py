@@ -168,17 +168,17 @@ class Pharming:
         if self.verbose:
             print(f"Starting segment {ell}...")
         
-        all_trees = []
+        segtrees = []
         Tm_edges = list(T_m.edges)
         for st in stis:
             trees = st.fit(Tm_edges, self.data, ell)
             if len(trees) > 0:
-                all_trees.append(trees)
+                segtrees.append(trees)
             
-        if len(all_trees) ==0:
+        if len(segtrees) ==0:
             print(f"Segment {ell} failed for {Tm_edges}!")
         else:
-            segtrees = utils.concat_and_sort(all_trees)
+            segtrees = utils.concat_and_sort(segtrees)
 
         if self.verbose:
             print(f"Segment {ell} complete!")
@@ -377,7 +377,7 @@ class Pharming:
             segments = data.segments
 
         init_segs, infer_segs, place_segs = self.partition_segments(segments, min_cn_states=2)
-        print(f"Segment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
+        print(f"\nSegment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
         
         print("Plowing the field.... ")
         stis = self.preprocess(init_segs)
