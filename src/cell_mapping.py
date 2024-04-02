@@ -86,7 +86,13 @@ class CellAssign:
         self.update(phi)
 
         
-         
+    def write_phi(self, fname, include_subcluster=True):
+
+        df = pd.DataFrame(list(self.phi.items()), columns=['cell', 'cluster'])
+        if include_subcluster:
+            df['subcluster'] =0
+            df = df[["cluster", "subcluster", "cell"]]
+        df.to_csv(fname, index=False)
 
     def compute_ari(self,obj) -> float:
         #  gt_mut = self.get_mut_clusters()

@@ -174,7 +174,7 @@ if __name__ == "__main__":
 
     # gtpth = "test"
     # seed = 13
-    # cov = 0.05
+    # cov = 0.25
     # instance = f"s{seed}_m5000_k25_l5"
     # folder = f"n1000_c{cov}_e0" 
     # pth = f"simulation_study/test"
@@ -186,9 +186,9 @@ if __name__ == "__main__":
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
     #     "-j", "1",
     #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-    #     # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
     #     "-n", "5",
-    #      "-L", "24", # "18", 
+    #     #  "-L", "24", # "18", 
     #     "--ninit-segs", "3",
     #     "--ninit-tm", "1",
     #     "--cell-threshold", "5",

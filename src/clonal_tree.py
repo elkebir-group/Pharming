@@ -1618,6 +1618,21 @@ class ClonalTree:
         tree.layout("dot")
         tree.draw(fname)
   
+    def write_psi(self, fname):
+        psi = self.get_psi()
+        df = pd.DataFrame(list(psi.items()), columns=['mutation', 'cluster'])
+        df.to_csv(fname, index=False)
+
+
+    def write_loss_mapping(self, fname):
+        self.update_mappings()
+        loss = {}
+        for u, snvs in self.mut_loss_mapping.items():
+            for j in snvs:
+                loss[j] = u
+        
+        df = pd.DataFrame(list(loss.items()), columns=['mutation', 'cluster'])
+        df.to_csv(fname, index=False)
 
     def save_text(self, path):
         '''

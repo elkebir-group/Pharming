@@ -36,11 +36,19 @@ class Pharming:
             self.k = k 
             self.delta = {q: self.rng.random(size=1) for q in range(self.k)}
 
-        if T_m is None:
+        if True:
+            self.ground_truth_tm = np.Inf
+        # if T_m is None:
             self.scriptTm = self.enumerate_mutcluster_trees()
+            print(f"\nTotal number of mutation cluster trees: {len(self.scriptTm)}")
+            for i,T in enumerate(self.scriptTm):
+                if set(T.edges) == set(T_m.edges):
+                    print(f"Found ground truth tree at index {i}!")
+                    self.ground_truth_tm = i
             # utils.pickle_object(self.scriptTm, "test/scriptTm.pkl")
 
         else:
+        
             
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
@@ -195,7 +203,7 @@ class Pharming:
         return list of lists of segment trees, one list per each segment
         """
 
-   
+
         if self.cores  <= 1:
             segtrees = []
             for ell in stis:
@@ -396,10 +404,12 @@ class Pharming:
             smallest_indices = sorted_indices[:self.ninit_Tm]
      
         
-
+    
         print(f"SMALLEST INDICES: {smallest_indices}")
         for i in smallest_indices:
             print(f"{i}: {list(self.scriptTm[i].edges)}")
+            if i == self.ground_truth_tm:
+                print("Including the ground truth mutation cluster tree!")
         
         print("\nWatering the fields.... ")
         if len(infer_segs) > 0:

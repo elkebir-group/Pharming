@@ -13,13 +13,15 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-def score_tree(gt, gt_phi, inf,inf_phi, segments=None):
+def score_tree(gt, gt_phi, inf,inf_phi, dat, lamb=1e3, segments=None, filter=False):
         if segments is None:
               segments = inf.get_segments()
-        gt.filter_snvs(inf.get_all_muts())
+        if filter:
+            gt.filter_segments(segments)
         _ = gt.compute_likelihood(dat, gt_phi, lamb)
+        _ = inf.compute_likelihood(dat, inf_phi, lamb=lamb)
         scores = gt.score_snvs(inf)
-        # scores["tree"] = i
+
         scores["segment"] = ":".join([str(ell) for ell in segments])
         scores["cell_ari"] =gt_phi.compute_ari(inf_phi)
         scores["gt_cost"] = gt.cost 
@@ -118,32 +120,43 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    instance = "s11_m5000_k25_l5"
-    # instance = "s12_m5000_k25_l7"
-    folder = "n1000_c0.05_e0" 
-    pth = f"simulation_study/input"
+    # instance = "s11_m5000_k25_l5"
+    # # instance = "s12_m5000_k25_l7"
+    # folder = "n1000_c0.05_e0" 
+    # pth = f"simulation_study/input"
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-t", f"{pth}/{instance}/{folder}/gt.pkl",
-        "-c", f"{pth}/{instance}/{folder}/phi.pkl",
-        # "-s", "14",
-        # "--segment", "0",
-        "-o", "test/scores4.csv",
-        "-S", f"test/solutions4.pkl",
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-t", f"{pth}/{instance}/{folder}/gt.pkl",
+    #     "-c", f"{pth}/{instance}/{folder}/phi.pkl",
+    #     # "-s", "14",
+    #     # "--segment", "0",
+    #     "-o", "test/scores4.csv",
+    #     "-S", f"test/solutions4.pkl",
 
-    ])
-
-
-
-
-
+    # ])
 
 
     lamb = args.lamb
     dat = load_pickled_object(args.data)
+    gt = load_pickled_object(args.tree)
+    phi = load(args.cell_assign)
+    phi.relabel(dat.cell_lookup)
+    gt.compute_likelihood(dat, phi, lamb)
+    
+    gt.update_mappings()
+    
+    sol_list =   load_pickled_object(args.solutions)
+    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi, dat, lamb) for sol in sol_list]
+      
+    pd.DataFrame(score_results).to_csv(args.out, index=False)
+  
+    # sol.png("test/ct0.png")
+    # gt_cost =gt.compute_likelihood(dat, phi, lamb=1e3)
+    # print(f"{inf_cost} vs {gt_cost}")
 
+ 
 
 
     # if args.segment is None:
@@ -153,34 +166,21 @@ if __name__ == "__main__":
 
     # snvs = list(itertools.chain(*[dat.seg_to_snvs[seg] for seg in eval_segs]))
 
-    gt = load_pickled_object(args.tree)
-    phi = load(args.cell_assign)
+
 
     # gt.reindex_snvs(dat.mut_lookup)
 
-    phi.relabel(dat.cell_lookup)
-    gt_dcfs = gt.compute_dcfs(phi)
-    root = gt.root
 
-    mysegs = [18, 3, 2, 24, 5, 13]
-    # mysegs = [2]
-    gt.filter_segments(mysegs)
-    gt.compute_likelihood(dat, phi, lamb)
-    
-    gt.update_mappings()
+    # gt_dcfs = gt.compute_dcfs(phi)
+    # root = gt.root
+
+    # mysegs = [18, 3, 2, 24, 5, 13]
+    # # mysegs = [2]
+    # gt.filter_segments(mysegs)
 
 
-    sol_list =   load_pickled_object(args.solutions)
-    sol = sol_list[0]
-    sol.ct.filter_segments(mysegs)
 
-    inf_cost = sol.ct.compute_likelihood(dat, sol.phi, lamb=1e3)
-    sol.png("test/ct0.png")
-    gt_cost =gt.compute_likelihood(dat, phi, lamb=1e3)
-    print(f"{inf_cost} vs {gt_cost}")
 
-    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi) for sol in sol_list]
-    pd.DataFrame(score_results).to_csv(args.out, index=False)
     # sns.histplot(total)
 
     # gt.draw("test/gt_testsegs.png", phi, segments = mysegs)
