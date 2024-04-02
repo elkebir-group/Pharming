@@ -18,7 +18,9 @@ cov:
 
 cerror: 0
 
-dirch: 2
+dirch: 
+  - 2
+
 
 alpha: 0.001
 nsegs: 25
