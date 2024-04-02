@@ -1,11 +1,10 @@
-configfile: "test.yml"
+configfile: "sims.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
-# seeds = [11]
 import sys 
 sys.path.append("../src")
 
 # #TODO: add rule generate cna trees 
-ruleorder:  simulate > generatesinglecells
+# ruleorder:  simulate > generatesinglecells
 
 rule all:
     input:
@@ -19,7 +18,7 @@ rule all:
             mclust = config['mclust'],
             err = config["cerror"]
         ),
-        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pkl",
+        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/tree.txt",
             inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
@@ -31,7 +30,6 @@ rule all:
         ),
 
 
-
 rule simulate:
     input: "cnatrees_nocompleteloss.txt"
     output:
@@ -40,12 +38,13 @@ rule simulate:
         genotypes ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/node.tsv",
     params:
         pth = config["simpath"],
-        cp_thresh = 0.05,
+        cp_thresh =config["cp_thresh"],
         purity = 0.99,
         sample = 1,
         dirch = config["dirch"],
-        alpha= config["alpha"],
-        truncalSegs = 2,
+        alpha=  config["alpha"],
+        truncalSegs = config["truncalsegs"],
+        threshold = config["threshold"],
         simout_dir = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}",
     log:
         std ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/run.log", 
@@ -54,7 +53,7 @@ rule simulate:
         "{params.pth} -r -S {input} "
         " -purity {params.purity} -minProp {params.cp_thresh} "
         " -kk {params.truncalSegs} -f "
-        "-dirich_param {params.dirch} "
+        "-dirich_param {params.dirch}   -threshold {params.threshold} "
         "-s {wildcards.s}  -l {wildcards.mclust} "
         "-k {wildcards.nsegs} -n {wildcards.snvs} -m {params.sample} "
         "-output_file_dir {params.simout_dir}  > {log.std} 2> {log.err}  "
@@ -73,7 +72,7 @@ rule generatesinglecells:
         pth = config["genpath"],
         purity = 0.99,
         sample = 1,
-        alpha= config["alpha"],
+        alpha=  0.001, #config["alpha"],
         simout_dir = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}",
         scout_dir = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}",
     log:
@@ -116,7 +115,26 @@ rule make_gt:
 
 
 
-    
+rule write_gt_files:
+    input:
+        gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/gt.pkl",
+        phi = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/phi.pkl",
+    output:
+        gt_mut= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
+        gt_mut_loss=   "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/mut_loss_clust_gt.csv",
+        gt_phi =  "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/cellclust_gt.csv",
+        tree = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/tree.txt"
+    run:
+        import utils 
+        gt = utils.load_pickled_object(input['gt'])
+        phi = utils.load_pickled_object(input['phi'])
+        phi.write_phi(output["gt_phi"])
+        gt.write_psi(output['gt_mut'])
+        gt.write_loss_mapping(output['gt_mut_loss'])
+        gt.save_text(output['tree'])
+        
+
+
 
 
 

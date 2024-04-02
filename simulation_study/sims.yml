@@ -1,0 +1,40 @@
+
+inpath: "sims"
+simpath: "../clonesim/build2/simulate"
+genpath: "../clonesim/build2/generatesinglecells"
+nseeds: 5
+
+cells: 
+  - 1000
+  - 2000
+snvs: 
+  - 5000
+  - 10000
+
+cov:
+  - 0.01
+  - 0.05
+  - 0.25
+
+cerror: 0
+
+dirch: 2
+
+alpha: 0.001
+nsegs: 25
+
+mclust: 
+  - 5
+  - 7
+
+threshold: 0.025
+
+truncalsegs: 2
+
+cp_thresh: 0.05
+
+
+
+
+
+
