@@ -1,4 +1,4 @@
-configfile: "sims.yml"
+configfile: "simulate.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
 import sys 
 sys.path.append("../src")
