@@ -1,0 +1,16 @@
+#Pharming runtime params
+
+ninit_segs:
+  - 3
+
+ninit_tm:
+  - 4
+
+order:
+  - "weighted-random"
+
+topn:
+  - 5
+
+lamb:
+  - 1000

@@ -12,6 +12,7 @@ class Solution:
 
     def __post_init__(self):
         self.segments = self.ct.get_segments()
+        self.m = len(self.ct.get_all_muts())
 
     def png(self, fname, segments=None):
         if segments is None:
@@ -31,7 +32,4 @@ class Solution:
     def collapse(self, k, cell_threshold=10):
         self.ct.collapse(self.phi, k, cell_threshold)
     
-    def prune(self):
-        self.ct.prune(self.phi)
-
 

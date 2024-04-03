@@ -19,9 +19,14 @@ import utils
         
 class Pharming:
     def __init__(self, dcfs=None, cnatrees=None, k=3, T_m=None,
-                  start_state=(1,1), seed=102,verbose=False, top_n=3, ilp=False, collapse=False,
+                  start_state=(1,1), seed=102,
+                  verbose=False, top_n=3, ilp=False, collapse=False,
+                  order = "weighted-random",
+                  ninit_segs = None,
+                  ninit_Tm = None,
                   cell_threshold=10) -> None:
-        self.verbose =verbose 
+        self.verbose =verbose
+        self.verbose = True 
         self.rng = np.random.default_rng(seed)
 
         if dcfs is not None:
@@ -31,10 +36,19 @@ class Pharming:
             self.k = k 
             self.delta = {q: self.rng.random(size=1) for q in range(self.k)}
 
-        if T_m is None:
+        if True:
+            self.ground_truth_tm = np.Inf
+        # if T_m is None:
             self.scriptTm = self.enumerate_mutcluster_trees()
+            print(f"\nTotal number of mutation cluster trees: {len(self.scriptTm)}")
+            for i,T in enumerate(self.scriptTm):
+                if set(T.edges) == set(T_m.edges):
+                    print(f"Found ground truth tree at index {i}!")
+                    self.ground_truth_tm = i
+            # utils.pickle_object(self.scriptTm, "test/scriptTm.pkl")
 
         else:
+        
             
             if not isinstance(T_m,list):
                 self.scriptTm = [T_m]
@@ -70,6 +84,9 @@ class Pharming:
         self.ilp = ilp
         self.collapse = collapse
         self.cell_threshold = cell_threshold
+        self.order = order
+        self.ninit_segs= ninit_segs
+        self.ninit_Tm = ninit_Tm
 
     def check_dcfs(self, T):
         for u in T:
@@ -131,10 +148,10 @@ class Pharming:
 
         T_CNAS = [convert_to_CNAtree(tree) for tree in trees]
         
-        if self.verbose:
-            print(f"Enumerated CNA trees for {cn_states}")
-            for T in T_CNAS:
-                print(T)
+        # if self.verbose:
+        #     print(f"Enumerated CNA trees for {cn_states}")
+        #     for T in T_CNAS:
+        #         print(T)
         
         return T_CNAS
 
@@ -144,7 +161,7 @@ class Pharming:
     
 
         
-    def fit_segment(self, ell,T_m):
+    def fit_segment(self, ell,T_m, stis):
         """
         Fits a segment tree for the data in segment ell given mutation cluster tree T_m.
         
@@ -156,26 +173,29 @@ class Pharming:
         :return: A list of the top n solutions.
         :rtype: list of Solutions
         """
-        cn_states, counts = self.data.cn_states_by_seg(ell)
-
-        if len(self.cnatrees) == 0 or ell not in self.cnatrees:
-            cnatrees = self.enumerate_cna_trees(cn_states)
-        else:
-            cnatrees = [self.cnatrees[ell]]
-        all_trees = []
+        if self.verbose:
+            print(f"Starting segment {ell}...")
+        
+        segtrees = []
         Tm_edges = list(T_m.edges)
-        for S in cnatrees:
-            st  = STI(S, Tm_edges, self.delta, lamb1=self.lamb, ilp=self.ilp)
-            trees = st.fit(self.data, ell)
-            all_trees.append(trees)
-        print(f"Segment {ell} complete!")
-        segtrees = utils.concat_and_sort(all_trees)
-        # segtrees = get_top_n(all_trees, self.top_n)
-        # pickle_object(segtrees, f"test/segtrees{ell}.pkl")
+        for st in stis:
+            trees = st.fit(Tm_edges, self.data, ell)
+            if len(trees) > 0:
+                segtrees.append(trees)
+            
+        if len(segtrees) ==0:
+            print(f"Segment {ell} failed for {Tm_edges}!")
+        else:
+            segtrees = utils.concat_and_sort(segtrees)
+
+        if self.verbose:
+            print(f"Segment {ell} complete!")
+
+       
         return segtrees
 
 
-    def segment_trees_inference(self, Tm, segments):
+    def segment_trees_inference(self, Tm, stis):
         """
         nx:DiGraph Tm: a mutation cluster tree
         iterable segments: an iterable of segments for which segtrees should be inferred, given Tm
@@ -183,50 +203,55 @@ class Pharming:
         return list of lists of segment trees, one list per each segment
         """
 
-         #infer a list of lists of segtrees
+
         if self.cores  <= 1:
             segtrees = []
-            for ell in segments:
+            for ell in stis:
                 # try:
                     if self.data.num_cn_states(ell,self.start_state) > 1:
-                        segtrees.append(self.fit_segment(ell, Tm))
+                
+                        segtrees.append(self.fit_segment(ell, Tm, stis[ell]))
                         
         else:
-            arguments = [(ell, Tm) for ell in segments 
+            arguments = [(ell, Tm, stis[ell]) for ell in stis 
                             if self.data.num_cn_states(ell, self.start_state) > 1]
-            pool = multiprocessing.Pool(processes=self.cores)
-            segtrees = pool.starmap(self.fit_segment, arguments)
+            with multiprocessing.Pool(processes=self.cores) as pool:                
+                segtrees = pool.starmap(self.fit_segment, arguments, chunksize=1)
         
         return segtrees
    
     @utils.timeit_decorator
     def integrate(self, Tm_edges, segtrees):
-            print(f"All segment trees constructed, integrating trees...")
-            ctm = ClonalTreeMerging(self.k, self.rng, n_orderings=1, top_n=self.top_n, 
+            
+            print(f"Starting integration for {len(segtrees)} segments...")
+            ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
                                     collapse=self.collapse, cell_threshold=self.cell_threshold)
             
             Tm = nx.DiGraph(Tm_edges)
+
             #add the normal clone as the root
             root = [n for n in Tm if Tm.in_degree[n]==0][0]
             Tm.add_edge(max(Tm)+2, root) 
             
             top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
 
-            # for sol in top_trees:
-            #     sol.optimize(self.data, self.lamb)
 
             return top_trees
     
 
-    def partition_segments(self, segments, ninit_segs=2, min_cn_states=2):
-        if ninit_segs < len(segments):
-      
-            init_segs = sorted([ell for ell in segments if self.data.num_cn_states(ell) >= min_cn_states],
-                                reverse=True, key= lambda x: self.data.num_snvs(x))
-            if len(init_segs) > ninit_segs:
-                init_segs = init_segs[:ninit_segs]
+    def partition_segments(self, segments,  min_cn_states=2):
+        if self.ninit_segs is None or self.ninit_segs > len(segments):
+            init_segs = [ell for ell in segments 
+                         if self.data.num_cn_states(ell) >= min_cn_states]
+
         else:
-            init_segs = segments
+      
+            init_segs = sorted([ell for ell in segments if 
+                                self.data.num_cn_states(ell) >= min_cn_states],
+                                reverse=True, key= lambda x: self.data.num_snvs(x))
+            if len(init_segs) > self.ninit_segs:
+                init_segs = init_segs[:self.ninit_segs]
+
         
         init_segs = set(init_segs)
         
@@ -235,10 +260,11 @@ class Pharming:
         remaining_segs = set(segments) -  init_segs
         infer_segs = set([ell for ell in remaining_segs if self.data.num_cn_states(ell) > 1])
         place_segs = set([ell for ell in segments if self.data.num_cn_states(ell)==1])
+        
         return init_segs, infer_segs, place_segs
       
-    @utils.timeit_decorator
-    def infer(self, Tm_list, seg_list, init_trees=None):
+
+    def infer(self, Tm_list, stis, init_trees=None):
         """
         infer a clonal tree for a list of mutation cluster trees
         and a subset of segments.  
@@ -251,7 +277,7 @@ class Pharming:
         all_trees = []
         for i,Tm in enumerate(Tm_list):
 
-            segtrees = self.segment_trees_inference(Tm, segments=seg_list)
+            segtrees = self.segment_trees_inference(Tm, stis)
             if init_trees is None:
                 tree_list = segtrees
             else:
@@ -267,8 +293,7 @@ class Pharming:
                 costs.append(np.Inf)
 
         return all_trees, costs 
-        
-    @utils.timeit_decorator
+
     def place_snvs(self, solutions, segments):
         """
         Place SNVs that occur in segments with only a single copy number state
@@ -297,10 +322,45 @@ class Pharming:
         for sol in solutions:
             sol.ct.assign_genotypes(self.data, sol.phi, rho, seg_to_snvs, states)
             sol.ct.add_rho(rho)
+
+    # @utils.timeit_decorator
+    def preprocess_helper(self, ell):
+
+        stis =[]
+        cn_states, counts = self.data.cn_states_by_seg(ell)
+
+        if len(self.cnatrees) == 0 or ell not in self.cnatrees:
+            cnatrees = self.enumerate_cna_trees(cn_states)
+        else:
+            cnatrees = [self.cnatrees[ell]]
+
+            # Tm_edges = list(T_m.edges)
+        for S in cnatrees:
+            st =STI(ell, S, self.delta, lamb=self.lamb, ilp=self.ilp)
+            st.precompute_costs(self.data)
+            stis.append(st)
+        return ell, stis
     
-   
+    def preprocess(self, seg_list):
+
+        if self.cores <= 1:
+            stis = {}
+            dictlist = []
+            for ell in seg_list:
+                _, stis[ell]  = self.preprocess_helper(ell)
+           
+        else:
+            
+            with multiprocessing.Pool(self.cores) as pool:
+                dictlist = pool.map(self.preprocess_helper, seg_list)
+            
+            stis = {ell: vals for ell, vals in dictlist}
+        return stis
+       
+  
+
     @utils.timeit_decorator
-    def fit(self, data, lamb=1e3, segments= None, cores=1, ninit_segs=3, ninit_Tm=3):
+    def fit(self, data, lamb=1e3, segments= None, cores=1):
         '''
         @params Data data: the input data (C,A,D) to fit
         @params float lamb (float): a regularization parameter the cost function
@@ -311,9 +371,11 @@ class Pharming:
         for the input data and specified segments. 
 
         returns a list of the top_n Solutions to the Clonal Tree Inference with Copy Number problem (CTICN)
-        '''
+        ''' 
         
         self.data = data
+
+
         self.lamb = lamb 
         self.cores = cores 
         
@@ -322,134 +384,53 @@ class Pharming:
         if segments is None:
             segments = data.segments
 
-        init_segs, infer_segs, place_segs = self.partition_segments(segments, ninit_segs, min_cn_states=2)
+        init_segs, infer_segs, place_segs = self.partition_segments(segments, min_cn_states=2)
+        print(f"\nSegment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
         
-        init_trees, costs = self.infer(self.scriptTm, init_segs)
+        print("Plowing the field.... ")
+        stis = self.preprocess(init_segs)
+ 
+        print("Planting the seeds.... ")
+        init_trees, costs = self.infer(self.scriptTm, stis)
+        self.clonal_trees = init_trees
+
+        # return utils.concat_and_sort(init_trees)
 
         #identify the mutation cluster trees that yield minimum cost over the initial segments
         sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
-
-        if len(sorted_indices) > ninit_Tm:
-            smallest_indices = sorted_indices[:ninit_Tm]
+        if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
+            smallest_indices = sorted_indices
         else:
-            smallest_indices  =sorted_indices
+            smallest_indices = sorted_indices[:self.ninit_Tm]
+     
         
+    
+        print(f"SMALLEST INDICES: {smallest_indices}")
+        for i in smallest_indices:
+            print(f"{i}: {list(self.scriptTm[i].edges)}")
+            if i == self.ground_truth_tm:
+                print("Including the ground truth mutation cluster tree!")
+        
+        print("\nWatering the fields.... ")
         if len(infer_segs) > 0:
             init_Tm = [self.scriptTm[i] for i in smallest_indices]
-            
-            self.clonal_trees, costs = self.infer(init_Tm, infer_segs, [init_trees[i] for i in smallest_indices] )
+            stis = self.preprocess(infer_segs)
+            self.clonal_trees, costs = self.infer(init_Tm, stis, [init_trees[i] for i in smallest_indices] )
         
         best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
 
             
         self.post_process(best_trees)
-        # pickle_object(best_trees, "test/best_trees.pkl")
-        # best_trees = load_pickled_object("test/best_trees.pkl")
-        # self.clonal_trees = [[]]
-
+ 
         self.place_snvs(best_trees, place_segs)
+        
+        
+        print("\nHarvesting....")
         for sol in best_trees:
             sol.optimize(self.data, self.lamb)
         
         return  best_trees
         
-
-        #            self.clonal_trees = []
-        # best_costs = []
-        
-        # # if len(remaining_segs) > 1:
-        #     init_Tm = [T for T in self.scriptTm[i] for i in smallest_indices]
-
-    
-            # # segtrees = []
-            # for i in smallest_indices:
-            #     Tm = self.scriptTm[i]
-            #     segtrees = [list(init_trees[i])]
-            #     segtrees += self.segment_trees_inference(Tm, segments=remaining_segs)
-            #     top_trees = self.integrate(Tm.edges, segtrees)
-
-            #     best_cost = min(tr.cost for tr in top_trees)
-            #     best_costs.append(best_cost)
-            #     self.clonal_trees.append(top_trees)
-            #     print(f"Integration complete for tree Tm_{i}: {best_cost}")
-        
-      
-        # #find the most promising mutation cluster trees 
-        # costs = []
-        # init_trees = []
-        # for i,Tm in enumerate(self.scriptTm):
-        #     print(f"Starting inference for Tm_{i}")
-        #     segtrees = self.segment_trees_inference(Tm, segments=init_segs)
-        #     # pickle_object(segtrees, "test/segrees_ilp.pkl")
-        #     top_trees = self.integrate(Tm, segtrees)
-        #     if len(top_trees) > 0:
-        #         best_cost = top_trees[0].cost
-        #         print(f"Integration complete for tree Tm_{i}: {best_cost}")
-        #         costs.append(best_cost)
-        #         init_trees.append(top_trees)
-        #     else:
-        #         print(f"Integration failed for Tm_{i}")
-        #         costs.append(np.Inf)
-
-      
-
-        
-         #fit the remaining segment trees for each top Tm and integrate
-        # remaining_segs = set(segments) - set(init_segs)
-        # remaining_segs = [ell for ell in remaining_segs if self.data.num_cn_states(ell) > 1]
-        # self.clonal_trees = []
-        # best_costs = []
-        
-        # if len(remaining_segs) > 1:
-    
-        #     # segtrees = []
-        #     for i in smallest_indices:
-        #         Tm = self.scriptTm[i]
-        #         segtrees = [list(init_trees[i])]
-        #         segtrees += self.segment_trees_inference(Tm, segments=remaining_segs)
-        #         top_trees = self.integrate(Tm.edges, segtrees)
-
-        #         best_cost = min(tr.cost for tr in top_trees)
-        #         best_costs.append(best_cost)
-        #         self.clonal_trees.append(top_trees)
-        #         print(f"Integration complete for tree Tm_{i}: {best_cost}")
-        #         # pickle_object(clonal_trees, "test/clonal_trees.pkl")
-        
-        # else:
-        #     self.clonal_trees = init_trees
-        #     best_costs = []
-        
-
-
-
-
-
-         
-            # #infer a list of lists of segtrees
-            # if cores  <= 1:
-            #     segtrees = []
-            #     for ell in segments:
-            #         # try:
-            #             if self.data.num_cn_states(ell,self.start_state) > 1:
-            #                 segtrees.append(self.fit_segment(ell, T_m))
-                         
-            # else:
-            #     arguments = [(ell, T_m) for ell in segments 
-            #                  if self.data.num_cn_states(ell, self.start_state) > 1]
-            #     pool = multiprocessing.Pool(processes=cores)
-            #     segtrees = pool.starmap(self.fit_segment, arguments)
-            # pickle_object(segtrees, "test/segtrees.pkl")
-            
-            # segtrees = load_pickled_object("test/segtrees.pkl")
-
-        #     best_cost = min(tr.cost for tr in top_trees)
-        #     best_costs.append(best_cost)
-        #     clonal_trees.append(top_trees)
-        #     print(f"Integration complete for tree Tm_{i}: {best_cost}")
-        #     # pickle_object(clonal_trees, "test/clonal_trees.pkl")
-        # clonal_trees =  get_top_n(clonal_trees, self.top_n)   
-
-    
 
 
   
@@ -469,8 +450,10 @@ class Pharming:
         """
 
         for sol in sol_list:
-            sol.prune()
             sol.optimize(self.data, self.lamb)
+            # sol.prune()
+       
+
 
             # ct = sol.ct 
             # for ell in self.data.segments:
