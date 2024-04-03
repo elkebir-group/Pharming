@@ -4,7 +4,7 @@ import sys
 sys.path.append("../src")
 
 # #TODO: add rule generate cna trees 
-# ruleorder:  simulate > generatesinglecells
+ruleorder:  generatesinglecells > make_data
 
 rule all:
     input:
