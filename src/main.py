@@ -1,4 +1,3 @@
-
 # Created by: L.L. Weber
 # Created on: 2024-02-29 17:30:46
 
@@ -20,6 +19,8 @@ def main(args):
                 must be specified or alternatively, the path to the \
                 preprocessed pharming data object!")
     
+
+
     if args.segments is None:
         segments = dat.segments
     
@@ -31,8 +32,6 @@ def main(args):
     for ell in segments:
         print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}")
     
-    segments = [ell for ell in segments if dat.num_snvs(ell) > 75]
-
 
     if args.delta is not None:
         dlist = {}
@@ -79,19 +78,18 @@ def main(args):
                 start_state=(args.root_x, args.root_y), 
                 seed = args.seed,
                 top_n=  args.top_n,
-                collapse= args.collapse
+                collapse= args.collapse,
+                order = args.order,
+                ninit_segs = args.ninit_segs,
+                ninit_Tm = args.ninit_tm,
+                cell_threshold= args.cell_threshold,
                 )
 
   
-    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, ninit_segs=args.ninit_segs)
+    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
 
 
-    if args.scores is not None:
-            print("Saving cost values...")
-            with open(args.scores, "w+") as file:
-                for sol in solutions:
-                    file.write(f"{sol.cost}\n")
-    
+
     if args.pickle is not None:
          print("Pickling solutions...")
          pickle_object(solutions, args.pickle)
@@ -107,8 +105,11 @@ def main(args):
     if args.all_sol is not None:
         pickle_object(ph.clonal_trees, args.all_sol)
 
-
-    print("\nPharming complete...let's go sell our trees at the local Pharmer's Market!")
+    if len(solutions) > 0:
+        print(f"\nPharming complete with objective value: {solutions[0].cost}!\n")
+        print("Let's go sell our trees at the local Pharmer's Market!")
+    else:
+        print("Error: no trees inferred, check input data and try again!")
 
 import cProfile
 
@@ -134,14 +135,17 @@ if __name__ == "__main__":
     parser.add_argument("-T", "--Tm", type=str,  
                         help="optional filename of  mutation cluster tree")
     parser.add_argument("-k", "--snv-clusters", type=int, default=5,
-                        help="number of SNV clusters, if dcfs are also specified, k defaults to the \
-                        of specified DCFs")
+                        help="number of SNV clusters, if dcfs are also specified, k defaults to the number of specified DCFs")
     parser.add_argument("-D", "--dcfs", type=str, 
                         help="optional filename of dcfs to use")
     parser.add_argument("--delta", type=float, nargs='+',
                         help="list of DCFs to use, ignored if dcf file is provided")
-    parser.add_argument("--ninit-segs", type=int, default=3,
-                        help="default number of segments for initialization of mutation cluster tree")
+    parser.add_argument("--ninit-segs", type=int,
+                        help="number of segments for initialization of mutation cluster tree")
+    parser.add_argument("--ninit-tm", type=int,
+                        help="number of mutation cluster trees to consider after pruning with initial segs")
+    parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
+                        help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
     parser.add_argument("-S", "--cnatrees",type=str,
                         help="optional filename of a pickled dictionary of CNA tree (nx.digraph) for each segment")
     parser.add_argument("--root_x", type=int, default=1,
@@ -150,14 +154,14 @@ if __name__ == "__main__":
                         help="starting state for paternal (y) allele")
     parser.add_argument("--collapse", action="store_true",
                         help="whether linear chains of copy number events should be collapsed prior to integration")
+    parser.add_argument("--cell-threshold", type=int,
+                        help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")
     parser.add_argument("-P" ,"--pickle", required=False, type=str,
                         help="directory where the pickled solution list of top n trees should be saved")
     parser.add_argument("-O" ,"--out", required=False, type=str,
                         help="directory where output files should be written")
-    parser.add_argument("-J", "--scores", type=str,
-        help = "filename of tree scores")
     parser.add_argument( "--all-sol", type=str,
         help = "filename of object to pickle all top clonal trees inferred from each mutation cluster tree")
     parser.add_argument("--profile", type=str)
@@ -167,30 +171,34 @@ if __name__ == "__main__":
     
 
 
-    # instance = "s11_m5000_k25_l7"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/input"
 
     # gtpth = "test"
+    # seed = 13
+    # cov = 0.25
+    # instance = f"s{seed}_m5000_k25_l5"
+    # folder = f"n1000_c{cov}_e0" 
+    # pth = f"simulation_study/test"
 
 
 
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "5",
+    #     "-j", "1",
     #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-    #     "-n", "3",
-    #     # "-L",  "16", "10", "20", "24",
+    #     "-n", "5",
+    #     #  "-L", "24", # "18", 
     #     "--ninit-segs", "3",
-    #     "-s", "11",
+    #     "--ninit-tm", "1",
+    #     "--cell-threshold", "5",
+    #     "--order", "weighted-random",
+    #     "-s", f"{seed}",
     #     # "--segment", "0",
     #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-    #     "-J", f"{gtpth}/scores_test.csv",
-    #     "-P", f"{gtpth}/solution_test.pkl",
-    #     "--all-sol", f"{gtpth}/clonal_trees.pkl",
+    #     # "-J", f"{gtpth}/scores4.csv",
+    #     "-P", f"{gtpth}/solutions_full.pkl",
+    #     # "--all-sol", f"{gtpth}/clonal_trees.pkl",
     #     "--profile", "test/profile.prof",
     #     "--collapse",
     #     "-O", f"{gtpth}"
@@ -200,7 +208,6 @@ if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()
 
-    # Call your main function here with the parsed arguments
     main(args)
 
     profiler.disable()

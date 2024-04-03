@@ -110,15 +110,15 @@ class GenotypeTree:
 
         v = self.dcf_to_v(dcf, cn_prop)
 
-        if np.isnan(v):
-            print("Warning, DCF not valid for cn proportions and genotype tree!")
+        # if np.isnan(v):
+        #     print("Warning, DCF not valid for cn proportions and genotype tree!")
 
         logpost = binom.logpmf(a_vec, d_vec, v)
         #
         #  logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
         # if v (converted vaf) is outside [0,1] will return np.NINF
-        if np.any(logpost == 0):
-            print("at least one log probability 0")
+        # if np.any(logpost == 0):
+        #     print("at least one log probability 0")
 
         logpost[np.isnan(logpost)] = EPSILON
 
