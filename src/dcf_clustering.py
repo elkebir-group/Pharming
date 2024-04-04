@@ -114,12 +114,20 @@ class DCF_Clustering:
 
         for snv in snvs:
             for cluster in range(len(dcfs)):
-                for tree_list in tree_id_to_indices: #FIX: allow SNVs to be assigned separately
+                for tree in tree_id_to_indices: #FIX: allow SNVs to be assigned separately
                     #prob_arr = []
                     #for a, d in zip(a_vec, d_vec):
-                    for tree in tree_list:
+                    if isinstance(tree, list):
+                        for t in tree:
+                            prob = t.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
+                            #prob_arr.append(prob)
+                            if prob > likelihood[snv]:
+                                best_cluster[snv] = cluster
+                                best_tree[snv] = t
+                                likelihood[snv] = prob
+                    else:
                         prob = tree.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
-                        #prob_arr.append(prob)
+                        # prob_arr.append(prob)
                         if prob > likelihood[snv]:
                             best_cluster[snv] = cluster
                             best_tree[snv] = tree
