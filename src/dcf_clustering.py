@@ -61,7 +61,7 @@ def scalar_obj_new(dcf, tree_assignments, snvs_in_cluster, alt, total, deciferOb
     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25, seed=1026, verbose=False, cna_restriction=True):
+    def __init__(self, nrestarts=25, seed=1026, verbose=False, cna_restriction=1):
         self.nrestarts =nrestarts 
    
         self.rng = np.random.default_rng(seed)
@@ -207,7 +207,7 @@ class DCF_Clustering:
                 snvs = self.data.seg_to_snvs[ell]
                 seg_like = -np.Inf
                 
-                if self.cna_restriction:
+                if self.cna_restriction == 1:
 
                     for s in S[ell]:
                         #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     parser.add_argument("output_path", type=str, help="Path to the output data data")
     parser.add_argument("accuracy_path", type=str, help="Path to the accuracy data")
     parser.add_argument("num_restarts", type=int, help="Number of restarts")
-    parser.add_argument("restrict_CNA_trees", type=bool, help="Whether or not to enforce CNA Constraint")
+    parser.add_argument("restrict_CNA_trees", type=int, help="Whether or not to enforce CNA Constraint")
 
     # Parse command line arguments
     args = parser.parse_args()
