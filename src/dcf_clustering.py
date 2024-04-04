@@ -114,15 +114,16 @@ class DCF_Clustering:
 
         for snv in snvs:
             for cluster in range(len(dcfs)):
-                for tree in tree_id_to_indices: #FIX: allow SNVs to be assigned separately
+                for tree_list in tree_id_to_indices: #FIX: allow SNVs to be assigned separately
                     #prob_arr = []
                     #for a, d in zip(a_vec, d_vec):
-                    prob = tree.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
-                    #prob_arr.append(prob)
-                    if prob > likelihood[snv]:
-                        best_cluster[snv] = cluster
-                        best_tree[snv] = tree
-                        likelihood[snv] = prob
+                    for tree in tree_list:
+                        prob = tree.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
+                        #prob_arr.append(prob)
+                        if prob > likelihood[snv]:
+                            best_cluster[snv] = cluster
+                            best_tree[snv] = tree
+                            likelihood[snv] = prob
 
         return best_cluster, best_tree, likelihood
 
@@ -249,7 +250,7 @@ class DCF_Clustering:
                     T_SNVs = []
                     for s in S[ell]:
                         scriptT = clonelib.get_genotype_trees(s)
-                        T_SNVs.append(GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT))
+                        T_SNVs.append([GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT)])
                         
                     cluster, tree, likelihood  = self.optimize_cluster_and_tree_assignments(T_SNVs, dcfs, self.data.var, self.data.total, ell)
                     new_seg_likelihood = 0
