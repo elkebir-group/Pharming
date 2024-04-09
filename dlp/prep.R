@@ -130,6 +130,7 @@ seg.states <- seg.cp.imp %>% select(chr, segment, cn_impute, cell ) %>% distinct
   count(segment, cn_impute) %>%
   mutate(prop = prop.table(n), .by =segment) %>% mutate(include = prop > 0.05)
 
+seg.cell.impute %>% select(-n) %>% ungroup() %>% write_csv("copy_profiles.imputed.csv")
 seg.state.counts <- seg.states %>% group_by(segment) %>% summarize(num_imp_filt = sum(include))
 ggplot(seg.state.counts, aes(x=num_imp_filt, y="0")) + geom_boxplot() + 
   theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
