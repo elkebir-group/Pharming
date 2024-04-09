@@ -61,12 +61,14 @@ def scalar_obj_new(dcf, tree_assignments, snvs_in_cluster, alt, total, deciferOb
     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25, seed=1026, verbose=False):
+    def __init__(self, nrestarts=25, seed=1026, verbose=False, cna_restriction=1):
         self.nrestarts =nrestarts 
    
         self.rng = np.random.default_rng(seed)
 
         self.verbose=verbose
+
+        self.cna_restriction = cna_restriction
 
 
         # self.clusters= [i+1 for i in range(max_clusters)]
@@ -115,12 +117,21 @@ class DCF_Clustering:
                 for tree in tree_id_to_indices: #FIX: allow SNVs to be assigned separately
                     #prob_arr = []
                     #for a, d in zip(a_vec, d_vec):
-                    prob = tree.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
-                    #prob_arr.append(prob)
-                    if prob > likelihood[snv]:
-                        best_cluster[snv] = cluster
-                        best_tree[snv] = tree
-                        likelihood[snv] = prob
+                    if isinstance(tree, list):
+                        for t in tree:
+                            prob = t.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
+                            #prob_arr.append(prob)
+                            if prob > likelihood[snv]:
+                                best_cluster[snv] = cluster
+                                best_tree[snv] = t
+                                likelihood[snv] = prob
+                    else:
+                        prob = tree.posterior_dcf(dcfs[cluster], a_vec[snv], d_vec[snv], cn_prob)
+                        # prob_arr.append(prob)
+                        if prob > likelihood[snv]:
+                            best_cluster[snv] = cluster
+                            best_tree[snv] = tree
+                            likelihood[snv] = prob
 
         return best_cluster, best_tree, likelihood
 
@@ -204,31 +215,52 @@ class DCF_Clustering:
             for ell in self.segments: #TO DO: Swap these segments and CNA tree assignment
                 snvs = self.data.seg_to_snvs[ell]
                 seg_like = -np.Inf
-                for s in S[ell]:
-                    #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
-                    #after doing this for all the segments, then update the clusters (using assignments & dcf values)
-                    scriptT = clonelib.get_genotype_trees(s)
-                    T_SNVs = [GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT) ]
-                    # for snv_edges in scriptT:
+                
+                if self.cna_restriction == 1:
 
-                        # T = nx.DiGraph(snv_edges)
-                        # #recode the tree so the nodes are labeled by integers
-                        # node_mapping ={u: i for i,u in enumerate(T)}
-                        # T= nx.relabel_nodes(T, node_mapping)
-
-                        # T_SNVs.append(GenotypeTree(T, node_mapping))
-                    
-                    #find an SNV tree assignment and DCF cluster assignment
+                    for s in S[ell]:
+                        #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
+                        #after doing this for all the segments, then update the clusters (using assignments & dcf values)
                         
-                    '''
-                    TO DO: Optimize cluster assignments needs to be updated.
-                    You will need to compute the posterior probability of each dcf q and T pair in T_SNVs for each SNV
-                    Set omega equal to the tree with max posterior prob
-                    Set alpha equal cluster id q with max posterior prob
-                    the likelihood is the sum of the  log posterior probabilities for all optimal assignments
-                    '''   
-                    cluster, tree, likelihood  = self.optimize_cluster_and_tree_assignments(T_SNVs, dcfs, self.data.var, self.data.total, ell)
+                        scriptT = clonelib.get_genotype_trees(s)
+                        T_SNVs = [GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT) ]
+                        # for snv_edges in scriptT:
 
+                            # T = nx.DiGraph(snv_edges)
+                            # #recode the tree so the nodes are labeled by integers
+                            # node_mapping ={u: i for i,u in enumerate(T)}
+                            # T= nx.relabel_nodes(T, node_mapping)
+
+                            # T_SNVs.append(GenotypeTree(T, node_mapping))
+                        
+                        #find an SNV tree assignment and DCF cluster assignment
+                            
+                        '''
+                        TO DO: Optimize cluster assignments needs to be updated.
+                        You will need to compute the posterior probability of each dcf q and T pair in T_SNVs for each SNV
+                        Set omega equal to the tree with max posterior prob
+                        Set alpha equal cluster id q with max posterior prob
+                        the likelihood is the sum of the  log posterior probabilities for all optimal assignments
+                        '''   
+                        cluster, tree, likelihood  = self.optimize_cluster_and_tree_assignments(T_SNVs, dcfs, self.data.var, self.data.total, ell)
+
+                        new_seg_likelihood = 0
+                        for key, val in likelihood.items():
+                            new_seg_likelihood += val
+
+                        if new_seg_likelihood > seg_like:
+                            CNA_tree[ell] = s
+                            CLUSTER_ASSIGNMENTS[ell] = cluster
+                            TREE_ASSIGNMENTS[ell] = tree
+                            seg_like = new_seg_likelihood
+                    
+                else:
+                    T_SNVs = []
+                    for s in S[ell]:
+                        scriptT = clonelib.get_genotype_trees(s)
+                        T_SNVs.append([GenotypeTree(edges= edge_list, id=i) for i, edge_list in enumerate(scriptT)])
+                        
+                    cluster, tree, likelihood  = self.optimize_cluster_and_tree_assignments(T_SNVs, dcfs, self.data.var, self.data.total, ell)
                     new_seg_likelihood = 0
                     for key, val in likelihood.items():
                         new_seg_likelihood += val
@@ -238,7 +270,7 @@ class DCF_Clustering:
                         CLUSTER_ASSIGNMENTS[ell] = cluster
                         TREE_ASSIGNMENTS[ell] = tree
                         seg_like = new_seg_likelihood
-                
+                    
                                     
         
             
@@ -297,12 +329,12 @@ class DCF_Clustering:
         return best_result#best
         
 
-def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts):
+def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts, cna_restriction):
     print(data_path)
     data = pd.read_pickle(data_path)
     ground_truth = read_ground_truth_text_file(ground_truth_path)
     k = [len(ground_truth)]
-    dec = DCF_Clustering(nrestarts=num_restarts, seed=21, verbose=True)
+    dec = DCF_Clustering(nrestarts=num_restarts, seed=21, verbose=True, cna_restriction=cna_restriction)
     all_results = dec.run(data, k_vals=k)
     dcfs = all_results[1]
     mean_difference = compute_mean_difference(ground_truth, dcfs)/k
@@ -342,12 +374,13 @@ if __name__ == "__main__":
     parser.add_argument("output_path", type=str, help="Path to the output data data")
     parser.add_argument("accuracy_path", type=str, help="Path to the accuracy data")
     parser.add_argument("num_restarts", type=int, help="Number of restarts")
+    parser.add_argument("restrict_CNA_trees", type=int, help="Whether or not to enforce CNA Constraint")
 
     # Parse command line arguments
     args = parser.parse_args()
 
     # Call the main function with provided arguments
-    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, args.num_restarts)
+    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, args.num_restarts, args.restrict_CNA_trees)
 
 
      #load in pickled data object 
