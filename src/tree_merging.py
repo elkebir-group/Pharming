@@ -95,7 +95,7 @@ class ClonalTreeMerging:
 
         
             merged_tree_list = cnm.fit(data, lamb, self.top_n)
-            print(f"Merged list length: {len(merged_tree_list)}")
+           
 
         except Exception as e:
         # Log the error or perform other actions

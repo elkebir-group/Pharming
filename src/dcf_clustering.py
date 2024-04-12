@@ -329,14 +329,23 @@ class DCF_Clustering:
         return best_result#best
         
 
-def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts, cna_restriction):
+def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts, cna_restriction, clusters=None, outdcfs=None):
     print(data_path)
     data = pd.read_pickle(data_path)
     ground_truth = read_ground_truth_text_file(ground_truth_path)
-    k = [len(ground_truth)]
+    if clusters is None:
+        k = [len(ground_truth)]
+    else:
+        k = clusters 
+
     dec = DCF_Clustering(nrestarts=num_restarts, seed=21, verbose=True, cna_restriction=cna_restriction)
     all_results = dec.run(data, k_vals=k)
     dcfs = all_results[1]
+
+    if outdcfs is not None:
+        with open(outdcfs, "w+") as file:
+            for d in dcfs:
+                file.write(f"{d}\n")
     mean_difference = compute_mean_difference(ground_truth, dcfs)/k
 
     with open(accuracy_path, 'a', newline='') as file:
@@ -346,6 +355,10 @@ def main (data_path, ground_truth_path, output_path, accuracy_path, num_restarts
     with open(output_path, 'wb') as file:
         pickle.dump(all_results, file)
 
+    if outdcfs is not None:
+        with open(outdcfs, "w+") as file:
+            for d in dcfs:
+                file.write(f"{d}\n")
 
 def compute_mean_difference(ground_truth, dcfs):
 
@@ -369,18 +382,20 @@ def read_ground_truth_text_file(file_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Perform clustering analysis on data from a pickled object")
-    parser.add_argument("pickle_path", type=str, help="Path to the pickled object")
-    parser.add_argument("ground_truth", type=str, help="Path to the ground truth data")
-    parser.add_argument("output_path", type=str, help="Path to the output data data")
-    parser.add_argument("accuracy_path", type=str, help="Path to the accuracy data")
-    parser.add_argument("num_restarts", type=int, help="Number of restarts")
-    parser.add_argument("restrict_CNA_trees", type=int, help="Whether or not to enforce CNA Constraint")
+    parser.add_argument("-d","--pickle_path", type=str, help="Path to the pickled object")
+    parser.add_argument("-g", "--ground_truth", type=str, help="Path to the ground truth data")
+    parser.add_argument("-o", "--output_path", type=str, help="Path to the output data data")
+    parser.add_argument("-a",  "--accuracy_path", type=str, help="Path to the accuracy data")
+    parser.add_argument("-r", "--num_restarts", type=int, help="Number of restarts")
+    parser.add_argument("-c", "--restrict_CNA_trees", type=int, help="Whether or not to enforce CNA Constraint")
+    parser.add_argument("-k", "--clusters", type=int, help="number of clusters")
+    parser.add_argument("-D", "--dcfs", type=str, help="output file for inferred dcfs")
 
     # Parse command line arguments
     args = parser.parse_args()
 
     # Call the main function with provided arguments
-    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, args.num_restarts, args.restrict_CNA_trees)
+    main(args.pickle_path, args.ground_truth, args.output_path, args.accuracy_path, args.num_restarts, args.restrict_CNA_trees, args.clusters, args.dcfs)
 
 
      #load in pickled data object 

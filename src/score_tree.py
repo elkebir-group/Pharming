@@ -41,9 +41,9 @@ def score_tree(gt, gt_phi, inf,inf_phi, dat, lamb=1e3, segments=None, filter=Fal
 
 def compare_CNA_trees(gt, inf, segment):
         S_gt = gt.get_cna_tree(segment)
-        # draw(S_gt,f"test/S_{segment}_gt.png")
+  
         S_inf= inf.get_cna_tree(segment)
-        # draw(S_inf,f"test/S_{segment}_inf.png")
+
         return set(S_gt.edges) == set(S_inf.edges)
 
 

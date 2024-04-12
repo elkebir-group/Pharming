@@ -2,24 +2,39 @@ library(tidyverse)
 library(yaml)
 library(glue)
 library(mclust)
-bpath <- "/Users/leah/Documents/Research/projects/Pharming/simulation_study"
-config = yaml.load_file(file.path(bpath, "config.yml"))
+bpath <- "simulation_study"
+config = yaml.load_file(file.path(bpath, "simulate.yml"))
 
-runs <- expand.grid(cells=config$cells, snvs=config$snvs, cov=c("0.01", "0.05", "0.25", "1"), 
+seeds <- 10:14
+runs <- expand.grid(cells=config$cells, 
+                    snvs=config$snvs,
+                     cov= config$cov,
                     mclust = config$mclust,
-                    err = config$cerror, s = 10:14, nsegs=config$nsegs)%>% 
-  mutate(folder = glue("s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}"))
+                    err = config$cerror, 
+                    s = seeds, 
+                    nsegs=config$nsegs,
+                    dirch = config$dirch) %>%
+                    mutate_all(factor) %>%
+                     mutate(folder = glue("s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
 
-"decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/input.tsv"
+
+#"decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}/n{cells}_c{cov}_e{err}/input.tsv"
 
 get_decifer<- function(folder, prefix, suffix){
-  dec.out <- read.table(file.path(bpath, prefix, folder, suffix), header=TRUE)
-  dec.clust <- select(dec.out, snv=mut_index ,cluster, 
-                      inf_dcf = point_estimate_DCF0,  true_cluster_DCF0) %>%
-    separate(col=true_cluster_DCF0, c("clust_dcf", "CI"), sep=";") %>%
-    mutate(clust_dcf= as.numeric(clust_dcf))
-  dec.clust$folder <- folder
-  return(dec.clust)
+  fname <- file.path(bpath, prefix, folder, suffix)
+  if(file.exists(fname)){
+      dec.out <- read.table(fname, header=TRUE)
+      dec.clust <- select(dec.out, snv=mut_index ,cluster, 
+                          inf_dcf = point_estimate_DCF0,  true_cluster_DCF0) %>%
+        separate(col=true_cluster_DCF0, c("clust_dcf", "CI"), sep=";") %>%
+        mutate(clust_dcf= as.numeric(clust_dcf))
+      dec.clust$folder <- folder
+      return(dec.clust)
+
+  }else{
+    return(data.frame())
+  }
+
 }
 
 read_csv_wrapper <- function(folder, prefix, suffix){
@@ -31,6 +46,18 @@ read_csv_wrapper <- function(folder, prefix, suffix){
 
 
 res <- bind_rows(lapply(runs$folder,  get_decifer, "decifer", "decifer_output.tsv"))
+
+
+test <- filter(res, folder=="s13_m5000_k25_l5_d2/n1000_c0.25_e0")
+
+test %>% select(clust_dcf) %>% distinct() %>% arrange(desc(clust_dcf))
+# seed = 13
+#     cov = 0.25
+#     instance = f"s{seed}_m5000_k25_l5_d2"
+#     folder = f"n1000_c{cov}_e0" 
+#     pth = f"simulation_study/sims"
+
+
 psi <- bind_rows(lapply(runs$folder,  read_csv_wrapper ,"decifer", "gt_psi.csv"))
 delta <- bind_rows(lapply(runs$folder,  read_csv_wrapper ,"decifer", "gt_delta.csv"))
 
