@@ -5,7 +5,7 @@ from scipy.stats import beta
 import math
 
 EPSILON = -10e10
-from genotype import genotype, CNAgenotype
+# from genotype import genotype, CNAgenotype
 
 
 class GenotypeTree:
@@ -29,13 +29,13 @@ class GenotypeTree:
                 break
 
         self.id = id
-        self.node_to_geno = {val: genotype(*key) for key, val in self.node_mapping.items()}
+        self.node_to_geno = {val: key for key, val in self.node_mapping.items()}
 
         split_par = self.get_split_nodes()
         if split_par is not None:
             self.split_node_parent, self.split_node, self.split_node_parent_geno, self.split_geno = split_par
 
-            self.m_star = self.split_geno.z
+            self.m_star = self.mut_copies(self.split_geno) 
 
             self.gamma = [self.node_to_geno[u] for u in self.tree]
             self.desc_genotypes = [self.node_to_geno[u] for u in nx.descendants(self.tree, self.split_node)]
@@ -50,10 +50,13 @@ class GenotypeTree:
 
         for v in self.tree:
             geno = self.node_to_geno[v]
-            if geno.x == cna_geno.x and geno.y == cna_geno.y:
+            if geno[0]== cna_geno[0] and geno[1]== cna_geno[1]:
                 return v
         return None
-
+    @staticmethod
+    def mut_copies(tup):
+        return tup[2] + tup[3]
+    
     def __str__(self):
         mystr = ""
 
@@ -65,10 +68,10 @@ class GenotypeTree:
         return (mystr)
 
     def get_nodes_by_cn(self, cn):
-        if not isinstance(cn, CNAgenotype):
-            cn = CNAgenotype(*cn)
+        # if not isinstance(cn, CNAgenotype):
+        #     cn = CNAgenotype(*cn)
         return [self.node_mapping[(x, y, x_bar, y_bar)] for x, y, x_bar, y_bar in self.node_mapping if
-                x == cn.x and y == cn.y]
+                x == cn[0] and y == cn[1]]
 
     def get_split_nodes(self):
 
@@ -77,7 +80,8 @@ class GenotypeTree:
                 parent = list(self.tree.predecessors(u))[0]
                 p_geno = self.node_to_geno[parent]
                 u_geno = self.node_to_geno[u]
-                if p_geno.cna_eq(u_geno) and u_geno.z > 0:
+                if p_geno[0] ==u_geno[0] and p_geno[1] ==u_geno[1] and self.mut_copies(u_geno) >0:
+                # if p_geno.cna_eq(u_geno) and self.mut_copies(u_geno) > 0:
                     return parent, u, p_geno, u_geno
 
     def posterior_dcf(self, dcf, a, d, cn_prop):
@@ -134,9 +138,9 @@ class GenotypeTree:
         F = self.compute_F(cn_prop)
 
         v = (dcf * self.m_star) / F \
-            + (1 / F) * sum([(g.z - self.m_star) *
-                             cn_prop[(g.x, g.y)] for g in self.desc_genotypes
-                             if not g.cna_eq(self.split_geno)])
+            + (1 / F) * sum([(self.mut_copies(g) - self.m_star) *
+                             cn_prop[(g[0], g[1])] for g in self.desc_genotypes
+                             if not (g[0]==self.split_geno[0] and g[1]==self.split_geno[1])])
 
         vmin = self.v_minus(cn_prop)
         vplus = self.v_plus(cn_prop, vmin)
@@ -163,14 +167,14 @@ class GenotypeTree:
 
     def v_minus(self, cn_prop):
         F = self.compute_F(cn_prop)
-        return sum(g.z * cn_prop[(g.x, g.y)] for g in self.gamma if not g.cna_eq(self.split_geno)) / F
+        return sum(self.mut_copies(g) * cn_prop[(g[0], g[1])] for g in self.gamma if not (g[0]==self.split_geno[0] and g[1]==self.split_geno[1])) / F
 
     def v_plus(self, cn_prop, vmin=None):
         F = self.compute_F(cn_prop)
         if vmin is None:
             vmin = self.v_minus(cn_prop)
 
-        v_plus = vmin + self.m_star * cn_prop[(self.split_geno.x, self.split_geno.y)] / F
+        v_plus = vmin + self.m_star * cn_prop[(self.split_geno[0], self.split_geno[1])] / F
 
         return v_plus
 

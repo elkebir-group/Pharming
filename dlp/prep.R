@@ -1,5 +1,6 @@
 library(tidyverse)
 vtext <- theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+setwd("./dlp")
 df <- read_csv("DeepCopyPrediction.csv")
 colnames(df) <- c("cell", "chr", "start", "end", "x", "y")
 n_distinct((df$cell))
@@ -40,19 +41,22 @@ segments.df <- read_csv("segmentation.csv") %>% mutate(segment= row_number()-1) 
   right_join(bin_mapping %>% rename(start_loci = start, end_loci=end), relationship="many-to-many") %>%
   filter(bin >= start, bin <=end) 
 
-write_csv(segments.df, "segments.bin.mapping.csv")
+#write_csv(segments.df, "segments.bin.mapping.csv")
 
 var.dat <- read.table("variant_data.filt.tsv", header = F, sep="\t",
                       col.names=c("chr", "loci", "cell", "base", "var", "total") )
+
 head(segments.df)
 var <- var.dat %>% 
   left_join(segments.df %>% mutate(chr=as.character(chr)), by="chr", relationship="many-to-many") %>%
   filter(loci >= start_loci, loci <= end_loci)
 
+input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>% select(segment, mutation, cell, varReads = var, totReads = total)
 
+write_csv(input.dat, "input/read_counts.csv")
 
 snvs <- var %>% select(chr, loci, segment, start_loci, end_loci, bin) %>% distinct()
-
+nrow(snvs)
 ggplot(snvs, aes(x=factor(segment))) + geom_bar() + xlab("segment") + vtext
   
 
@@ -72,10 +76,16 @@ ggplot(seg.cp, aes(x=factor(segment), y=cell, fill=cn)) + geom_tile() +
 
 #now look at how many cn states per segment with and without imputation
 
-head(seg.cp)
+
 
 
 seg.cp <- left_join(segments.df , cp) 
+
+copy_prof <- select(seg.cp, segment, cell, copiesX = x, copiesY=y)
+write_csv(copy_prof, "input/copy_number_profiles.csv")
+
+head(copy_prof)
+head(seg.cp)
 num.cn <- seg.cp %>% group_by(chr, segment) %>% summarize(num_cn_states=n_distinct(cn))
 
 ggplot(num.cn, aes(x=factor(segment), y=num_cn_states)) + geom_bar(stat="identity") +

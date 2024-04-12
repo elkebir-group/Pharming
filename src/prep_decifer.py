@@ -1,4 +1,4 @@
-from data import Data, load_from_pickle
+from utils import load_pickled_object
 import argparse
 
 
@@ -51,5 +51,5 @@ if __name__ == "__main__":
 
     # ])
 
-    dat = load_from_pickle(args.data)
+    dat = load_pickled_object(args.data)
     write_input(dat, args.out)

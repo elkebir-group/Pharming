@@ -12,8 +12,6 @@ def load_from_files(var_fname, copy_fname ):
     read_counts = pd.read_table(
         var_fname, header=None, names=col_names, skiprows=[0])
     
-
-
     copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
 
     cell_labels_not_in_df1 = copy_numbers.loc[~copy_numbers['cell_label'].isin(read_counts['cell_label']), 'cell_label']
@@ -107,10 +105,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    # instance = "s11_m5000_k25_l7"
+    # instance = "s11_m5000_k25_l5_d2"
     # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/input"
+    # folder = "n2000_c0.25_e0" 
+    # pth = f"simulation_study/sims"
 
     # opth = "test"
 

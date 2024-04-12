@@ -211,6 +211,11 @@ class Data:
 
     #     return cellprobs
     
+    def var_marg(self, snvs):
+        return self.var[:,snvs].sum(axis=0)
+    
+    def total_marg(self, snvs):
+        return self.total[:,snvs].sum(axis=0)
     def compute_vafs(self, cells=None, snvs=None):
         if cells is None:
             cells = self.cells 

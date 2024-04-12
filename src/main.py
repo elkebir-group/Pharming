@@ -55,7 +55,7 @@ def main(args):
          cnatrees = None 
     
     if delta is None:
-        k = args.k 
+        k = args.snv_clusters
     else:
          k = len(delta)
     
@@ -172,38 +172,39 @@ if __name__ == "__main__":
 
 
 
-    # gtpth = "test"
-    # seed = 13
-    # cov = 0.25
-    # instance = f"s{seed}_m5000_k25_l5"
-    # folder = f"n1000_c{cov}_e0" 
-    # pth = f"simulation_study/test"
+    gtpth = "test"
+    seed = 13
+    cov = 0.25
+    instance = f"s{seed}_m5000_k25_l5_d2"
+    folder = f"n1000_c{cov}_e0" 
+    pth = f"simulation_study/sims"
 
 
 
-    # args = parser.parse_args([
+    args = parser.parse_args([
 
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "1",
-    #     "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-    #     "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-    #     "-n", "5",
-    #     #  "-L", "24", # "18", 
-    #     "--ninit-segs", "3",
-    #     "--ninit-tm", "1",
-    #     "--cell-threshold", "5",
-    #     "--order", "weighted-random",
-    #     "-s", f"{seed}",
-    #     # "--segment", "0",
-    #     # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-    #     # "-J", f"{gtpth}/scores4.csv",
-    #     "-P", f"{gtpth}/solutions_full.pkl",
-    #     # "--all-sol", f"{gtpth}/clonal_trees.pkl",
-    #     "--profile", "test/profile.prof",
-    #     "--collapse",
-    #     "-O", f"{gtpth}"
+        "-d", f"{pth}/{instance}/{folder}/data.pkl",
+        "-j", "3",
+        # "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
+        # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+        "-n", "2",
+        "-k", "5",
+        #  "-L", "24", # "18", 
+        "--ninit-segs", "3",
+        "--ninit-tm", "2",
+        "--cell-threshold", "5",
+        "--order", "weighted-random",
+        "-s", f"{seed}",
+        # "--segment", "0",
+        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
+        # "-J", f"{gtpth}/scores4.csv",
+        "-P", f"{gtpth}/solutions_full.pkl",
+        # "--all-sol", f"{gtpth}/clonal_trees.pkl",
+        "--profile", "test/profile.prof",
+        "--collapse",
+        "-O", f"{gtpth}"
 
-    # ])
+    ])
 
     profiler = cProfile.Profile()
     profiler.enable()

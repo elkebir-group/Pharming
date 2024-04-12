@@ -12,7 +12,7 @@ import clonelib
 import multiprocessing
 from tree_merging import ClonalTreeMerging
 import utils
-
+from dcf_clustering import DCF_Clustering
 
 
 
@@ -34,17 +34,18 @@ class Pharming:
             self.delta  = dcfs 
         else:
             self.k = k 
-            self.delta = {q: self.rng.random(size=1) for q in range(self.k)}
+            self.delta = None
 
-        if True:
-            self.ground_truth_tm = np.Inf
-        # if T_m is None:
-            self.scriptTm = self.enumerate_mutcluster_trees()
-            print(f"\nTotal number of mutation cluster trees: {len(self.scriptTm)}")
-            for i,T in enumerate(self.scriptTm):
-                if set(T.edges) == set(T_m.edges):
-                    print(f"Found ground truth tree at index {i}!")
-                    self.ground_truth_tm = i
+        # if True:
+        #     self.ground_truth_tm = np.Inf
+        if T_m is None:
+            self.scriptTm = []
+            #self.enumerate_mutcluster_trees()
+            # print(f"\nTotal number of mutation cluster trees: {len(self.scriptTm)}")
+            # for i,T in enumerate(self.scriptTm):
+            #     if set(T.edges) == set(T_m.edges):
+            #         print(f"Found ground truth tree at index {i}!")
+            #         self.ground_truth_tm = i
             # utils.pickle_object(self.scriptTm, "test/scriptTm.pkl")
 
         else:
@@ -341,6 +342,13 @@ class Pharming:
             stis.append(st)
         return ell, stis
     
+    def infer_dcfs(self):
+       dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
+    #    like, dcfs , _, _, _ = dcf_clust.decifer(self.data, np.array([0.179, 0.241, 0.32, 0.424, 0.985]) )
+    #    print(like)
+       like, dcfs , _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
+       self.delta = {i: dcfs[i] for i in range(len(dcfs))}
+
     def preprocess(self, seg_list):
 
         if self.cores <= 1:
@@ -388,6 +396,10 @@ class Pharming:
         print(f"\nSegment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
         
         print("Plowing the field.... ")
+        if self.delta is None:
+            self.delta = self.infer_dcfs()
+        
+        self.scriptTm = self.enumerate_mutcluster_trees()
         stis = self.preprocess(init_segs)
  
         print("Planting the seeds.... ")
@@ -405,11 +417,11 @@ class Pharming:
      
         
     
-        print(f"SMALLEST INDICES: {smallest_indices}")
+        print(f"Best mutation cluster trees:")
         for i in smallest_indices:
             print(f"{i}: {list(self.scriptTm[i].edges)}")
-            if i == self.ground_truth_tm:
-                print("Including the ground truth mutation cluster tree!")
+            # if i == self.ground_truth_tm:
+            #     print("Including the ground truth mutation cluster tree!")
         
         print("\nWatering the fields.... ")
         if len(infer_segs) > 0:
