@@ -9,8 +9,8 @@ sys.path.append("../src")
 
 rule all:
     input:
-        expand("pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
-            inpath = config["inpath"],
+        expand("pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+            inpath = ["dcf_clust", "decifer"],
             order = config["order"],
             isegs = config["ninit_segs"],
             tm = config["ninit_tm"],
@@ -25,31 +25,60 @@ rule all:
             dirch = config["dirch"],
             err = config["cerror"]
         ),
-        expand("pharming/{inpath}/aggregate_scores.csv",
-                     inpath = config["inpath"],
-        )
+        # expand("pharming/{inpath}/aggregate_scores.csv",
+        #              inpath = config["inpath"],
+        # )
+
+# rule pharming_gt_dcfs:
+#     input:
+#         dcfs = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+#         data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+#     params:
+#         cell_thresh = 5,
+#         root_x = 1,
+#         root_y = 1,
+#     threads: 1
+#     output:
+#         sol = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+#         profile = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+#     benchmark:"pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+#     log:
+#         std= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+#         err= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+#     shell:
+#         "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} -T {input.tm} "
+#         "-s {wildcards.s} "
+#         "-l {wildcards.lamb} "
+#         "-n {wildcards.topn} "
+#         "-j {threads} "
+#         "--ninit-segs {wildcards.isegs} "
+#         "--ninit-tm {wildcards.tm} "
+#         "--cell-threshold {params.cell_thresh} "
+#         "--root_x {params.root_x} --root_y {params.root_y} " 
+#         "--collapse "
+#         "--profile {output.profile} "
+#         "-P {output.sol} > {log.std} 2> {log.err} "
 
 
-rule pharming:
+rule pharming_decifer:
     input:
-        dcfs = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        #enumerating mut cluster trees but checking to see if the ground truth was selected 
-        tm= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/Tm.txt",  
-        data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        dcfs = "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     params:
         cell_thresh = 5,
         root_x = 1,
         root_y = 1,
+        max_loops = config["max_loops"]
     threads: 1
     output:
-        sol = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-        profile = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
-    benchmark:"pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+        sol = "pharming/decifer/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        profile = "pharming/decifer/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+    benchmark:"pharming/decifer/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     log:
-        std= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
-        err= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+        std= "pharming/decifer/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+        err= "pharming/decifer/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
     shell:
-        "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} -T {input.tm} "
+        "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} "
         "-s {wildcards.s} "
         "-l {wildcards.lamb} "
         "-n {wildcards.topn} "
@@ -59,62 +88,96 @@ rule pharming:
         "--cell-threshold {params.cell_thresh} "
         "--root_x {params.root_x} --root_y {params.root_y} " 
         "--collapse "
+        "--ntree-iter {params.max_loops} "
         "--profile {output.profile} "
         "-P {output.sol} > {log.std} 2> {log.err} "
 
-rule aggregate_scores:
-    input:
-        # paths = [path for path in glob.glob("phertilizer/*/s*_m*_k*_l*/n*_c*_e*/")]
-        paths = expand("pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
-         inpath = config["inpath"],
-            order = config["order"],
-            isegs = config["ninit_segs"],
-            tm = config["ninit_tm"],
-            topn = config["topn"],
-            lamb = config["lamb"],
-            s =seeds,
-            cells = config["cells"],
-            snvs = config["snvs"],
-            nsegs = config["nsegs"],
-            cov = config["cov"],
-            mclust = config['mclust'],
-            dirch = config["dirch"],
-            err = config["cerror"]
-        ),
-    output:
-        "pharming/{inpath}/aggregate_scores.csv"
-    run:
-        # Read each CSV file, skipping missing files
-        dfs = []
-        import pandas as pd
-        for path in input.paths:
 
-            file = path
-            if os.path.exists(file):
-                df = pd.read_csv(file)
-                df["folder"] = path.split("/")[4]
-                df["instance"] = path.split("/")[5]
-                df["params"] = path.split("/")[3]
-                df["prog_order"] =path.split("/")[2]
+rule pharming_dcf_clust:
+    input:
+        dcfs = "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf_dcfs.txt",
+        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+    params:
+        cell_thresh = 5,
+        root_x = 1,
+        root_y = 1,
+        max_loops = config["max_loops"]
+    threads: 1
+    output:
+        sol = "pharming/dcf_clust/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        profile = "pharming/dcf_clust/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+    benchmark:"pharming/dcf_clust/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+    log:
+        std= "pharming/dcf_clust/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+        err= "pharming/dcf_clust/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+    shell:
+        "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} "
+        "-s {wildcards.s} "
+        "-l {wildcards.lamb} "
+        "-n {wildcards.topn} "
+        "-j {threads} "
+        "--ninit-segs {wildcards.isegs} "
+        "--ninit-tm {wildcards.tm} "
+        "--cell-threshold {params.cell_thresh} "
+        "--root_x {params.root_x} --root_y {params.root_y} " 
+        "--collapse "
+        "--ntree-iter {params.max_loops} "
+        "--profile {output.profile} "
+        "-P {output.sol} > {log.std} 2> {log.err} "
+
+
+# rule aggregate_scores:
+#     input:
+#         # paths = [path for path in glob.glob("phertilizer/*/s*_m*_k*_l*/n*_c*_e*/")]
+#         paths = expand("pharming//{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
+#          inpath = config["inpath"],
+#             order = config["order"],
+#             isegs = config["ninit_segs"],
+#             tm = config["ninit_tm"],
+#             topn = config["topn"],
+#             lamb = config["lamb"],
+#             s =seeds,
+#             cells = config["cells"],
+#             snvs = config["snvs"],
+#             nsegs = config["nsegs"],
+#             cov = config["cov"],
+#             mclust = config['mclust'],
+#             dirch = config["dirch"],
+#             err = config["cerror"]
+#         ),
+#     output:
+#         "pharming/sims/aggregate_scores.csv"
+#     run:
+#         # Read each CSV file, skipping missing files
+#         dfs = []
+#         import pandas as pd
+#         for path in input.paths:
+
+#             file = path
+#             if os.path.exists(file):
+#                 df = pd.read_csv(file)
+#                 df["folder"] = path.split("/")[4]
+#                 df["instance"] = path.split("/")[5]
+#                 df["params"] = path.split("/")[3]
+#                 df["prog_order"] =path.split("/")[2]
            
-                dfs.append(df)
-            else:
-                print(f"Warning: Input file {file} is missing. Skipping...")
+#                 dfs.append(df)
+#             else:
+#                 print(f"Warning: Input file {file} is missing. Skipping...")
         
-        # Concatenate dataframes and save as CSV
-        if dfs:
-            result = pd.concat(dfs, ignore_index=True)
-            result.to_csv(output[0], index=False)
-        else:
-            print("No input files found. Skipping aggregation.")
+#         # Concatenate dataframes and save as CSV
+#         if dfs:
+#             result = pd.concat(dfs, ignore_index=True)
+#             result.to_csv(output[0], index=False)
+#         else:
+#             print("No input files found. Skipping aggregation.")
     
 rule eval_solutions:
     input:
-        data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
         gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
         cellassign = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl",
         sol = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-
     params:
         lamb = config["lamb"],
     output:

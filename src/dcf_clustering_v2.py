@@ -11,7 +11,7 @@ import pickle
 import pandas as pd
 from utils import timeit_decorator
 import  multiprocessing
-TOLERANCE = 0.1
+TOLERANCE = 2
 EPSILON = -1e40
 SEQERROR = 1e-40
 
@@ -73,7 +73,7 @@ def scalar_obj_val(dcf, clust_group_map, q, data):
 #     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=1, rng=None, iterations=100 ):
+    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100 ):
         self.nrestarts =nrestarts 
         if rng is None:
             self.rng = np.random.default_rng(seed)
@@ -86,32 +86,29 @@ class DCF_Clustering:
         self.cna_restriction = cna_restriction
 
 
-        # self.clusters= [i+1 for i in range(max_clusters)]
-        
-        # self.k = clusters
-        # self.T_CNAs = T_CNAs
-
-        # self.T_SNVs = T_SNVs
-        # self.id_to_tree = {tree.id: tree for tree in T_SNVs}
-        # self.max_iterations=100
-        # self.combos = []
-   
-        # self.T_SNV_clusters = T_SNV_clusters
-        # for k in range(self.k):
-        #     for t,tree in enumerate(self.T_SNVs):
-        #             self.combos.append((k,t))
-        
-        # self.verbose = False
+    
     
 
-    def init_cluster_centers(self,k):
-        ''' 
-        randomly initialize cluster centers 
-        '''
-        init = self.rng.uniform(low=0.0, high=1.0, size=k)
-        init[0] = 0.95
-        return init
+    # def init_cluster_centers(self,k, include_truncal=True):
+    #     ''' 
+    #     randomly initialize cluster centers 
+    #     '''
+    #     init = self.rng.uniform(low=0.0, high=1.0, size=k)
+    #     if include_truncal:
+    #         init[np.argmax(init)] = 0.98
+    #     return init
   
+    def init_cluster_centers(self, k):
+        block_size = 1.0 / k
+        # Generate random values uniformly in [0, 1] for each block
+        block_uniform_values = self.rng.uniform(size=k)
+        # Calculate the starting point of each block
+        block_starts = np.arange(k) * block_size
+        # Calculate the random sample within each block
+        samples = block_starts + block_uniform_values * block_size
+        return samples
+
+
         #return [0.056, 0.146, 0.179, 0.996, 0.617, 0.138, 0.382]
 
 
@@ -201,48 +198,17 @@ class DCF_Clustering:
             # new_dcfs[q] = minimize_scalar(scalar_obj_val, args=(clust_group_map, q, self.data), 
             #                               method='bounded', bounds=[0,1]).x
             result = minimize(objective_function, x0=[dcfs[q]], args=(clust_group_map, q, self.data), bounds=[(0,1)])
-            new_dcfs[q]= result.x
-
             if result ==0:
                 new_dcfs[q] = self.rng.uniform()
+            else:
+                new_dcfs[q]= result.x[0]
+
+           
         return new_dcfs
 
-            # for ell in clust_group_map:
-            #     if q in clust_group_map[ell]:
-            #         clust_group = clust_group_map[ell][q]
-
-        
-
-            #     snvs = self.data.seg_to_snvs[seg]
-            #     for snv in snvs:
-            #         if cluster[snv] == k:
-            #             snvs_in_cluster.append(snv)
-            # if len(snvs_in_cluster) > 0:
-                # obj = scalar_obj_new(dcfs[k], TREE_ASSIGNMENTS, snvs_in_cluster, alt, total, self)
-    
-    # def optimize_cluster_centers(self, dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, alt, total): #TO DO: Check if this should be updated?
-    #     new_dcfs = []
-    #     for k in range(len(dcfs)): #looping over clusters
-    #         snvs_in_cluster = []
-    #         tree_in_cluster = []
-    #         #find segments of 
-
-    #         for seg, cluster in CLUSTER_ASSIGNMENTS.items():
-    #             snvs = self.data.seg_to_snvs[seg]
-    #             for snv in snvs:
-    #                 if cluster[snv] == k:
-    #                     snvs_in_cluster.append(snv)
-    #         if len(snvs_in_cluster) > 0:
-    #             # obj = scalar_obj_new(dcfs[k], TREE_ASSIGNMENTS, snvs_in_cluster, alt, total, self)
-    #             new_dcf = minimize_scalar(scalar_obj_new, args=(TREE_ASSIGNMENTS, snvs_in_cluster, alt, total, self), method='bounded', bounds=[0,1]).x
-    #         else:
-    #             #new_dcf = self.rng.random()
-    #             new_dcf = dcfs[k]
-    #         new_dcfs.append(new_dcf)
-    #     return np.array(new_dcfs)
 
 
-    #     return np.array(new_dcfs)
+
     def compute_likelihood(self, dcfs, clust_group_mapping):
         likelihood = 0
         #scalar_obj_new(dcf, tree_assignments, segs_in_cluster, alt, total):
@@ -257,6 +223,7 @@ class DCF_Clustering:
         See data.py for the data object 
         k = # of SNV clusters 
         '''
+        init_dcfs =dcfs.copy()
         prev_likelihood = np.NINF
         self.k = len(dcfs)
         # dcfs = self.init_cluster_centers()
@@ -287,7 +254,7 @@ class DCF_Clustering:
                 # snvs = self.data.seg_to_snvs[ell]
                 seg_like = np.NINF
                 
-                if self.cna_restriction == 1:
+                if self.cna_restriction:
 
                     for s in S[ell]:
                         #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
@@ -365,13 +332,24 @@ class DCF_Clustering:
             #check for covergence:
             diff = new_likelihood -prev_likelihood
             if self.verbose:
-                print(f"Previous likelihood: {prev_likelihood} New likelihood: {new_likelihood} Diff: {diff}")
+                print(f"{j}: Previous likelihood: {prev_likelihood} New likelihood: {new_likelihood} Diff: {diff}")
             if abs(diff) <  TOLERANCE:
                  break
             else:
                  prev_likelihood = new_likelihood
 
             
+        if self.verbose:
+            print(f"Restart complete with likelihood: {new_likelihood}")
+            print(f"Initial DCFs: {init_dcfs}")
+            print(f"Inferred DCFs: {dcfs}")
+ 
+            clust_assign = defaultdict(list)
+            for ell in CLUSTER_ASSIGNMENTS:
+                for j, q in CLUSTER_ASSIGNMENTS[ell].items():
+                    clust_assign[q].append(j)
+            for q in clust_assign:
+                print(f"{q}: {dcfs[q]}: {len(clust_assign[q])} SNVs")
 
         return new_likelihood, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
             
@@ -415,31 +393,42 @@ class DCF_Clustering:
         
 
 def main(args):
-    print(args.pickle_path)
+    
     data = pd.read_pickle(args.pickle_path)
-    ground_truth = read_ground_truth_text_file(args.ground_truth)
-    k = [len(ground_truth)]
-    dec = DCF_Clustering(nrestarts=args.num_restarts, seed=21, verbose=True, cna_restriction=args.restrict_CNA_trees)
-    all_results = dec.run(data, k_vals=k)
+    print(data)
+    
+    dec = DCF_Clustering(nrestarts=args.num_restarts, seed=args.seed, 
+                         verbose=True, cna_restriction=args.restrict_CNA_trees)
+
+    gt_like = 0
+
+    if args.ground_truth is not None:
+
+        ground_truth = read_ground_truth_text_file(args.ground_truth)
+        k = [len(ground_truth)]
+        res  = dec.decifer(data, np.array(ground_truth))
+        gt_like = res[0]
+        print(f"GT Likelihood: {gt_like}")
+        print(f"DCFS: {res[1]}")
+    else:
+        k  = [args.k]
+
+    all_results = dec.run(data, k_vals=k, cores=args.cores)
     dcfs = all_results[1]
-    mean_difference = compute_mean_difference(ground_truth, dcfs)/k
 
-    with open(args.accuracy_path, 'a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([mean_difference])
+    if args.dcfs is not None:
 
-    with open(args.output_path, 'wb') as file:
-        pickle.dump(all_results, file)
+        with open(args.dcfs, "w+") as file:
+            file.write(f"#likelihood: {all_results[0]}\n")
+            file.write(f"#gt likelihood: {gt_like}\n")
+            for d in dcfs:
+                file.write(f"{d}\n")
+    
 
+    if args.output_path is not None:
+        with open(args.output_path, 'wb') as file:
+            pickle.dump(all_results, file)
 
-def compute_mean_difference(ground_truth, dcfs):
-
-    differences = np.abs(np.subtract.outer(ground_truth, dcfs))
-    row_ind, col_ind = linear_sum_assignment(differences)
-    selected_differences = differences[row_ind, col_ind]
-    mean_difference = np.mean(selected_differences)
-
-    return mean_difference
 
 
 def read_ground_truth_text_file(file_path):
@@ -452,37 +441,48 @@ def read_ground_truth_text_file(file_path):
     return data
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Perform clustering analysis on data from a pickled object")
-    parser.add_argument("pickle_path", type=str, help="Path to the pickled object")
-    parser.add_argument("ground_truth", type=str, help="Path to the ground truth data")
-    parser.add_argument("output_path", type=str, help="Path to the output data data")
-    parser.add_argument("accuracy_path", type=str, help="Path to the accuracy data")
-    parser.add_argument("num_restarts", type=int, help="Number of restarts")
-    parser.add_argument("restrict_CNA_trees", type=int, help="Whether or not to enforce CNA Constraint")
+    parser.add_argument("-d","--pickle_path", type=str, help="Path to the pickled object")
+    parser.add_argument("-g", "--ground_truth", type=str, help="Path to the ground truth data")
+    parser.add_argument("-o", "--output_path", type=str, help="Path to the output data data")
+    parser.add_argument("-r", "--num_restarts", type=int, help="Number of restarts")
+    parser.add_argument("-c", "--restrict_CNA_trees", action="store_true")
+    parser.add_argument("-k", "--clusters", type=int, default=3, help="number of clusters")
+    parser.add_argument("-D", "--dcfs", type=str, help="output file for inferred dcfs")
+    parser.add_argument("-s", "--seed", type=int, default=21,  help="output file for inferred dcfs")
+    parser.add_argument("-j", "--cores", default=1, type=int, help="number of cores to use")
 
     # Parse command line arguments
     args = parser.parse_args()
 
+    # gtpth = "test"
+    # seed = 12
+    # cov = 0.25
+    # instance = f"s{seed}_m5000_k25_l5_d2"
+    # folder = f"n1000_c{cov}_e0" 
+    # pth = f"simulation_study/sims"
+
+
+
+    # args = parser.parse_args([
+
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-j", "5",
+    #     "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
+    #     "-s", f"{seed}",
+    #     "-r", "30",
+    #     "-D", f"{gtpth}/out_dcfs.txt",
+    #     "-c"
+
+    # ])
+
+
     # Call the main function with provided arguments
     main(args)
 
-     #load in pickled data object 
-     #from data import Data, load_from_pickle
-     #dat = load_from_pickle("/Users/annahart/CLionProjects/Pharming/s11_m5000_k25_l7/n1000_c0.25_e0/data.pkl")
 
-
-     #load in ground-truth DCFs
-
-     #initialize object 
-     #dec = DCF_Clustering(nrestarts=50,seed=21,verbose=True)
-     #all_results = dec.run(dat, k_vals=[i+1 for i in range(8)])
-     #results = dec.run(dat, k_vals=[7])
-     #print(results)
-
-     #store file of results
-
-     #write to accuracy file
 
      
 
