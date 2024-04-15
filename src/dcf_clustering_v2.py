@@ -411,7 +411,7 @@ def main(args):
         print(f"GT Likelihood: {gt_like}")
         print(f"DCFS: {res[1]}")
     else:
-        k  = [args.k]
+        k  = [args.clusters]
 
     all_results = dec.run(data, k_vals=k, cores=args.cores)
     dcfs = all_results[1]
@@ -419,8 +419,8 @@ def main(args):
     if args.dcfs is not None:
 
         with open(args.dcfs, "w+") as file:
-            file.write(f"#likelihood: {all_results[0]}\n")
-            file.write(f"#gt likelihood: {gt_like}\n")
+            # file.write(f"#likelihood: {all_results[0]}\n")
+            # file.write(f"#gt likelihood: {gt_like}\n")
             for d in dcfs:
                 file.write(f"{d}\n")
     
