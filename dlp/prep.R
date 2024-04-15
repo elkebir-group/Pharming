@@ -2,67 +2,69 @@ library(tidyverse)
 vtext <- theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 setwd("./dlp")
 df <- read_csv("DeepCopyPrediction.csv")
+
+outdir <- "SA1090"
+theme_set(theme_gray(base_size = 20))
 colnames(df) <- c("cell", "chr", "start", "end", "x", "y")
-n_distinct((df$cell))
-
-bin_mapping <- df %>% select(chr, start, end) %>% distinct() %>% arrange(chr, start, end) %>%
-  mutate(bin = row_number()-1)
-
-df <- inner_join(df, bin_mapping)
-cp <- select(df, cell,chr, bin, x, y) %>% unite(col=cn, x, y, sep ="|", remove=FALSE)
+df <- df %>% separate(col=cell, into=c("sample", "clone", "region", "cell_id"), sep="-", remove=F)  %>%
+    mutate(total = x + y) 
 
 
+mean_cn <- df %>% group_by(sample) %>% summarize(mean_cn = mean(total)) 
 
-num_states_df <- cp %>% group_by(bin, cn) %>%
-  summarize(num_cells =n())
+selected_sample <- mean_cn %>% top_n(1, - mean_cn) %>% pull(sample)
 
 
 
 
-compute_dist <- function(bin_ids, pseudo=1e-7){
-  bin_data <- filter(cp, bin %in% bin_ids) %>% select(-bin)
-  states <- unique(cp$cn)
-  norm <- n_distinct(bin_data$cell) * length(bin_ids)
-  dat <- left_join(data.frame(cn= states), bin_data,  by="cn") %>%
-    mutate(count = ifelse(is.na(cell),0, 1 ))
 
-  dist <- dat %>%
-      group_by(cn) %>% 
-    summarize(counts = sum(count), freq = sum(count)/norm)
-  
-  dist$bin = bin_ids
-  
-  return(dist)
-  
-  
-}
 
-segments.df <- read_csv("segmentation.csv") %>% mutate(segment= row_number()-1) %>%
-  right_join(bin_mapping %>% rename(start_loci = start, end_loci=end), relationship="many-to-many") %>%
-  filter(bin >= start, bin <=end) 
+seg_mapping <- df.filt %>% select(chr, start, end) %>% distinct() %>% arrange(chr, start, end) %>%
+  mutate(segment = row_number()-1)
+
+df.filt <- inner_join(df %>% filter(sample %in% selected_sample) , seg_mapping)
+
+
+ncells <- n_distinct((df.filt$cell))
+cp <- select(df.filt, cell,chr, segment, x, y) %>% unite(col=cn, x, y, sep ="|", remove=FALSE)
+
+
+
+num_states_df <- cp %>% group_by(segment, cn) %>%
+  summarize(num_cells =n(), prop= num_cells/ncells )
+
+nstates <- num_states_df %>% group_by(segment) %>% summarize(nstates= sum(prop >= 0.05))
+
+
 
 #write_csv(segments.df, "segments.bin.mapping.csv")
 
 var.dat <- read.table("variant_data.filt.tsv", header = F, sep="\t",
                       col.names=c("chr", "loci", "cell", "base", "var", "total") )
 
-head(segments.df)
-var <- var.dat %>% 
-  left_join(segments.df %>% mutate(chr=as.character(chr)), by="chr", relationship="many-to-many") %>%
-  filter(loci >= start_loci, loci <= end_loci)
+var.dat  <- var.dat %>% separate(col=cell, into=c("sample", "clone", "region", "cell_id"), sep="-", remove=F)
 
-input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>% select(segment, mutation, cell, varReads = var, totReads = total)
+var.dat.filt <- var.dat %>% filter(sample %in% selected_sample)
 
+var <- var.dat.filt %>% 
+  left_join(seg_mapping %>% mutate(chr=as.character(chr)), by="chr", relationship="many-to-many") %>%
+  filter(loci >= start, loci <= end)
+
+
+input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
+     select(segment, mutation, cell, varReads = var, totReads = total)
+snvs <- input.dat %>% select(segment, mutation) %>% distinct()
+
+snvs_per_seg <- snvs %>% group_by(segment) %>% count()
+ggplot(snvs_per_seg, aes(x=n)) + geom_histogram()
 write_csv(input.dat, "input/read_counts.csv")
 
-snvs <- var %>% select(chr, loci, segment, start_loci, end_loci, bin) %>% distinct()
-nrow(snvs)
-ggplot(snvs, aes(x=factor(segment))) + geom_bar() + xlab("segment") + vtext
-  
 
 snvs.per.seg <- snvs %>% group_by(segment) %>% count()
 ggplot(snvs.per.seg, aes(x=n)) + geom_histogram(binwidth = 25, fill="white", color="black") +
   xlab("# of SNVs per segment") + ylab("number of segments")
+
+seg.dat <- full_join(snvs_per_seg, nstates)
 
 ggplot(snvs.per.seg, aes(x=n, y="0")) + geom_boxplot() + 
   theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
@@ -82,7 +84,7 @@ ggplot(seg.cp, aes(x=factor(segment), y=cell, fill=cn)) + geom_tile() +
 seg.cp <- left_join(segments.df , cp) 
 
 copy_prof <- select(seg.cp, segment, cell, copiesX = x, copiesY=y)
-write_csv(copy_prof, "input/copy_number_profiles.csv")
+write_csv(copy_prof, file.path(outdir,"input/copy_number_profiles.csv")
 
 head(copy_prof)
 head(seg.cp)
@@ -212,3 +214,20 @@ ggplot(cp %>% filter(chr==1)  %>% inner_join(bin_mapping) ,
 #        aes(x=factor(bin), y=cell, fill=cn)) + geom_tile()
 
 
+# compute_dist <- function(bin_ids, pseudo=1e-7){
+#   bin_data <- filter(cp, bin %in% bin_ids) %>% select(-bin)
+#   states <- unique(cp$cn)
+#   norm <- n_distinct(bin_data$cell) * length(bin_ids)
+#   dat <- left_join(data.frame(cn= states), bin_data,  by="cn") %>%
+#     mutate(count = ifelse(is.na(cell),0, 1 ))
+
+#   dist <- dat %>%
+#       group_by(cn) %>% 
+#     summarize(counts = sum(count), freq = sum(count)/norm)
+  
+#   dist$bin = bin_ids
+  
+#   return(dist)
+  
+  
+# }

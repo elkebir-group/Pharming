@@ -74,7 +74,6 @@ def main(args):
     ph = Pharming(dcfs = delta,
                 cnatrees = cnatrees,
                 k= k, 
-                T_m = T_m,
                 start_state=(args.root_x, args.root_y), 
                 seed = args.seed,
                 top_n=  args.top_n,
@@ -83,6 +82,7 @@ def main(args):
                 ninit_segs = args.ninit_segs,
                 ninit_Tm = args.ninit_tm,
                 cell_threshold= args.cell_threshold,
+                max_loops= args.ntree_iter,
                 )
 
   
@@ -144,6 +144,8 @@ if __name__ == "__main__":
                         help="number of segments for initialization of mutation cluster tree")
     parser.add_argument("--ninit-tm", type=int,
                         help="number of mutation cluster trees to consider after pruning with initial segs")
+    parser.add_argument("--ntree-iter", type=int, default=3,
+                        help="number of iterations to check for new mutation cluster tree to use for inference")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
     parser.add_argument("-S", "--cnatrees",type=str,
@@ -172,39 +174,36 @@ if __name__ == "__main__":
 
 
 
-    gtpth = "test"
-    seed = 13
-    cov = 0.25
-    instance = f"s{seed}_m5000_k25_l5_d2"
-    folder = f"n1000_c{cov}_e0" 
-    pth = f"simulation_study/sims"
+    # gtpth = "test"
+    # seed = 13
+    # cov = 0.25
+    # instance = f"s{seed}_m5000_k25_l5_d2"
+    # folder = f"n1000_c{cov}_e0" 
+    # pth = f"simulation_study/sims"
 
 
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        "-j", "3",
-        # "-D", f"{pth}/{instance}/{folder}/dcfs.txt",
-        # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-        "-n", "2",
-        "-k", "5",
-        #  "-L", "24", # "18", 
-        "--ninit-segs", "3",
-        "--ninit-tm", "2",
-        "--cell-threshold", "5",
-        "--order", "weighted-random",
-        "-s", f"{seed}",
-        # "--segment", "0",
-        # "--out", f"/Users/leah/Documents/Research/projects/Pharming/test",
-        # "-J", f"{gtpth}/scores4.csv",
-        "-P", f"{gtpth}/solutions_full.pkl",
-        # "--all-sol", f"{gtpth}/clonal_trees.pkl",
-        "--profile", "test/profile.prof",
-        "--collapse",
-        "-O", f"{gtpth}"
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-j", "3",
+    #     "-D", f"simulation_study/dcf_clustering_v2/{instance}/{folder}/inf_dcfs.txt",
+    #     # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
+    #     "-n", "2",
+    #     "-k", "5",
+    #      "-L", "1", "2", "3", "5", "10", "11", "12", "20",
+    #     "--ninit-segs", "1",
+    #     "--ninit-tm", "1",
+    #     "--cell-threshold", "5",
+    #     "--order", "weighted-random",
+    #     "-s", f"{seed}",
+    #     "-P", f"{gtpth}/solutions_full.pkl",
+    #     "--profile", "test/profile.prof",
+    #     "--collapse",
+    #     "--ntree-iter", "5",
+    #     "-O", f"{gtpth}"
 
-    ])
+    # ])
 
     profiler = cProfile.Profile()
     profiler.enable()

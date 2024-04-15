@@ -305,6 +305,17 @@ class Data:
 
         # Convert the defaultdict to a regular dictionary
         return dict(copy_states_dict)
+    
+    def thresholded_cn_prop(self, seg, thresh=0, start_state=(1,1) ):
+        cn_props = self.cn_proportions(seg)
+        cn_states = [state for state, prop in cn_props.items() if prop >= thresh or state==start_state]
+        
+        norm = sum(cn_props[s] for s in cn_states)
+        norm_cn_props = {state: cn_props[state]/norm for state in cn_states}
+        
+        if start_state not in norm_cn_props:
+            norm_cn_props[start_state] =0 
+        return norm_cn_props
 
     
     def cn_states_by_seg(self, seg):
@@ -317,10 +328,10 @@ class Data:
 
         return set(cn_states), item_counts 
 
-    def num_cn_states(self, seg, root_state=None):
-        cn_states, counts = self.cn_states_by_seg(seg)
-        # cn_states = set(root_state).intersection(cn_states)
-        return len(cn_states)
+    def num_cn_states(self, seg, thresh=0):
+        cn_prop =  self.cn_proportions(seg)
+
+        return len([s for s in cn_prop if cn_prop[s] >= thresh])
 
     def cn_proportions(self, seg):
         cn_props = {}

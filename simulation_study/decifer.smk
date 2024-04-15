@@ -7,7 +7,7 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/decifer_output.tsv",
+        expand("decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -17,24 +17,6 @@ rule all:
             err = config["cerror"],
             dirch = config["dirch"]
         ),
-        # expand("decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt_delta.csv",
-        #     s =seeds,
-        #     cells = config["cells"],
-        #     snvs = config["snvs"],
-        #     nsegs = config["nsegs"],
-        #     cov = config["cov"],
-        #     mclust = config['mclust'],
-        #     err = config["cerror"],
-        #     dirch = config["dirch"]
-        # ),
-
-
-        
-
-        
-
-        
-
 
 rule prep_decifer:
     input: "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
@@ -50,25 +32,29 @@ rule run_decifer:
     output: "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/decifer_output.tsv"
     params: 
         restarts= 50,
+        mink = lambda wildcards: int(wildcards.mclust) - 1,
+        maxk = lambda wildcards: int(wildcards.mclust)  + 1,
         prefix ="decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/decifer"
+    threads: 1
     log: 
         std = "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
         err= "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log",
     benchmark:"decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log",
     shell: 
-     " decifer {input.vaf} -p {input.purity} -k {wildcards.mclust} -K {wildcards.mclust} "
-     " -r {params.restarts} --seed {wildcards.s} -o {params.prefix} > {log.std} 2> {log.err} "
+     " decifer {input.vaf} -p {input.purity} -k {params.mink} -K {params.maxk} -j {threads} "
+     " -r {params.restarts}  --seed {wildcards.s} -o {params.prefix} > {log.std} 2> {log.err} "
+
+rule get_dcfs:
+    input: "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/decifer_output.tsv"
+    output: "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt"
+    run:
+        import pandas as pd 
+        dec_out = pd.read_table(input[0])
+        dec_clust = dec_out[['mut_index', 'cluster', 'point_estimate_DCF0', 'true_cluster_DCF0']]
+        dec_clust[['clust_dcf', 'CI']] = dec_clust['true_cluster_DCF0'].str.split(';', expand=True)
+        dec_clust['clust_dcf'] = pd.to_numeric(dec_clust['clust_dcf'])
+        dcfs = dec_clust['clust_dcf'].unique()
+        with open(output[0], 'w') as file:
+            for value in dcfs:
+                file.write(str(value) + '\n')
     
-
-# rule construct_gt:
-#     input:
-#         tree = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/gt.pkl",
-#         data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-#         phi = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cellAssign.pkl",
-
-#     output: 
-#         psi = "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt_psi.csv",
-#         delta=  "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt_delta.csv",
-#     shell: 
-#      " python ../src/get_gt.py -d {input.data} -t {input.tree} -c {input.phi} "
-#      " -p {output.psi} -f {output.delta} "

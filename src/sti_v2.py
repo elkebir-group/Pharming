@@ -28,7 +28,7 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False) -> None:
+    def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False, prop_thresh=0, start_state=(1,1)) -> None:
     
         self.ell = ell 
         nodes = list(S)
@@ -80,6 +80,8 @@ class STI:
                 
         self.cn_delta = {}
         self.cost1, self.cost2 = None, None
+        self.prop_thresh = prop_thresh
+        self.start_state = start_state
 
         # print(self.group_desc)
         # for g, trees in enumerate(self.T_SNV_groups):
@@ -289,7 +291,7 @@ class STI:
     # @timeit_decorator
     def precompute_costs_old(self, data):
         self.snvs = data.seg_to_snvs[self.ell]
-        self.cn_props = data.cn_proportions(self.ell)
+        self.cn_props = data.thresholded_cn_prop(self.ell, self.prop_thresh, self.start_state)
         if self.S_root not in self.cn_props:
             self.cn_props[self.S_root] = 0.0
         self.data  = data
@@ -337,7 +339,9 @@ class STI:
 
     def precompute_costs(self, data):
         self.snvs = data.seg_to_snvs[self.ell]
-        self.cn_props = data.cn_proportions(self.ell)
+        self.cn_props = data.thresholded_cn_prop(self.ell,
+                                                  thresh=self.prop_thresh, 
+                                                  start_state=self.start_state)
         if self.S_root not in self.cn_props:
             self.cn_props[self.S_root] = 0.0
         self.data  = data

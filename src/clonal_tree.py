@@ -215,8 +215,8 @@ class ClonalTree:
         return set(self.seg_to_muts.keys())
     
     def compute_dcfs(self, ca):
-        if self.mut_mapping is None:
-            self.update_mappings()
+   
+        self.update_mappings()
 
         dcfs = {}
         counts = ca.get_cell_count()
@@ -224,8 +224,7 @@ class ClonalTree:
         for n in self.tree:
             
             if len(self.mut_mapping[n]) > 0:
-                snvs = self.mut_mapping[n]
-                m = snvs[0]
+          
                 dcfs[n] = sum([counts[u] for u in self.preorder(source=n)])/ncells 
         return dcfs 
     
