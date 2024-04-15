@@ -55,20 +55,25 @@ input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
      select(segment, mutation, cell, varReads = var, totReads = total)
 snvs <- input.dat %>% select(segment, mutation) %>% distinct()
 
-snvs_per_seg <- snvs %>% group_by(segment) %>% count()
-ggplot(snvs_per_seg, aes(x=n)) + geom_histogram()
-write_csv(input.dat, "input/read_counts.csv")
+
+snvs <- input.dat %>% group_by(segment, mutation) %>% 
+  summarize(var= sum(varReads), total=sum(totReads)) %>% 
+  filter(var > 0) %>% 
+  select(segment, mutation)
 
 
 snvs.per.seg <- snvs %>% group_by(segment) %>% count()
+
 ggplot(snvs.per.seg, aes(x=n)) + geom_histogram(binwidth = 25, fill="white", color="black") +
   xlab("# of SNVs per segment") + ylab("number of segments")
 
-seg.dat <- full_join(snvs_per_seg, nstates)
+seg.dat <- full_join(snvs.per.seg, nstates) %>% rename(m=n)
 
-ggplot(snvs.per.seg, aes(x=n, y="0")) + geom_boxplot() + 
-  theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
-  xlab("# of SNVs per segment") + ylab("")
+ggplot(seg.dat %>% pivot_longer(c("m", "nstates")), aes(x=name, y=value)) + facet_wrap(~name, scales="free") +
+geom_boxplot() + xlab(outdir) + ylab("count")
+
+ggplot(seg.dat, aes(x=factor(nstates), y=m)) +  geom_boxplot(aes(x=factor(nstates))) + geom_point() + xlab("number of cn states")
+
   
 
 ggplot(seg.cp, aes(x=factor(segment), y=cell, fill=cn)) + geom_tile() +  
@@ -80,73 +85,19 @@ ggplot(seg.cp, aes(x=factor(segment), y=cell, fill=cn)) + geom_tile() +
 
 
 
+input.dat <- inner_join(input.dat, snvs)
+write_csv(input.dat, file.path(outdir,"input/read_counts.csv"))
 
-seg.cp <- left_join(segments.df , cp) 
-
-copy_prof <- select(seg.cp, segment, cell, copiesX = x, copiesY=y)
-write_csv(copy_prof, file.path(outdir,"input/copy_number_profiles.csv")
-
-head(copy_prof)
-head(seg.cp)
-num.cn <- seg.cp %>% group_by(chr, segment) %>% summarize(num_cn_states=n_distinct(cn))
-
-ggplot(num.cn, aes(x=factor(segment), y=num_cn_states)) + geom_bar(stat="identity") +
-  vtext + xlab("segment") + ylab("# of unique CN states per segment")
-
-ggplot(num.cn, aes(x=num_cn_states)) + geom_histogram( fill="white", color="black") +
-  xlab("# of unique CN states per segment") + ylab("number of segments")
-
-ggplot(num.cn, aes(x=num_cn_states, y="0")) + geom_boxplot() + 
-  theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
-  xlab("# of unique CN states per segment") + ylab("")
-
-seg.cell.impute <- seg.cp %>% group_by(chr, segment, cell, cn) %>% count()
-ggplot(seg.cell.impute, aes(x=cell, fill=cn)) + geom_bar(position="fill") +
-  guides(fill="none") + theme(axis.text.x  = element_blank(),
-                              axis.ticks.x = element_blank()) +
-  facet_wrap(~segment, labeller = "label_both")
-
-seg.cell.state <- seg.cell.impute %>% group_by(chr, segment, cell) %>% 
-  arrange(desc(n)) %>% filter(row_number()==1) %>% select(-n) %>% rename(cn_impute=cn)
-head(seg.cell.state)
-
-head(seg.cp)
-seg.cp.imp <- inner_join(seg.cp, seg.cell.state)
-
-num.cn.imp <- seg.cp.imp %>% group_by(chr, segment) %>% summarize(num_cn_states=n_distinct(cn_impute))
-
-ggplot(num.cn.imp, aes(x=factor(segment), y=num_cn_states)) + geom_bar(stat="identity") +
-  vtext + xlab("segment") + ylab("# of unique CN states per segment")
+copy_prof <- select(cp, segment, cell, copiesX = x, copiesY=y)
+write_csv(copy_prof, file.path(outdir,"input/copy_number_profiles.csv"))
 
 
 
-ggplot(num.cn.imp, aes(x=num_cn_states, y="0")) + geom_boxplot() + 
-  theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
-  xlab("# of unique CN states per segment") + ylab("")
 
-seg.cell.impute <- seg.cp %>% group_by(chr, segment, cell, cn) %>% count()
-ggplot(seg.cell.impute, aes(x=cell, fill=cn)) + geom_bar(position="fill") +
-  guides(fill="none") + theme(axis.text.x  = element_blank(),
-                              axis.ticks.x = element_blank()) +
-  facet_wrap(~segment, labeller = "label_both")
 
-ggplot(seg.cp.imp, aes(x=factor(segment), fill=cn_impute)) + geom_bar(position="fill") +
-  xlab("segment") + guides(fill="none") + vtext
 
-head(seg.cp.imp)
-mtcars %>%
-  count(am, gear) %>% 
-  mutate(freq = prop.table(n), .by = am)
 
-seg.states <- seg.cp.imp %>% select(chr, segment, cn_impute, cell ) %>% distinct() %>% 
-  count(segment, cn_impute) %>%
-  mutate(prop = prop.table(n), .by =segment) %>% mutate(include = prop > 0.05)
 
-seg.cell.impute %>% select(-n) %>% ungroup() %>% write_csv("copy_profiles.imputed.csv")
-seg.state.counts <- seg.states %>% group_by(segment) %>% summarize(num_imp_filt = sum(include))
-ggplot(seg.state.counts, aes(x=num_imp_filt, y="0")) + geom_boxplot() + 
-  theme(axis.text.y = element_blank(),  axis.ticks.y = element_blank()) +  
-  xlab("# of unique CN states per segment after imputation & filtering ( > 0.05)") + ylab("")
 # inner_loop <- function(start){
 #   res <- data.frame()
 #   for(j in (start+1):nbins-1){
@@ -165,39 +116,39 @@ ggplot(seg.state.counts, aes(x=num_imp_filt, y="0")) + geom_boxplot() +
 # }
 
 
-i <- 0
+# i <- 0
 
 
-ggplot(res %>%filter(end-start > 10, end >40, end < 60), aes(x=end, y=jsd)) + geom_point() 
-filter(res, end==46)
-bins <- unique(cp$bin)
+# ggplot(res %>%filter(end-start > 10, end >40, end < 60), aes(x=end, y=jsd)) + geom_point() 
+# filter(res, end==46)
+# bins <- unique(cp$bin)
 
-dist.df <- bind_rows(lapply(bins, compute_dist)) 
-count.dat <- dist.df %>% select(-freq) %>% 
-  pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
+# dist.df <- bind_rows(lapply(bins, compute_dist)) 
+# count.dat <- dist.df %>% select(-freq) %>% 
+#   pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
 
-proc.dat <- dist.df %>% select(-freq) %>% inner_join(bin_mapping %>% select(bin, chr))
+# proc.dat <- dist.df %>% select(-freq) %>% inner_join(bin_mapping %>% select(bin, chr))
 
-chr1.dat <- proc.dat %>%   filter(chr==1) %>% select(-chr) 
-write_csv(select(proc.dat, chr, bin, cn, counts), "counts.csv")
+# chr1.dat <- proc.dat %>%   filter(chr==1) %>% select(-chr) 
+# write_csv(select(proc.dat, chr, bin, cn, counts), "counts.csv")
 
-chr1.dat.wide <- chr1.dat %>%   
-  pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
-write_csv(chr1.dat.wide, "chr1.csv")
-write_csv(count.dat, "counts_by_states.csv")
-# dist.wide <- dist.df %>% pivot_wider(id_cols=cn, names_from = bin, names_prefix = "bin", values_from =freq )
+# chr1.dat.wide <- chr1.dat %>%   
+#   pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
+# write_csv(chr1.dat.wide, "chr1.csv")
+# write_csv(count.dat, "counts_by_states.csv")
+# # dist.wide <- dist.df %>% pivot_wider(id_cols=cn, names_from = bin, names_prefix = "bin", values_from =freq )
 
-# ent_vals <- numeric(ncol(dist.wide)-1)
-# for(i in 2:(ncol(dist.wide)-1)){
-#   p <- dist.wide[,i]
-#   q <- dist.wide[,i+1]
-#   ent_vals[i] <- kl_div(p,q)
-# }
-# summary(ent.df$kldiv)
-ggplot(cp %>% filter(chr==1)  %>% inner_join(bin_mapping) ,
-       aes(x=bin, y=cell, fill=cn)) + geom_tile()  +
-  geom_vline(aes(xintercept=7)) +  geom_vline(aes(xintercept=14))  +
-  geom_vline(aes(xintercept=23))# +    geom_vline(aes(xintercept=22))
+# # ent_vals <- numeric(ncol(dist.wide)-1)
+# # for(i in 2:(ncol(dist.wide)-1)){
+# #   p <- dist.wide[,i]
+# #   q <- dist.wide[,i+1]
+# #   ent_vals[i] <- kl_div(p,q)
+# # }
+# # summary(ent.df$kldiv)
+# ggplot(cp %>% filter(chr==1)  %>% inner_join(bin_mapping) ,
+#        aes(x=bin, y=cell, fill=cn)) + geom_tile()  +
+#   geom_vline(aes(xintercept=7)) +  geom_vline(aes(xintercept=14))  +
+#   geom_vline(aes(xintercept=23))# +    geom_vline(aes(xintercept=22))
 #[(0, 5), (6, 6), (7, 15), (16, 22), (23, 23), (24, 24), (25, 28)]
 
 

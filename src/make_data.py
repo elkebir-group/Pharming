@@ -1,5 +1,4 @@
 import pandas as pd 
-from segment_genome import Segment
 import numpy as np
 import argparse
 from data import Data
@@ -8,11 +7,13 @@ from data import Data
 def load_from_files(var_fname, copy_fname ):
     col_names = ['segment', 'mutation_label', 'cell_label','var', 'total']
 
-   
+
     read_counts = pd.read_table(
-        var_fname, header=None, names=col_names, skiprows=[0])
+        var_fname, header=None, names=col_names, skiprows=[0], sep=None)
+    print(read_counts.head())
     
     copy_numbers = pd.read_csv(copy_fname, header=None,names=["segment", "cell_label", "x", "y"], skiprows=[0])
+    print(copy_numbers.head())
 
     cell_labels_not_in_df1 = copy_numbers.loc[~copy_numbers['cell_label'].isin(read_counts['cell_label']), 'cell_label']
     excluded_labels = cell_labels_not_in_df1.unique()
@@ -73,13 +74,13 @@ def load(read_counts,copy_numbers ):
 
     return Data(var, total, copy_x, copy_y, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
 
-def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
-    '''
-    cn_profiles: an numpy array with shape N x B (cell by bin) matrix with the total copy number profiles of for each cell in each bin
+# def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
+#     '''
+#     cn_profiles: an numpy array with shape N x B (cell by bin) matrix with the total copy number profiles of for each cell in each bin
     
-    returns: a pd.DataFrame with Segment ID as index and columns start and end bin (inclusive)
-    '''
-    return Segment(tol=tol, pseudo_counts=pseudo_counts).fit(cn_profiles)
+#     returns: a pd.DataFrame with Segment ID as index and columns start and end bin (inclusive)
+#     '''
+#     return Segment(tol=tol, pseudo_counts=pseudo_counts).fit(cn_profiles)
 
 
 
