@@ -1,0 +1,5 @@
+sample:
+  - SA1090
+
+mink: 2
+maxk: 8

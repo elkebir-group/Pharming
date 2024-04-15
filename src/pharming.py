@@ -56,6 +56,7 @@ class Pharming:
         self.ninit_segs= ninit_segs
         self.ninit_Tm = ninit_Tm
         self.max_loops = max_loops
+        print(f"Max loops: {self.max_loops}")
         self.thresh_prop = thresh_prop
 
         # if True:
@@ -429,7 +430,7 @@ class Pharming:
         allscriptTm = []
         delta = self.delta.copy()
         while loop < self.max_loops and len(scriptTm) > 0:
-            print(f"Starting mutation cluster trees iteration {loop}...")
+            print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
             stis_init = self.preprocess(init_segs, delta)
 
             allscriptTm += scriptTm
