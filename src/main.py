@@ -20,17 +20,21 @@ def main(args):
                 preprocessed pharming data object!")
     
 
+    if args.segfile is not None:
+        with open(args.segfile, "r+") as file:
+            segments = [int(line.strip()) for line in file]
 
-    if args.segments is None:
-        segments = dat.segments
-    
     else:
-        segments = args.segments
+        if args.segments is None:
+            segments = dat.segments
+        
+        else:
+            segments = args.segments
 
-    print("\t".join(["seg", "snvs", "cn states"] ))
+    print("\t".join(["seg", "snvs", "cn states", "thresh" ] ))
     print("-------------------------------------------")
     for ell in segments:
-        print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}")
+        print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}\t{len(dat.thresholded_cn_prop(ell, thresh=args.thresh_prop))}")
     
 
     if args.delta is not None:
@@ -83,6 +87,7 @@ def main(args):
                 ninit_Tm = args.ninit_tm,
                 cell_threshold= args.cell_threshold,
                 max_loops= args.ntree_iter,
+                thresh_prop = args.thresh_prop
                 )
 
   
@@ -146,6 +151,8 @@ if __name__ == "__main__":
                         help="number of mutation cluster trees to consider after pruning with initial segs")
     parser.add_argument("--ntree-iter", type=int, default=3,
                         help="number of iterations to check for new mutation cluster tree to use for inference")
+    parser.add_argument("--thresh-prop", type=float,
+                        help="proportion threshold for determining CN states")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
     parser.add_argument("-S", "--cnatrees",type=str,
@@ -160,6 +167,8 @@ if __name__ == "__main__":
                         help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")
+    parser.add_argument("--segfile", required=False, type=str,
+                    help="filename with list of segments")
     parser.add_argument("-P" ,"--pickle", required=False, type=str,
                         help="directory where the pickled solution list of top n trees should be saved")
     parser.add_argument("-O" ,"--out", required=False, type=str,
