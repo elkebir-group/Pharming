@@ -11,6 +11,7 @@ import pickle
 import pandas as pd
 from utils import timeit_decorator
 import  multiprocessing
+from decifer_post_process import post_process
 TOLERANCE = 2
 EPSILON = -1e40
 SEQERROR = 1e-40
@@ -251,7 +252,12 @@ class DCF_Clustering:
             CNA_tree ={}
             CLUST_GROUP_MAPPING= {}
             for ell in self.segments: #TO DO: Swap these segments and CNA tree assignment
-                # snvs = self.data.seg_to_snvs[ell]
+
+                #skip segments with a lot of copy number states but a small number of SNVs
+                thresh_cn_prop= self.data.thresholded_cn_prop(ell, 0.05)
+                if len(thresh_cn_prop) > 4 and self.data.num_snvs(ell) < 100:
+                    continue
+          
                 seg_like = np.NINF
                 
                 if self.cna_restriction:
@@ -259,6 +265,8 @@ class DCF_Clustering:
                     for s in S[ell]:
                         #here, get optimal cluster assignments, then save the optimal CNA tree + assignments of SNVs to trees + assignments of SNVs to clusters
                         #after doing this for all the segments, then update the clusters (using assignments & dcf values)
+                   
+                            
                         if len(s) ==0:
                             states = list(cn_props[ell].keys())
                             assert len(states) ==1
@@ -318,12 +326,12 @@ class DCF_Clustering:
 
 
             '''  
-            old_dcfs = dcfs.copy()
+            # old_dcfs = dcfs.copy()
             # dcfs = self.optimize_cluster_centers(dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, self.data.var, self.data.total)
-            test_like = self.compute_likelihood(dcfs, CLUST_GROUP_MAPPING)
+            # test_like = self.compute_likelihood(dcfs, CLUST_GROUP_MAPPING)
             dcfs = self.optimize_cluster_centers(dcfs, CLUST_GROUP_MAPPING)
-            dcfs[dcfs > 0.99] =1.0
-            dcfs[dcfs < 1e-3] =0
+            # dcfs[dcfs > 0.99] =1.0
+            # dcfs[dcfs < 1e-3] =0
 
             '''
             TO DO: The likelihood computation needs to be updated as well 
@@ -352,15 +360,41 @@ class DCF_Clustering:
                 print(f"{q}: {dcfs[q]}: {len(clust_assign[q])} SNVs")
 
         return new_likelihood, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
-            
+
+    @staticmethod         
+    def elbow_criteria_model_selection(objs, mink, maxk, ubleft=0.06):
+        if mink == maxk:
+            return mink, objs, {}
+        best = {}
+        for k in range(mink + 1, maxk + 1):
+            if objs[k - 1] < objs[k]:
+                best[k] = k-1
+                
+                objs[k] = objs[k - 1]
+            else:
+                best[k] =k
+
+        chk = (lambda v: v if v != 0.0 else 0.01)
+        left = (lambda k: min((objs[k - 1] - objs[k]) / abs(chk(objs[k - 1])), ubleft) if k > mink else ubleft)
+        right = (lambda k: (objs[k] - objs[k + 1]) / abs(chk(objs[k])))
+        # left_vals = {k: left(k) for k in range(mink, maxk) }
+        # right_vals = {k: right(k) for k in range(mink, maxk) }
+        elbow = {k: left(k) - right(k) for k in range(mink, maxk)}
+   
+    
+        selected = max(range(mink, maxk), key=(lambda k: elbow[k]))
+
+        return best[selected], objs, elbow
                             
     @timeit_decorator
-    def run(self, data, k_vals= [5,6], cores=1):
+    def run(self, data, k_vals, cores=1):
        
         #results = {}
         #for k in k_vals:
         #    for i in range(self.nrestarts):
         #       results[k,i] = self.decifer(data, k)
+        results_by_k ={}
+        likelihoods  = {}
         for k in k_vals:
             best_result = []
             best_likeli = np.inf
@@ -380,16 +414,22 @@ class DCF_Clustering:
                     all_results = pool.starmap(self.decifer, args)
                     # print(results)
                     # print("****")
+        
             for results in all_results:
                 likeli = results[0]
                 if likeli < best_likeli:
                     best_result = results
                     best_likeli = likeli
+            likelihoods[k] = best_likeli
+            results_by_k[k] = best_result
+        
+        
+        selected, updated_obj, elbow =   self.elbow_criteria_model_selection(likelihoods, min(k_vals), max(k_vals))
 
 
         #add model selection 
                
-        return best_result#best
+        return results_by_k[selected]#best
         
 
 def main(args):
@@ -405,29 +445,56 @@ def main(args):
     if args.ground_truth is not None:
 
         ground_truth = read_ground_truth_text_file(args.ground_truth)
-        k = [len(ground_truth)]
+        k_vals = [len(ground_truth)]
         res  = dec.decifer(data, np.array(ground_truth))
         gt_like = res[0]
         print(f"GT Likelihood: {gt_like}")
         print(f"DCFS: {res[1]}")
+    elif args.clusters is not None:
+        k_vals  = [args.clusters]
     else:
-        k  = [args.clusters]
+        if args.mink > args.maxk:
+            maxk = args.mink
+            mink = args.maxk
+        else:
+            mink = args.mink
+            maxk = args.maxk
 
-    all_results = dec.run(data, k_vals=k, cores=args.cores)
-    dcfs = all_results[1]
+        #do one extra value of k to check to allow maxk to be an elbow point.
+        k_vals = [k for k in range(mink, maxk+2)]
+
+    best = dec.run(data, k_vals=k_vals, cores=args.cores)
+
+
+
+    dcfs = best[1]
 
     if args.dcfs is not None:
 
         with open(args.dcfs, "w+") as file:
-            # file.write(f"#likelihood: {all_results[0]}\n")
-            # file.write(f"#gt likelihood: {gt_like}\n")
             for d in dcfs:
                 file.write(f"{d}\n")
+    
+    if args.post_dcfs is not None:
+        clust_assign, tree_assign = best[3], best[4]
+        snv_assign = defaultdict(list)
+        tassign = {}
+        for ell in clust_assign:
+            for j,q in clust_assign[ell].items():
+                snv_assign[q].append(j)
+            for j, t in tree_assign[ell].items():
+                tassign[j] = t
+        dcf_dict = {i: d for i, d in enumerate(dcfs)}
+        post_dcfs = post_process(dcf_dict, snv_assign, tassign, data)
+        with open(args.post_dcfs, "w+") as file:
+            for q, d in post_dcfs.items():
+                file.write(f"{d}\n")
+    
     
 
     if args.output_path is not None:
         with open(args.output_path, 'wb') as file:
-            pickle.dump(all_results, file)
+            pickle.dump(best, file)
 
 
 
@@ -446,11 +513,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Perform clustering analysis on data from a pickled object")
     parser.add_argument("-d","--pickle_path", type=str, help="Path to the pickled object")
     parser.add_argument("-g", "--ground_truth", type=str, help="Path to the ground truth data")
-    parser.add_argument("-o", "--output_path", type=str, help="Path to the output data data")
-    parser.add_argument("-r", "--num_restarts", type=int, help="Number of restarts")
+    parser.add_argument("-o", "--output_path", type=str, help="Path to the output  data")
+    parser.add_argument("-r", "--num-restarts", type=int, help="Number of restarts")
     parser.add_argument("-c", "--restrict_CNA_trees", action="store_true")
-    parser.add_argument("-k", "--clusters", type=int, default=3, help="number of clusters")
+    parser.add_argument("-k", "--clusters", type=int, help="number of clusters")
+    parser.add_argument("--mink", type=int, default=2, help="minimum number of clusters")
+    parser.add_argument("--maxk", type=int, default= 5, help="maximum number of clusters")
     parser.add_argument("-D", "--dcfs", type=str, help="output file for inferred dcfs")
+    parser.add_argument("-P", "--post-dcfs", type=str, help="output file for post-processed dcfs")
     parser.add_argument("-s", "--seed", type=int, default=21,  help="output file for inferred dcfs")
     parser.add_argument("-j", "--cores", default=1, type=int, help="number of cores to use")
 
@@ -469,11 +539,16 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     "-k", "4",
+    #     # "--mink", "4",
+    #     # "--maxk", "4",
     #     "-j", "5",
-    #     "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
+    #     # "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-s", f"{seed}",
-    #     "-r", "30",
-    #     "-D", f"{gtpth}/out_dcfs.txt",
+    #     "-r", "50",
+    #     "-D", f"{gtpth}/dcfs.txt",
+    #     "-P", f"{gtpth}/post_dcfs.txt",
+        
     #     "-c"
 
     # ])
@@ -485,4 +560,22 @@ if __name__ == "__main__":
 
 
      
+
+# def silhouette_model_selection(shared, best, mink, maxk):
+#     silhouette_scores = {}
+#     for k in range(mink, maxk + 1):
+#         mutations = shared['bmut'][best[k]]
+#         X, labels = [], []
+#         for mut in mutations:
+#             # don't use mutations that couldn't be assigned to any cluster
+#             if mut.assigned_cluster > 0:
+#                 labels.append( mut.assigned_cluster )
+#                 var = mut.a
+#                 tot = mut.d
+#                 vaf = [float(v) / t if t > 0 else 0.5 for v, t in zip(var, tot)]
+#                 estC = [mut.assigned_config.v_to_cf(vaf[sam], sam, truncate = False)/PURITY[sam] for sam in range(len(mut.a))]
+#                 X.append(estC)
+#         silhouette_scores[k] = silhouette_score(np.array(X), np.array(labels))
+#     selected = max(range(mink, maxk+1), key=(lambda k: silhouette_scores[k]))
+#     return selected, silhouette_scores
 
