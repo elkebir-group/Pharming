@@ -1,34 +1,41 @@
 library(tidyverse)
-vtext <- theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-setwd("./dlp")
-df <- read_csv("DeepCopyPrediction.csv")
-
-outdir <- "SA1090"
+# vtext <- theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 theme_set(theme_gray(base_size = 20))
+
+
+deep_copy_in <- snakemake@input[['copy_numbers']]
+var_reads_in <- snakemake@input[['var_reads']]
+
+
+var_reads_out <- snakemake@output[['var_reads']]
+deep_copy_out <- snakemake@output[['copy_numbers']]
+sample_segs_out <- snakemake@output[['sampled_segs']]
+
+figpath <- snakemake@params[['figpath']]
+nsegs <- as.numeric(snakemake@params[['nsegs']])
+selected_sample <- snakemake@wildcards[['sample']]
+seed <- snakemake@params[['seed']]
+
+set.seed(seed)
+
+
+
+df <- read_csv(deep_copy_in)
+
 colnames(df) <- c("cell", "chr", "start", "end", "x", "y")
 df <- df %>% separate(col=cell, into=c("sample", "clone", "region", "cell_id"), sep="-", remove=F)  %>%
     mutate(total = x + y) 
 
 
-mean_cn <- df %>% group_by(sample) %>% summarize(mean_cn = mean(total)) 
-
-selected_sample <- mean_cn %>% top_n(1, - mean_cn) %>% pull(sample)
-
-
-
-
-
-
-seg_mapping <- df.filt %>% select(chr, start, end) %>% distinct() %>% arrange(chr, start, end) %>%
+seg_mapping <- df %>% select(chr, start, end) %>% distinct() %>% arrange(chr, start, end) %>%
   mutate(segment = row_number()-1)
 
 df.filt <- inner_join(df %>% filter(sample %in% selected_sample) , seg_mapping)
 
 
 ncells <- n_distinct((df.filt$cell))
+
 cp <- select(df.filt, cell,chr, segment, x, y) %>% unite(col=cn, x, y, sep ="|", remove=FALSE)
-
-
 
 num_states_df <- cp %>% group_by(segment, cn) %>%
   summarize(num_cells =n(), prop= num_cells/ncells )
@@ -39,7 +46,7 @@ nstates <- num_states_df %>% group_by(segment) %>% summarize(nstates= sum(prop >
 
 #write_csv(segments.df, "segments.bin.mapping.csv")
 
-var.dat <- read.table("variant_data.filt.tsv", header = F, sep="\t",
+var.dat <- read.table(var_reads_in, header = F, sep="\t",
                       col.names=c("chr", "loci", "cell", "base", "var", "total") )
 
 var.dat  <- var.dat %>% separate(col=cell, into=c("sample", "clone", "region", "cell_id"), sep="-", remove=F)
@@ -53,7 +60,7 @@ var <- var.dat.filt %>%
 
 input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
      select(segment, mutation, cell, varReads = var, totReads = total)
-snvs <- input.dat %>% select(segment, mutation) %>% distinct()
+# snvs <- input.dat %>% select(segment, mutation) %>% distinct()
 
 
 snvs <- input.dat %>% group_by(segment, mutation) %>% 
@@ -61,124 +68,41 @@ snvs <- input.dat %>% group_by(segment, mutation) %>%
   filter(var > 0) %>% 
   select(segment, mutation)
 
-
+m <- nrow(snvs)
 snvs.per.seg <- snvs %>% group_by(segment) %>% count()
 
-ggplot(snvs.per.seg, aes(x=n)) + geom_histogram(binwidth = 25, fill="white", color="black") +
-  xlab("# of SNVs per segment") + ylab("number of segments")
 
-seg.dat <- full_join(snvs.per.seg, nstates) %>% rename(m=n)
 
-ggplot(seg.dat %>% pivot_longer(c("m", "nstates")), aes(x=name, y=value)) + facet_wrap(~name, scales="free") +
-geom_boxplot() + xlab(outdir) + ylab("count")
+seg.dat <- full_join(snvs.per.seg, nstates) %>% rename(m=n) %>%
+replace_na(list(m=0))
 
-ggplot(seg.dat, aes(x=factor(nstates), y=m)) +  geom_boxplot(aes(x=factor(nstates))) + geom_point() + xlab("number of cn states")
 
+
+med_snvs <- median(seg.dat$m)
+selected_segs <- filter(seg.dat, m >= med_snvs, nstates < 5) %>%
+ ungroup() %>%
+ slice_sample(n=nsegs) %>% arrange(segment)
+
+p1 <- ggplot(selected_segs %>% pivot_longer(c("m", "nstates")), aes(x=name, y=value)) + facet_wrap(~name, scales="free") +
+geom_boxplot() + xlab(selected_sample) + ylab("count")
+
+ggsave(file.path(figpath, "selected_seg_dist.pdf"), plot=p1)
+
+p2 <- ggplot(selected_segs, aes(x=factor(nstates), y=m)) +  geom_boxplot(aes(x=factor(nstates))) + geom_point() + xlab("number of cn states")
+ggsave(file.path(figpath, "snvs_by_num_cn_states.pdf"), plot=p2)
   
 
-ggplot(seg.cp, aes(x=factor(segment), y=cell, fill=cn)) + geom_tile() +  
-  facet_wrap(~chr, scales="free_x", labeller = "label_both") + guides(fill="none")  + 
-  xlab("segment") +  theme(axis.text.y = element_blank(),
-                           axis.ticks.y = element_blank())
-
-#now look at how many cn states per segment with and without imputation
 
 
+input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
+     select(segment, mutation, cell, varReads = var, totReads = total) %>% 
+     inner_join(snvs) %>% filter(segment %in% selected_segs$segment)
+write_csv(input.dat, var_reads_out)
 
-input.dat <- inner_join(input.dat, snvs)
-write_csv(input.dat, file.path(outdir,"input/read_counts.csv"))
+write_csv(selected_segs, sample_segs_out)
 
-copy_prof <- select(cp, segment, cell, copiesX = x, copiesY=y)
-write_csv(copy_prof, file.path(outdir,"input/copy_number_profiles.csv"))
-
-
-
-
-
-
+copy_prof <- select(cp, segment, cell, copiesX = x, copiesY=y) %>% 
+      filter(segment %in% selected_segs$segment)
+write_csv(copy_prof, deep_copy_out)
 
 
-# inner_loop <- function(start){
-#   res <- data.frame()
-#   for(j in (start+1):nbins-1){
-#     arc1 <- start:j
-#     #bissect the data from 0 to j and then j+1 to nbins
-#     bins1 <- compute_dist(start:j) %>% rename(freq1 = freq)
-#     bins2  <- compute_dist((j+1): nbins) %>% rename(freq2 = freq)
-#     freq.df <- inner_join(bins1, bins2, by="cn")
-#     
-#     
-#     div <- JSD(freq.df$freq1, freq.df$freq2)
-#     res <- res %>% rbind(data.frame(start=i, end=j, jsd=div))
-#     
-#   }
-#   
-# }
-
-
-# i <- 0
-
-
-# ggplot(res %>%filter(end-start > 10, end >40, end < 60), aes(x=end, y=jsd)) + geom_point() 
-# filter(res, end==46)
-# bins <- unique(cp$bin)
-
-# dist.df <- bind_rows(lapply(bins, compute_dist)) 
-# count.dat <- dist.df %>% select(-freq) %>% 
-#   pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
-
-# proc.dat <- dist.df %>% select(-freq) %>% inner_join(bin_mapping %>% select(bin, chr))
-
-# chr1.dat <- proc.dat %>%   filter(chr==1) %>% select(-chr) 
-# write_csv(select(proc.dat, chr, bin, cn, counts), "counts.csv")
-
-# chr1.dat.wide <- chr1.dat %>%   
-#   pivot_wider(names_from = bin, names_prefix = "bin", values_from = counts)
-# write_csv(chr1.dat.wide, "chr1.csv")
-# write_csv(count.dat, "counts_by_states.csv")
-# # dist.wide <- dist.df %>% pivot_wider(id_cols=cn, names_from = bin, names_prefix = "bin", values_from =freq )
-
-# # ent_vals <- numeric(ncol(dist.wide)-1)
-# # for(i in 2:(ncol(dist.wide)-1)){
-# #   p <- dist.wide[,i]
-# #   q <- dist.wide[,i+1]
-# #   ent_vals[i] <- kl_div(p,q)
-# # }
-# # summary(ent.df$kldiv)
-# ggplot(cp %>% filter(chr==1)  %>% inner_join(bin_mapping) ,
-#        aes(x=bin, y=cell, fill=cn)) + geom_tile()  +
-#   geom_vline(aes(xintercept=7)) +  geom_vline(aes(xintercept=14))  +
-#   geom_vline(aes(xintercept=23))# +    geom_vline(aes(xintercept=22))
-#[(0, 5), (6, 6), (7, 15), (16, 22), (23, 23), (24, 24), (25, 28)]
-
-
-# kl_div <- function(p, q){
-#   return(sum(p*log2(p/q)))
-# }
-# 
-# JSD <- function(p,q){
-#   n <- 0.5 * (p + q)
-#   JS <- 0.5 * (sum(p * log2(p / n)) + sum(q * log2(q / n)))
-#   return(JS)
-# }
-# ggplot(cp %>% filter(bin >=100, bin <=125), 
-#        aes(x=factor(bin), y=cell, fill=cn)) + geom_tile()
-
-
-# compute_dist <- function(bin_ids, pseudo=1e-7){
-#   bin_data <- filter(cp, bin %in% bin_ids) %>% select(-bin)
-#   states <- unique(cp$cn)
-#   norm <- n_distinct(bin_data$cell) * length(bin_ids)
-#   dat <- left_join(data.frame(cn= states), bin_data,  by="cn") %>%
-#     mutate(count = ifelse(is.na(cell),0, 1 ))
-
-#   dist <- dat %>%
-#       group_by(cn) %>% 
-#     summarize(counts = sum(count), freq = sum(count)/norm)
-  
-#   dist$bin = bin_ids
-  
-#   return(dist)
-  
-  
-# }

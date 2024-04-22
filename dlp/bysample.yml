@@ -1,5 +1,33 @@
 sample:
+  - SA921
+  - SA922
   - SA1090
 
 mink: 2
-maxk: 8
+maxk: 6
+
+nsegs: 50
+
+seed: 1026
+
+thresh: 0.05
+
+
+#Pharming parameters 
+ninit_segs:
+  - 3
+
+ninit_tm:
+  - 4
+
+order:
+  - "weighted-random"
+
+topn:
+  - 5
+
+lamb:
+  - 1000
+
+max_loops: 5
+

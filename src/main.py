@@ -151,7 +151,7 @@ if __name__ == "__main__":
                         help="number of mutation cluster trees to consider after pruning with initial segs")
     parser.add_argument("--ntree-iter", type=int, default=3,
                         help="number of iterations to check for new mutation cluster tree to use for inference")
-    parser.add_argument("--thresh-prop", type=float,
+    parser.add_argument("--thresh-prop", type=float, default=0.0,
                         help="proportion threshold for determining CN states")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")

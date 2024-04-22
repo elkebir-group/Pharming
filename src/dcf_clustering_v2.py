@@ -198,7 +198,7 @@ class DCF_Clustering:
         for q in range(len(dcfs)): #looping over clusters
             # new_dcfs[q] = minimize_scalar(scalar_obj_val, args=(clust_group_map, q, self.data), 
             #                               method='bounded', bounds=[0,1]).x
-            result = minimize(objective_function, x0=[dcfs[q]], args=(clust_group_map, q, self.data), bounds=[(0,1)])
+            result = minimize(objective_function, x0=[dcfs[q]], args=(clust_group_map, q, self.data), bounds=[(0.025,1)])
             if result ==0:
                 new_dcfs[q] = self.rng.uniform()
             else:
@@ -330,9 +330,10 @@ class DCF_Clustering:
             # dcfs = self.optimize_cluster_centers(dcfs, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, self.data.var, self.data.total)
             # test_like = self.compute_likelihood(dcfs, CLUST_GROUP_MAPPING)
             dcfs = self.optimize_cluster_centers(dcfs, CLUST_GROUP_MAPPING)
-            # dcfs[dcfs > 0.99] =1.0
-            # dcfs[dcfs < 1e-3] =0
-
+      
+            dcfs[dcfs > 0.999] =1.0
+            dcfs[dcfs < 1e-3] =0
+     
             '''
             TO DO: The likelihood computation needs to be updated as well 
             '''
@@ -365,14 +366,12 @@ class DCF_Clustering:
     def elbow_criteria_model_selection(objs, mink, maxk, ubleft=0.06):
         if mink == maxk:
             return mink, objs, {}
-        best = {}
+   
         for k in range(mink + 1, maxk + 1):
             if objs[k - 1] < objs[k]:
-                best[k] = k-1
-                
+    
                 objs[k] = objs[k - 1]
-            else:
-                best[k] =k
+            
 
         chk = (lambda v: v if v != 0.0 else 0.01)
         left = (lambda k: min((objs[k - 1] - objs[k]) / abs(chk(objs[k - 1])), ubleft) if k > mink else ubleft)
@@ -384,7 +383,7 @@ class DCF_Clustering:
     
         selected = max(range(mink, maxk), key=(lambda k: elbow[k]))
 
-        return best[selected], objs, elbow
+        return selected, objs, elbow
                             
     @timeit_decorator
     def run(self, data, k_vals, cores=1):
@@ -423,9 +422,10 @@ class DCF_Clustering:
             likelihoods[k] = best_likeli
             results_by_k[k] = best_result
         
-        
+        print("Starting model selection using elbow criteria..")
         selected, updated_obj, elbow =   self.elbow_criteria_model_selection(likelihoods, min(k_vals), max(k_vals))
-
+        print(updated_obj)
+        print(elbow)
 
         #add model selection 
                
@@ -440,7 +440,7 @@ def main(args):
     dec = DCF_Clustering(nrestarts=args.num_restarts, seed=args.seed, 
                          verbose=True, cna_restriction=args.restrict_CNA_trees)
 
-    gt_like = 0
+ 
 
     if args.ground_truth is not None:
 
@@ -468,6 +468,13 @@ def main(args):
 
 
     dcfs = best[1]
+    print("Best DCFs:")
+    print(dcfs)
+
+
+    if args.output_path is not None:
+        with open(args.output_path, 'wb') as file:
+            pickle.dump(best, file)
 
     if args.dcfs is not None:
 
@@ -491,10 +498,6 @@ def main(args):
                 file.write(f"{d}\n")
     
     
-
-    if args.output_path is not None:
-        with open(args.output_path, 'wb') as file:
-            pickle.dump(best, file)
 
 
 
@@ -528,8 +531,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # gtpth = "test"
-    # seed = 12
-    # cov = 0.25
+    # seed = 10
+    # cov = 0.01
     # instance = f"s{seed}_m5000_k25_l5_d2"
     # folder = f"n1000_c{cov}_e0" 
     # pth = f"simulation_study/sims"
@@ -539,15 +542,16 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-k", "4",
-    #     # "--mink", "4",
-    #     # "--maxk", "4",
+    #     # "-k", "4",
+    #     "--mink", "4",
+    #     "--maxk", "6",
     #     "-j", "5",
     #     # "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-s", f"{seed}",
-    #     "-r", "50",
+    #     "-r", "25",
     #     "-D", f"{gtpth}/dcfs.txt",
     #     "-P", f"{gtpth}/post_dcfs.txt",
+    #     "-o",  f"{gtpth}/results.pkl",
         
     #     "-c"
 

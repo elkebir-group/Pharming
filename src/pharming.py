@@ -409,6 +409,8 @@ class Pharming:
         print("Plowing the field.... ")
         if self.delta is None:
             self.delta = self.infer_dcfs()
+        # else:
+        #     self.delta  = self.check_for_duplicates()
 
         if Tm is not None:
             scriptTm = [Tm]

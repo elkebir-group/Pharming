@@ -1776,6 +1776,11 @@ class ClonalTree:
         #  gt_mut = self.get_mut_clusters()
          gt_mut =   pd.Series(self.get_psi())
          pred_mut = pd.Series(obj.get_psi())
+         if gt_mut.shape != pred_mut.shape:
+             inf_missing_snvs= set(gt_mut.index).difference(set(pred_mut.index))
+             gt_missing_snvs= set(pred_mut.index).difference(set(gt_mut.index))
+             print(f"Inf missing snvs: {inf_missing_snvs}")
+             print(f"GT missing snvs: {gt_missing_snvs}")
          df = pd.concat([gt_mut, pred_mut], axis=1, keys=['gt', 'pred'])
         #  pred_mut = obj.get_mut_clusters()
       
@@ -1920,11 +1925,11 @@ class ClonalTree:
              
              scores = {
                  'feature' : 'SNV',
-                 'ari' : self.compute_mut_ari(obj),
+                #  'ari' : self.compute_mut_ari(obj),
                  'anc_pair_recall' : self.ancestor_pair_recall(obj),
                  'incomp_pair_recall': self.incomp_pair_recall(obj),
                  'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="snv"),
-                 'n_assigned': len(self.get_all_muts())
+                 'n_assigned': len(obj.get_all_muts())
          
              }
              return scores 

@@ -7,11 +7,12 @@ metric_names <-  c("Ancestral Pair\nRecall", "Incomparable Pair\nRecall",
 
 
 
+
 read_csv_wrapper <- function(folder, prefix, suffix){
   fname <- file.path(bpath, prefix, folder, suffix)
   if(file.exists(fname)){
     df<- read.csv(fname) %>%
-    mutate(folder = folder)
+    mutate(folder = folder) 
   }else{
     print(glue("{fname} does not exist!"))
     df <- data.frame()
@@ -30,7 +31,7 @@ runs <- expand.grid(cells=config$cells,
                     mclust = config$mclust,
                     err = config$cerror, 
                     s = seeds, 
-                    nsegs=config$nsegs,
+                    segs=config$nsegs,
                     dirch = config$dirch) %>%
                     mutate_all(factor)
 
@@ -43,34 +44,57 @@ pharm_runs <-  expand.grid(
     lamb = pharming_config$lamb) %>% 
     mutate_all(factor)  %>%
 merge(runs) %>%
-  mutate(folder = glue("{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
+  mutate(folder = glue("{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{segs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
 
 
+phert_runs <- runs %>% 
+    mutate(folder = glue("s{s}_m{snvs}_k{segs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
 
-pharm_res <- bind_rows(lapply(pharm_runs$folder,  read_csv_wrapper, "pharming/sims", "scores.csv")) %>%
+clust_methods <- c("decifer", "dcf_clust", "sims")
+pharm_res <- data.frame()
+for(clust in clust_methods){
+  temp <- bind_rows(lapply(pharm_runs$folder,  read_csv_wrapper, glue("pharming/{clust}"), "scores.csv")) %>%
   group_by(folder) %>%
-  inner_join(pharm_runs)
+  mutate(clust_method = clust )
+  pharm_res <- bind_rows(pharm_res, temp)
+}
 
-top_pharm  <- pharm_res %>% group_by(folder) %>% top_n(1, -inf_cost) 
+phert <- bind_rows(lapply(phert_runs$folder,  read_csv_wrapper, "phertilizer/sims", "scores.csv")) %>%
+  group_by(folder) %>%
+  mutate(clust_method = "Phertilizer", segment=as.character(segment)) %>% inner_join(phert_runs)
 
-top_pharm %>% group_by(folder) %>% count()
-top_pharm.long <- top_pharm %>% 
+
+top_pharm  <- pharm_res %>% group_by(folder, clust_method) %>% top_n(1, -inf_cost) %>% 
+  inner_join(pharm_runs) 
+
+top_pharm %>% group_by(folder, clust_method) %>% count()
+  
+ res <- bind_rows(top_pharm ,phert)%>%
+   mutate(clust_method = factor(clust_method, levels= c(clust_methods, "Phertilizer"), 
+   labels=c("Decifer + Pharming", "DCF Clustering +Pharming", "Ground Truth DCFs + Pharming", "Phertilizer")))
+
+
+
+res.long <- res %>% 
    pivot_longer(c(contains("recall"), "cell_ari", "perc_cna_trees_correct"))  
 
-metric_mapping <- data.frame(name = unique(top_pharm.long$name), 
+metric_mapping <- data.frame(name = unique(res.long$name), 
                 name_label = metric_names) %>%
                 mutate(name_label = factor(name_label, ordered=TRUE,
                  levels=metric_names))
 
 
-for(k in c(5,7)){
-  p <- top_pharm.long %>% filter(mclust ==k) %>%
+ foo <- res.long %>% filter(mclust ==k, cells==1000)
+
+for(k in c(5)){
+  p <- res.long %>% filter(mclust ==k, cells==1000) %>%
   inner_join(metric_mapping) %>%
-    ggplot(aes(x=snvs, y=value, fill=cells)) +
+    ggplot(aes(x=snvs, y=value, fill=clust_method)) +
   geom_boxplot() +
     facet_grid(cov~name_label) +
-    xlab("# of SNVs") + ylab("value") 
-    ggsave(file.path( figpath, sprintf("scores_mclust%d.pdf", k)), plot=p)
+    xlab("# of SNVs") + ylab("value") +
+    scale_fill_discrete(name="") + theme(legend.position ="top")
+    ggsave(file.path( figpath, sprintf("scores_mclust%d.pdf", k)), plot=p, width=12, height=10)
 }
 
 

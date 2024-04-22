@@ -6,7 +6,8 @@ sys.path.append("../src")
 
 rule all:
     input:
-        expand("dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
+        expand("{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/scores.csv",
+               folder = ["dcf_clustering"],
                s=seeds,
                cells=config["cells"],
                snvs=config["snvs"],
@@ -14,7 +15,8 @@ rule all:
                cov=config["cov"],
                mclust=config['mclust'],
                err=config["cerror"],
-               dirch = config["dirch"]
+               dirch = config["dirch"],
+               fname = ["dcfs", "post_dcfs"]
         ),
         # expand("dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output_unconstrained.pkl",
         #        s=seeds,
@@ -45,15 +47,37 @@ rule run_dcf_clustering_constrained:
          "-r {params.restarts} -c -j {threads} > {log.std} 2> {log.err}"    
 
 
+rule dcf_clustering_model_selection:
+    input: 
+        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+    output: 
+        output_data= "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
+        dcfs= "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        post_dcfs = "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
+    params: 
+        restarts=25,
+        mink = lambda wildcards: int(wildcards.mclust) - 1,
+        maxk = lambda wildcards: int(wildcards.mclust)  + 1,
+    threads: 5
+    log: 
+        std= "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
+        err= "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
+    benchmark: "dcf_clustering/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+    shell: 
+        "python ../src/dcf_clustering_v2.py -d {input.data}  -o {output.output_data} -D {output.dcfs} "
+         "-P {output.post_dcfs} --mink {params.mink} --maxk {params.maxk} "
+         "-r {params.restarts} -c -j {threads} > {log.std} 2> {log.err}"    
+
 rule clustering_eval:
     input:         
         gt_dcfs = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        inf_dcfs="dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        result = "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
+        inf_dcfs="{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
+        result = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
         gt_tree= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl"  
     output: 
-        scores = "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
-        dcfs = "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf_dcfs.txt"
+        scores = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/scores.csv",
+        dcfs = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/inf_dcfs.txt",
+        comp = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/comp.csv"
     run:
         import numpy as np
         from scipy.optimize import linear_sum_assignment
@@ -91,13 +115,22 @@ rule clustering_eval:
             differences = np.abs(np.subtract.outer(ground_truth, dcfs))
             row_ind, col_ind = linear_sum_assignment(differences)
             selected_differences = differences[row_ind, col_ind]
+            gt_order = ground_truth[row_ind]
+            dcfs_order = dcfs[col_ind]
+
         
          
-            return selected_differences
+            return selected_differences, gt_order, dcfs_order
         
         gt = read_dcfs(input['gt_dcfs'])
         inf = read_dcfs(input['inf_dcfs'])
-        selected_differences = compute_mean_difference(gt, inf)
+        selected_differences, gt_ord, dcfs_ord = compute_mean_difference(gt, inf)
+
+        dcf_df = pd.DataFrame({
+        'gt': gt_ord,
+        'inf': dcfs_ord
+        })
+        dcf_df.to_csv(output['comp'], index=False)
         max_diff = np.max(selected_differences)
 
         mean_diff = np.mean(selected_differences)

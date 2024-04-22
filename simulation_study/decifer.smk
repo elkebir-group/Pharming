@@ -7,7 +7,7 @@ sys.path.append("../src")
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        expand("decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt",
             s =seeds,
             cells = config["cells"],
             snvs = config["snvs"],
@@ -58,3 +58,20 @@ rule get_dcfs:
             for value in dcfs:
                 file.write(str(value) + '\n')
     
+rule post_process:
+        input: 
+            dec = "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/decifer_output.tsv",
+            dat = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        output: "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt",
+        params:
+            vaf = 0.1,
+            snv = 0.05,
+            cell_thresh = 0.05
+        log: 
+            std = "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post.log",
+            err= "decifer/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post.err.log",
+        shell:
+            "python ../src/decifer_post_process.py -d {input.dat} -f {input.dec} "
+            "--vaf-thresh {params.vaf} --snv-thresh {params.snv} --cell-thresh {params.cell_thresh} "
+            "-o {output}  > {log.std} 2> {log.err} "
+        

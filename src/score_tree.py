@@ -23,6 +23,7 @@ def score_tree(gt, gt_phi, inf,inf_phi, dat, lamb=1e3, segments=None, filter=Fal
         scores = gt.score_snvs(inf)
 
         scores["segment"] = ":".join([str(ell) for ell in segments])
+        scores["nsegs"] = len(segments)
         scores["cell_ari"] =gt_phi.compute_ari(inf_phi)
         scores["gt_cost"] = gt.cost 
         scores["gt_snv_cost"] =gt.snv_cost
@@ -30,7 +31,7 @@ def score_tree(gt, gt_phi, inf,inf_phi, dat, lamb=1e3, segments=None, filter=Fal
         scores["inf_cost"] = inf.cost 
         scores["inf_snv_cost"] =inf.snv_cost
         scores["inf_cna_cost"] = inf.cna_cost
-        scores['cna_mad'] = gt.cna_genotype_similarity(gt_phi, inf, inf_phi)
+        # scores['cna_mad'] = gt.cna_genotype_similarity(gt_phi, inf, inf_phi)
 
         cna_trees_correct = [compare_CNA_trees(gt,inf, ell ) for ell in segments]
         scores["perc_cna_trees_correct"] = sum(cna_trees_correct)/len(segments)
@@ -120,26 +121,29 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    # instance = "s11_m5000_k25_l5"
+    # instance = "s13_m5000_k25_l5_d2"
     # # instance = "s12_m5000_k25_l7"
     # folder = "n1000_c0.05_e0" 
-    # pth = f"simulation_study/input"
+    # gtpth = f"simulation_study/sims"
+    # infpth = f"simulation_study/pharming/decifer"
 
     # args = parser.parse_args([
 
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-t", f"{pth}/{instance}/{folder}/gt.pkl",
-    #     "-c", f"{pth}/{instance}/{folder}/phi.pkl",
+    #     "-d", f"{gtpth}/{instance}/{folder}/data.pkl",
+    #     "-t", f"{gtpth}/{instance}/{folder}/gt.pkl",
+    #     "-c", f"{gtpth}/{instance}/{folder}/phi.pkl",
     #     # "-s", "14",
     #     # "--segment", "0",
-    #     "-o", "test/scores4.csv",
-    #     "-S", f"test/solutions4.pkl",
+    #     "-o", "test/scores.csv",
+    #     "-S", f"{infpth}/weighted-random/isegs3_tm4_top5_lamb1000/{instance}/{folder}/solutions.pkl"
 
     # ])
 
 
     lamb = args.lamb
     dat = load_pickled_object(args.data)
+    # for j in missing_snvs:
+    #     print(dat.snv_to_seg[j])
     gt = load_pickled_object(args.tree)
     phi = load(args.cell_assign)
     phi.relabel(dat.cell_lookup)
@@ -148,9 +152,11 @@ if __name__ == "__main__":
     gt.update_mappings()
     
     sol_list =   load_pickled_object(args.solutions)
-    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi, dat, lamb) for sol in sol_list]
+    score_results= [score_tree(deepcopy(gt), phi, sol.ct, sol.phi, dat, lamb, filter=False) for sol in sol_list]
       
     pd.DataFrame(score_results).to_csv(args.out, index=False)
+
+    print("done")
   
     # sol.png("test/ct0.png")
     # gt_cost =gt.compute_likelihood(dat, phi, lamb=1e3)
@@ -272,14 +278,14 @@ if __name__ == "__main__":
     #         scores.append(eval_segtree(deepcopy(gt), phi, deepcopy(best_sol), ell, dat, lamb))
     # pd.DataFrame(seg_scores).to_csv("test/seg_scores.csv", index=False)
 
-    res = []
-    for ell in sol_list[0].segments:
-          res.append([ell, dat.num_snvs(ell), dat.num_cn_states(ell)])
-    pd.DataFrame(res, columns=["segment", "nsnvs", "ncn_states"]).to_csv("test/segments.csv", index=False)
+    # res = []
+    # for ell in sol_list[0].segments:
+    #       res.append([ell, dat.num_snvs(ell), dat.num_cn_states(ell)])
+    # pd.DataFrame(res, columns=["segment", "nsnvs", "ncn_states"]).to_csv("test/segments.csv", index=False)
 
 
 
-    print("done")
+
     # sol_list[0].png("test/opt_tree.png")
 
 

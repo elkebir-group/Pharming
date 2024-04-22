@@ -102,7 +102,7 @@ class GenotypeTree:
             posterior = max(binom.logpmf(a, d, v), EPSILON)
         return posterior
 
-    def vectorized_posterior(self, dcf, a_vec, d_vec, cn_prop):
+    def vectorized_posterior(self, dcf, a_vec, d_vec, cn_prop, use_binomial=True):
         '''
         dcf: int representing the cluster dcf value
         a_vec: np:array of length snvs containing the total variant reads for each SNV
@@ -116,10 +116,11 @@ class GenotypeTree:
 
         # if np.isnan(v):
         #     print("Warning, DCF not valid for cn proportions and genotype tree!")
-
-        # logpost = binom.logpmf(a_vec, d_vec, v)
-        v_vec = np.full(a_vec.shape, fill_value=v)
-        logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
+        if use_binomial:
+            logpost = binom.logpmf(a_vec, d_vec, v)
+        else:
+            v_vec = np.full(a_vec.shape, fill_value=v)
+            logpost = beta.logpdf(v_vec, a_vec+1, d_vec-a_vec +1)
         # if v (converted vaf) is outside [0,1] will return np.NINF
         # if np.any(logpost == 0):
         #     print("at least one log probability 0")
@@ -181,6 +182,14 @@ class GenotypeTree:
 
 
 
+    def is_consistent(self, obj):
+        if isinstance(obj, GenotypeTree):
+            if (self.split_geno[0],self.split_geno[1])  != (obj.split_geno[0],obj.split_geno[1]): 
+                return False 
+      
+            desc1 = set([(g[0], g[1]) for g in self.desc_genotypes])
+            desc2 = set([(g[0], g[1]) for g in obj.desc_genotypes])
+            return desc1 == desc2
 
 
 
