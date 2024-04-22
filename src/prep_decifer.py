@@ -3,7 +3,7 @@ import argparse
 
 
 
-def write_input(dat, outfile):
+def write_input(dat, outfile, thresh=0):
     # outfile = "simulation_study/decifer_test/test.tsv"
     s_index = "0"
     s_label = "0"
@@ -13,7 +13,7 @@ def write_input(dat, outfile):
         file.write('#sample_index\tsample_label\tcharacter_index\tcharacter_label\tref\tvar\n')
 
         for k, snvs in dat.seg_to_snvs.items():
-            cn_props = dat.cn_proportions(k)
+            cn_props = dat.thresholded_cn_prop(k,thresh=thresh)
             prop_str = "\t".join([f"{s[0]}\t{s[1]}\t{val}" for s, val in cn_props.items()])
             # print(prop_str)
             for j in snvs:
@@ -35,6 +35,8 @@ if __name__ == "__main__":
                         help="input file of preprocessed data pickle")
     parser.add_argument("-o" ,"--out", required=True, type=str,
                         help="where the output file should be written")
+    parser.add_argument("--cn-thresh", type=float, default=0,
+                        help="threshold for copy number proportions")
     
     args = parser.parse_args()
 
@@ -52,4 +54,4 @@ if __name__ == "__main__":
     # ])
 
     dat = load_pickled_object(args.data)
-    write_input(dat, args.out)
+    write_input(dat, args.out, args.cn_thresh)

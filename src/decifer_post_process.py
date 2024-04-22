@@ -50,9 +50,13 @@ def post_process(old_dcfs, clust_assign, snv_trees, dat, snv_thresh=0.05, cell_t
  
         snvs = snvs[snv_marg > 0]
         X = X[cell_marg >0, :]
+        X = X[:, snv_marg > 0]
         cells = dat.cells[cell_marg > 0]
-
-        clustering = SpectralBiclustering(n_clusters=(2,2), random_state=5, n_init=100).fit(X)
+        try:
+            clustering = SpectralBiclustering(n_clusters=(2,2), random_state=5, n_init=100).fit(X)
+        except:
+            print(f"Biclustering could not be found for cluster {q}")
+            continue
         snv_clust = get_clusters(clustering.column_labels_, snvs)
         valid_size = True
         for u,csnvs in  snv_clust.items():

@@ -3,9 +3,9 @@ library(yaml)
 library(glue)
 
 bpath <- "simulation_study"
-figs <- file.path(bpath, "scratch_figs")
+figs <- file.path(bpath, "figures")
 config = yaml.load_file(file.path(bpath, "simulate.yml"))
-theme_set(theme_gray(base_size = 24))
+theme_set(theme_gray(base_size = 20))
 seeds <- 10:14
 runs <- expand.grid(cells=config$cells, 
                     snvs=config$snvs,
@@ -52,9 +52,32 @@ read_scores <- function(folder, prefix, suffix){
 
 dcf_clust  <-  bind_rows(lapply(runs$folder, read_scores, "dcf_clustering_v2", "scores.csv")) %>% inner_join(runs)
 
-ggplot(dcf_clust, aes(x=factor(cov), y=mad)) + geom_boxplot() + xlab("coverage")
-ggplot(dcf_clust, aes(x=factor(cov), y=max_diff)) + geom_boxplot() + xlab("coverage")
-ggplot(dcf_clust, aes(x=factor(cov), y=perc_cna_tree_correct)) + geom_boxplot() + xlab("coverage")
+clust_comp <-  bind_rows(lapply(runs$folder, read_scores, "dcf_clustering_v2", "comp.csv")) %>% inner_join(runs)
+
+numk <- clust_comp %>% group_by(folder) %>% count()
+
+clust_comp <- clust_comp %>% inner_join(numk)
+
+clust_plot <- ggplot(clust_comp, aes(x=gt, y=inf, color=factor(n))) + 
+geom_point(size=3) + facet_wrap(~cov, ncol=1) +
+geom_abline(linetype="dashed") +
+scale_color_discrete(name="k") +xlab("ground truth DCFs") +
+ylab("inferred DCFs")
+clust_plot
+ggsave(file.path(figs, "dcf_clust_scatterplot.pdf"), plot=clust_plot)
+dcf_clust.long <- dcf_clust %>% pivot_longer(c("mad", contains("diff"), "perc_cna_tree_correct"))
+
+p <- dcf_clust.long %>% ggplot(aes(x=factor(cov), y=value)) + 
+geom_boxplot()+ facet_wrap(~name, scale="free_y") +xlab("coverage")
+
+ggsave(file.path(figs, "dcf_clustering.pdf"), plot=p)
+
+
+# ggplot(dcf_clust, aes(x=factor(cov), y=mad)) + geom_boxplot() + xlab("coverage")
+# ggplot(dcf_clust, aes(x=factor(cov), y=max_diff)) + geom_boxplot() + xlab("coverage")
+# ggplot(dcf_clust, aes(x=factor(cov), y=perc_cna_tree_correct)) + geom_boxplot() + xlab("coverage")
+
+
 res <- bind_rows(lapply(runs$folder,  get_decifer, "decifer", "decifer_output.tsv")) 
 
 
@@ -71,16 +94,16 @@ num.clust <- inner_join(num.inf, num.gt)
 
 
 nclust.plot  <- num.clust %>% group_by(ngt, ninf) %>% count() %>%
-ggplot(aes(x=factor(ngt), y=factor(ninf), fill=n)) + geom_tile() +
+ ggplot(aes(x=factor(ngt), y=factor(ninf), fill=n)) + geom_tile() +
   xlab("number of gt cluster") + ylab("number of decifer inferred clusters") +
   geom_text(aes(label=n), size=15, color="white")
-
+nclust.plot
 sp <- function(fname, p, h=6, w=8){
   ggsave(file.path(figs, fname), plot=p, heigh=h, width=w)
 }
 
 sp("numclust.pdf", nclust.plot)
-test <- filter(res, folder=="s13_m5000_k25_l5_d2/n1000_c0.25_e0")
+
 
 correct_num <- filter(num.clust, ngt==ninf) %>% pull(folder)
 
