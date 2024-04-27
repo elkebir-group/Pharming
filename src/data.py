@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import pickle
-import argparse
 from collections import defaultdict, Counter
 from scipy.stats import binom
 import utils 

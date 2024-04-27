@@ -9,6 +9,7 @@
 #include <cassert>
 #include <iterator>
 #include <map>
+//#include <unordered_set>
 
 /*
  * Output:
@@ -20,6 +21,23 @@
  * - n_inf_mut_clusters
  */
 
+//// Define a custom hash function for pairs of uint64_t integers
+//struct PairHash {
+//    size_t operator()(const std::pair<uint64_t, uint64_t>& pair) const {
+//        // Combine the hash values of the two elements
+//        return std::hash<uint64_t>()(pair.first) ^ (std::hash<uint64_t>()(pair.second) << 1);
+//    }
+//};
+//
+//// Define a custom equality predicate for pairs of uint64_t integers
+//struct PairEqual {
+//    bool operator()(const std::pair<uint64_t, uint64_t>& left, const std::pair<uint64_t, uint64_t>& right) const {
+//        return left.first == right.first && left.second == right.second;
+//    }
+//};
+
+// Define ClusteringPairs as an unordered_set of pairs of uint64_t integers
+//using ClusteringPairs = std::unordered_set<std::pair<uint64_t, uint64_t>, PairHash, PairEqual>;
 typedef std::set <uint64_t> IntSet;
 typedef std::vector <IntSet> IntSetVector;
 
@@ -267,6 +285,7 @@ std::map<uint64_t, IntPair> makeCellMap(const IntSetVector gt,const IntSetVector
 }
 void computeGenotypeSimilarity(const std::pair<Genotypes, CNAGeno > gt_genos, const std::pair<Genotypes, CNAGeno> inf_genos,
                                const std::map<uint64_t, IntPair> cellMap,
+                               const std::set<uint64_t> snvs,
                                uint64_t m,
                                uint64_t &pres,  uint64_t &allspec, uint64_t &sim,uint64_t &cna )
 {
@@ -283,23 +302,28 @@ void computeGenotypeSimilarity(const std::pair<Genotypes, CNAGeno > gt_genos, co
         IntPair nodes = cellMap.at(i);
 
         for(uint64_t j = 0; j < m; ++j){
-            geno g1 = gt.at(nodes.first).at(j);
-            geno g2 = inf.at(nodes.second).at(j);
+            if(snvs.count(j) > 0){
+                geno g1 = gt.at(nodes.first)[j];
+                geno g2 = inf.at(nodes.second)[j];
 
-            // Compare mutation copies
-            pres += (g1.mut_copies() > 0) == (g2.mut_copies() > 0);
+                // Compare mutation copies
+                pres += (g1.mut_copies() > 0) == (g2.mut_copies() > 0);
 
-            // Compare xbar and ybar values
-            allspec += (g1.xbar == g2.xbar) && (g1.ybar == g2.ybar);
+                // Compare xbar and ybar values
+                allspec += (g1.xbar == g2.xbar) && (g1.ybar == g2.ybar);
 
-            // Compare mutation copies
-            sim += (g1.mut_copies() == g2.mut_copies());
+                // Compare mutation copies
+                sim += (g1.mut_copies() == g2.mut_copies());
+            }
         }
         for (const auto& pair : cngt.at(nodes.first)) {
             int seg = pair.first;
             CNA c1 = pair.second;
-            CNA c2 = cninf.at(nodes.second).at(seg);
-            cna += (c1.x == c2.x) && (c1.x == c2.x);
+            if(cninf.at(nodes.second).count(seg) > 0){
+                CNA c2 = cninf.at(nodes.second).at(seg);
+                cna += (c1.x == c2.x) && (c1.y == c2.y);
+            }
+
         }
     }
 }
@@ -394,6 +418,7 @@ void performComparison(const uint64_t n,
                        uint64_t &TP, uint64_t &TN, uint64_t &FN, uint64_t &FP) {
     std::set <std::pair<uint64_t, uint64_t>> S;
 
+
     std::set_difference(GT.begin(), GT.end(),
                         inferred.begin(), inferred.end(),
                         std::inserter(S, S.begin()));
@@ -442,21 +467,19 @@ ClusteringPairs expandClustering(const ClusteringPairs& unexpPairs, const IntSet
     for (const auto& unexpPair : unexpPairs) {
         uint64_t sourceIdx = unexpPair.first;
         uint64_t targetIdx = unexpPair.second;
-        // std::cout <<"Source size:" << clustering[sourceIdx].size() << std::endl;
-        // if(clustering[targetIdx].size() > 5000){
-        //     std::cout << sourceIdx << ":" << targetIdx  << ":" << clustering[targetIdx].size() << std::endl;
-        // }
+//         std::cout <<"Source size:" << clustering[sourceIdx].size() << std::endl;
+         if(clustering.size() <= sourceIdx || clustering.size() <= targetIdx ) {
+             continue;
+         }
  
-        if(clustering[sourceIdx].size() > 0 & clustering[targetIdx].size() > 0){
+        if(!clustering[sourceIdx].empty() && !clustering[targetIdx].empty()){
                 for (uint64_t item1 : clustering[sourceIdx]) {
                         for (uint64_t item2 : clustering[targetIdx]) {
+//
                                 if(ancestral or item1 < item2){
                                     res.insert({item1, item2});
                                 }else{
                                     res.insert({item2, item1});
-                                    res.insert({item2, item1});
-
-
                                 }
 
                     }
@@ -529,18 +552,19 @@ uint64_t getNrNonEmptyClusters(const IntSetVector& clustering) {
 //
 //    return count / (double) (nrCells * nrMutations);
 //}
-SNVTree make_snv_tree(  ClusteringPairs edges,    Genotypes G, int j){
+SNVTree make_snv_tree(  ClusteringPairs edges,    const Genotypes G, int j){
     SNVTree ts;
 
 
     for(auto e: edges){
-        geno g1 = G[e.first][j];
-        geno g2 =G[e.second][j];
-        if(g1 != g2){
-            ts.insert({g1, g2});
-        }
+        geno g1 = G.at(e.first)[j];
 
-    }
+        geno g2 =G.at(e.second)[j];
+            if(g1 != g2){
+                ts.insert({g1, g2});
+            }
+
+        }
 
     return ts;
 }
@@ -558,45 +582,52 @@ ClusteringPairs get_edges(Tree T){
     return edges;
 }
 
-CNATree make_cna_tree(ClusteringPairs edges,  CNAGeno G, int ell){
+CNATree make_cna_tree(const ClusteringPairs edges,  const CNAGeno G, int ell){
     CNATree S;
 
     for(auto e: edges){
-        CNA g1 = G[e.first][ell];
-        CNA g2 =G[e.second][ell];
-        if(g1 != g2){
-            S.insert({g1, g2});
+        CNA g1 = G.at(e.first).at(ell);
+        if (G.at(e.second).count(ell) > 0) {
+
+            CNA g2 = G.at(e.second).at(ell);
+            if (g1 != g2) {
+                S.insert({g1, g2});
+            }
         }
+
 
     }
 
     return S;
 }
 
-double genotype_tree_accuracy(Tree GT, Tree INF, Genotypes gtGenos, Genotypes infGenos, uint64_t m){
+double genotype_tree_accuracy(Tree GT, Tree INF, Genotypes gtGenos, Genotypes infGenos, std::set<uint64_t> snvs, uint64_t m){
     int correct = 0;
     ClusteringPairs gtEdges = get_edges(GT);
     ClusteringPairs infEdges = get_edges(INF);
     for(int j=0; j < m; ++j){
-        SNVTree gtsnv = make_snv_tree(gtEdges, gtGenos, j);
-        SNVTree infsnv =make_snv_tree(infEdges, infGenos, j);
-        correct += (gtsnv ==infsnv);
+        if(snvs.count(j) > 0){
+            SNVTree gtsnv = make_snv_tree(gtEdges, gtGenos, j);
+            SNVTree infsnv =make_snv_tree(infEdges, infGenos, j);
+            correct += (gtsnv ==infsnv);
+        }
+
 
     }
     return (double) correct / m;
 }
 
-double cna_tree_accuracy(Tree GT, Tree INF, CNAGeno gtGenos, CNAGeno infGenos, std::set<int> segments){
+uint64_t cna_tree_accuracy(Tree GT, Tree INF, CNAGeno gtGenos, CNAGeno infGenos, std::set<int> segments){
     int correct = 0;
     ClusteringPairs gtEdges = get_edges(GT);
     ClusteringPairs infEdges = get_edges(INF);
     for(int ell: segments){
         CNATree gtS = make_cna_tree(gtEdges, gtGenos, ell);
         CNATree infS =make_cna_tree(infEdges, infGenos, ell);
-        correct += (gtS ==infS);
+        correct += (gtS == infS);
 
     }
-    return (double) correct / (double) segments.size();
+    return correct;
 }
 
 int main(int argc, char **argv) {
@@ -611,7 +642,7 @@ int main(int argc, char **argv) {
                   << ",mut_TP,mut_TN,mut_FN,mut_FP,mut_recall,mut_precision,mut_RI,mut_ARI"
                   << ",mut_GT_non_empty" << ",mut_inf_non_empty"
                   << ",genotype_pres_similarity" << ",genotype_allele_spec_similarity"<< ",genotype_similarity" <<",cna_genotype_similarity"
-                  << ",snv_tree_accuracy" << ",cna_tree_accuracy"
+                  << ",snv_tree_accuracy" << ",cna_tree_accuracy" << ",inf_segments" << ",inf_mut"
                   << std::endl;
         return 1;
     }
@@ -656,7 +687,7 @@ int main(int argc, char **argv) {
     inGtCell.close();
 
     std::ifstream inInfCell(argv[6]);
-    auto inf_cell_clustering = parseClustering(inInfCell, 2, 0);
+    auto inf_cell_clustering = parseClustering(inInfCell, 0, 1);
     inInfCell.close();
 
 
@@ -734,8 +765,17 @@ int main(int argc, char **argv) {
     inGtMut.close();
 
     std::ifstream inInfMut(argv[7]);
-    auto inf_mut_clustering = parseClustering(inInfMut, 1, 0);
+    auto inf_mut_clustering = parseClustering(inInfMut, 0, 1);
+
     inInfMut.close();
+    std::vector<std::set<uint64_t>> psi_inverse = inf_mut_clustering.second;
+    std::set <uint64_t> snvs;
+
+    for(auto clust: psi_inverse){
+        for(auto j: clust){
+            snvs.insert(j);
+        }
+    }
 
     if (gt_mut_clustering.first != inf_mut_clustering.first) {
         std::cerr << "Error: different number of elements in mutation clustering." << std::endl;
@@ -810,24 +850,35 @@ int main(int argc, char **argv) {
     }
 
 
-    std::map<uint64_t, IntPair> cellMap = makeCellMap(gt_cell_clustering.second, gt_cell_clustering.second);
+    std::map<uint64_t, IntPair> cellMap = makeCellMap(gt_cell_clustering.second, inf_cell_clustering.second);
     uint64_t n = cellMap.size();
 
     std::ifstream infGenos(argv[8]);
     auto infGenotypes = parseGenotypes(infGenos, infTree.first, m);
     infGenos.close();
-    double snv_tree_acc =genotype_tree_accuracy(gtTree.second, infTree.second, gtGenotypes.first, infGenotypes.first, m);
-    double cna_tree_acc = cna_tree_accuracy(gtTree.second, infTree.second, gtGenotypes.second, infGenotypes.second, segments);
 
-    computeGenotypeSimilarity(gtGenotypes, infGenotypes, cellMap, m, pres, allspec, sim, cna);
+    CNAGeno cnINF = infGenotypes.second;
+    std::set<int> infsegments;
+    for(const auto pair: cnINF){
+        for(const auto pr: pair.second){
+            infsegments.insert(pr.first);
+        }
+        break;
+    }
 
+    double snv_tree_acc =genotype_tree_accuracy(gtTree.second, infTree.second, gtGenotypes.first, infGenotypes.first, snvs, m);
+
+
+    computeGenotypeSimilarity(gtGenotypes, infGenotypes, cellMap, snvs, m, pres, allspec, sim, cna);
+    uint64_t cna_tree_correct = cna_tree_accuracy(gtTree.second, infTree.second, gtGenotypes.second, infGenotypes.second, infsegments);
 
     std::cout << "," << (double) pres / double(n * m)
               <<"," << (double) allspec / double(n * m)
               <<"," << (double) sim / double(n * m)
               <<"," << (double) cna / double(n * segments.size())
               << "," << snv_tree_acc
-              << "," << cna_tree_acc
+              << "," << (double) cna_tree_correct / double(segments.size())
+              << "," <<  infsegments.size() << "," << snvs.size()
               << std::flush;
 //    std::cout << "," << computeGenotypeSimilarity(gt_cell_clustering.first, gt_mut_clustering.first,
 //                                                  cellClusterGenotypes(gtTree.second), cellClusterGenotypes(infTree.second),
