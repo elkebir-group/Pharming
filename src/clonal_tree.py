@@ -1632,6 +1632,22 @@ class ClonalTree:
         
         df = pd.DataFrame(list(loss.items()), columns=['mutation', 'cluster'])
         df.to_csv(fname, index=False)
+    
+    def write_likelihood(self, fname):
+        with open(fname, "w+") as file:
+            file.write("likelihood,snv,cna\n")
+            file.write(f"{self.cost},{self.snv_cost},{self.cna_cost}\n")
+
+    def write_genotypes(self, fname):
+        colnames= ["node", "snv", "x", "y", "xbar", "ybar", "segment"]
+
+        with open(fname, "w+") as file:
+            file.write(",".join(colnames) + "\n")
+            for n in self.tree:
+                for ell, snvs in self.seg_to_muts.items():
+                    for j in snvs:
+                        g =self.genotypes[n][j]
+                        file.write(f"{n},{j},{g[0]},{g[1]},{g[2]},{g[3]},{ell}\n")
 
     def save_text(self, path):
         '''

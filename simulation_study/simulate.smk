@@ -19,7 +19,7 @@ rule all:
             err = config["cerror"],
             dirch = config["dirch"]
         ),
-        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
+        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/genotypes.csv",
             inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
@@ -115,16 +115,18 @@ rule make_gt:
         "-l {params.lamb} --mut-cluster-tree {output.tm} > {log.std} 2> {log.err} "
 
 
-
 rule write_gt_files:
     input:
         gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
         phi = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl",
+    params: 1e3
     output:
         gt_mut= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
         gt_mut_loss=   "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mut_loss_clust_gt.csv",
         gt_phi =  "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cellclust_gt.csv",
-        tree = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt"
+        gt_genos =  "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/genotypes.csv",
+        tree = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
+        likelihood = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/likelihood.csv"
     run:
         import utils 
         gt = utils.load_pickled_object(input['gt'])
@@ -132,7 +134,9 @@ rule write_gt_files:
         phi.write_phi(output["gt_phi"])
         gt.write_psi(output['gt_mut'])
         gt.write_loss_mapping(output['gt_mut_loss'])
+        gt.write_genotypes(output["gt_genos"])
         gt.save_text(output['tree'])
+        gt.write_likelihood(output['likelihood'])
         
 
 

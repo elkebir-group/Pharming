@@ -85,13 +85,13 @@ class CellAssign:
                 phi[i] = mapping[u]
         self.update(phi)
 
-        
-    def write_phi(self, fname, include_subcluster=True):
+    def to_dataframe(self):
+         df = pd.DataFrame(list(self.phi.items()), columns=['cell', 'cluster'])
+         return df
+    
+    def write_phi(self, fname):
 
-        df = pd.DataFrame(list(self.phi.items()), columns=['cell', 'cluster'])
-        if include_subcluster:
-            df['subcluster'] =0
-            df = df[["cluster", "subcluster", "cell"]]
+        df = self.to_dataframe()
         df.to_csv(fname, index=False)
 
     def compute_ari(self,obj) -> float:

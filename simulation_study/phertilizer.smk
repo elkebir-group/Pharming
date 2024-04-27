@@ -7,11 +7,10 @@ sys.path.append("../src")
 import pandas as pd 
 
 
-
 rule all:
     # noinspection PyInterpreter
     input:
-        expand("phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
+        expand("phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
             inpath = config["inpath"],
             s =seeds,
             cells = config["cells"],
@@ -43,43 +42,102 @@ rule phertilizer:
         umap =  "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cn_umap.csv"
     output:
         pickle = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.pkl",
-        tree = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
-        predcell = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
-        predmut = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
         png = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.png",
         like = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/likelihood.txt",
+        phi = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.csv",
+        psi = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/psi.csv",
+        tree = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf_tree.txt",
     benchmark:"phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     log:
         std= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf.log",
         err= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf.err.log"
     shell:
         "nice -n 10 phertilizer -f {input.readcounts} --bin_count_data {input.umap} --no-umap "
-        "--tree_pickle {output.pickle} --tree {output.png} --tree_text {output.tree} --likelihood {output.like} "
-        " -n {output.predcell} -m {output.predmut}  --post_process -s {wildcards.s} "
+        "--tree_pickle {output.pickle} --tree {output.png}  --likelihood {output.like} "
+        "-n {output.phi} -m {output.psi} --tree_text {output.tree}  --post_process -s {wildcards.s} "
         " > {log.std} 2> {log.err} "
 
 
-    
-rule eval_solutions:
+rule convert_to_pharming_obj:
     input:
         data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-        gt = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
-        cellassign = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl",
-        phert =   "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.pkl",
+        phi = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.csv",
+        psi = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/psi.csv",
+        tree = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/inf_tree.txt",
     params:
-        lamb = 0
+        lamb = 1e3
     output:
-        scores = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
+        solution = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solution.pkl",
     log:
-        std= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/score.log",
-        err= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/score.err.log"
+        std= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/convert.log",
+        err= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/convert.err.log"
     shell:
-        "nice -n 5 python ../src/score_phertilizer.py -d {input.data} -t {input.gt} -c {input.cellassign} "
-        "-T {input.phert} "
+        "python ../src/convert_phert_to_pharm.py "
+        "-d {input.data} "
+        "-t {input.tree} "
+        "-n {input.phi} "
+        "-m {input.psi} "
         "-l {params.lamb} "
-        "-o {output.scores} > {log.std} 2> {log.err} "
+        "-o {output.solution} > {log.std} 2> {log.err} "
 
 
+
+rule write_files:
+    input: "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solution.pkl",
+    output:
+        pred_mut= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
+        pred_cell =  "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
+        pred_genos = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genotypes.csv",
+        pred_tree = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
+        likelihood ="phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/likelihood.csv"
+    run:
+        import utils 
+        import pandas as pd 
+        sol= utils.load_pickled_object(input[0])
+        sol.phi.write_phi(output["pred_cell"])
+        sol.ct.write_psi(output["pred_mut"])
+        # sol.ct.write_loss_mapping(output['pred_mut_loss'])
+        sol.ct.write_genotypes(output["pred_genos"])
+        sol.ct.save_text(output['pred_tree'])
+        sol.ct.write_likelihood(output['likelihood'])
+
+
+rule score_tree:
+    input:
+        gt_phi ="sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cellclust_gt.csv",
+        gt_mut= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
+        gt_tree ="sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
+        gt_genos ="sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/genotypes.csv",
+        pred_mut= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
+        pred_cell =  "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
+        pred_genos = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genotypes.csv",
+        pred_tree = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt"
+    log:
+        err= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.err.log"
+    output:"phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv"
+    shell:
+        "timeout 20m ./cpp/metrics {input.gt_tree} {input.gt_phi} {input.gt_mut} {input.gt_genos} "
+        " {input.pred_tree} {input.pred_cell} {input.pred_mut} {input.pred_genos} > {output} 2> {log.err} "
+
+
+# rule eval_solutions:
+#     input:
+#         data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+#         gt = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
+#         cellassign = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl",
+#         phert =   "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.pkl",
+#     params:
+#         lamb = 0
+#     output:
+#         scores = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
+#     log:
+#         std= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/score.log",
+#         err= "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/score.err.log"
+#     shell:
+#         "nice -n 5 python ../src/score_phertilizer.py -d {input.data} -t {input.gt} -c {input.cellassign} "
+#         "-T {input.phert} "
+#         "-l {params.lamb} "
+#         "-o {output.scores} > {log.std} 2> {log.err} "
 
 # rule aggregate_scores:
 #     input:
