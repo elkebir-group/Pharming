@@ -6,8 +6,8 @@ sys.path.append("../src")
 
 rule all:
     input:
-        expand("{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/scores.csv",
-               folder = ["dcf_clustering"],
+        expand("{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
+               folder = ["dcf_clustering", "dcf_clustering_gtk"],
                s=seeds,
                cells=config["cells"],
                snvs=config["snvs"],
@@ -28,23 +28,24 @@ rule all:
         #        err=config["cerror"]
         # )
 
-rule run_dcf_clustering_constrained:
+rule run_dcf_clustering_ground_truth_clusters:
     input: 
         data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
         dcfs= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
     output: 
-        output_data= "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
-        dcfs= "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt"
+        output_data= "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
+        dcfs= "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        post_dcfs = "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
     params: 
-        restarts=50
-    threads: 3
+        restarts=25
+    threads: 1
     log: 
-        std= "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
-        err= "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
-    benchmark: "dcf_clustering_v2/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+        std= "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
+        err= "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
+    benchmark: "dcf_clustering_gtk/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     shell: 
         "python ../src/dcf_clustering_v2.py -d {input.data} -g {input.dcfs} -o {output.output_data} -D {output.dcfs} "
-         "-r {params.restarts} -c -j {threads} > {log.std} 2> {log.err}"    
+         "-r {params.restarts} -c -j {threads} -P {output.post_dcfs} > {log.std} 2> {log.err}"    
 
 
 rule dcf_clustering_model_selection:
