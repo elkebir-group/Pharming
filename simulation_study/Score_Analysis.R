@@ -1,7 +1,8 @@
 library(tidyverse)
 library(yaml)
 library(glue)
-figpath <- "simulation_study/figures"
+figpath <- "figures"
+#assuming working directory is /scratch/data/leah/Pharming/simulation_study
 # metric_names <-  c("Ancestral Pair\nRecall", "Incomparable Pair\nRecall",
 #                 "Clustered Pair\nRecall", "Cell\nARI", "CNA Tree\nAccuracy")
 
@@ -9,11 +10,11 @@ metric_names <- c("ancestral pair\n recall (APR)",
                   "incomparable pair\nrecall (IPR)" ,
                   "clustered pair\nrecall (CPR)",
                   "accuracy")
-header <- read.csv("simulation_study/cpp/metric_header.csv")
+header <- read.csv("cpp/metric_header.csv")
 
 
 read_csv_wrapper <- function(folder, prefix, suffix){
-  fname <- file.path(bpath, prefix, folder, suffix)
+  fname <- file.path(prefix, folder, suffix)
   if(file.exists(fname)){
     df<- read.csv(fname, header=FALSE)
     colnames(df) <- colnames(header)
@@ -27,9 +28,9 @@ read_csv_wrapper <- function(folder, prefix, suffix){
   return(df)
 }
 
-bpath <- "/scratch/leah/Pharming/simulation_study"
-config = yaml.load_file(file.path(bpath, "simulate.yml"))
-pharming_config <- yaml.load_file(file.path(bpath, "pharming.yml"))
+bpath <- "/scratch/leah/Pharming"
+config = yaml.load_file("simulate.yml")
+pharming_config <- yaml.load_file( "pharming.yml")
 seeds <- 10:14
 runs <- expand.grid(cells=config$cells, 
                     snvs=config$snvs,
@@ -147,11 +148,26 @@ tree.plot <- ggplot(df.tree.met,
   scale_fill_discrete(name="") +
   theme(legend.position="top")
 
-res.long <- res %>% 
-   pivot_longer(c(contains("recall"), "cell_ari", "perc_cna_trees_correct"))  
+# res.long <- res %>% 
+#    pivot_longer(c(contains("recall"), "cell_ari", "perc_cna_trees_correct"))  
 
 ggsave(file.path(figpath, "tree_metrics_k5.pdf"), plot=tree.plot,width=10, height=10 )   
 
+
+
+df.sim<- res %>%
+  select(s, cells, snvs, mclust, cov,
+         method_name,
+         method,
+         contains("similarity"),
+         contains("accuracy")
+         ) %>%
+  pivot_longer(c(contains("similarity"), contains("accuracy"))) 
+
+sim_acc_plot <- ggplot(df.sim, aes(x=cov, y=value, fill=method_name)) + geom_boxplot() +
+  facet_wrap(~name) +   scale_fill_discrete(name="") +
+  theme(legend.position="top")
+ggsave(file.path(figpath, "similarity_k5.pdf"), plot=sim_acc_plot,width=10, height=10 )  
 metric_mapping <- data.frame(name = unique(res.long$name), 
                 name_label = metric_names) %>%
                 mutate(name_label = factor(name_label, ordered=TRUE,
@@ -165,15 +181,15 @@ res.long <- inner_join(res.long, metric_mapping)
   #   xlab("# of SNVs") + ylab("value") +
   #   scale_fill_discrete(name="") + theme(legend.position ="top")
 
-for(k in c(5)){
-  p <- res.long %>% filter(mclust ==k, cells==1000) %>%
-    ggplot(aes(x=snvs, y=value, fill=method_name)) +
-  geom_boxplot() +
-    facet_grid(cov~name_label) +
-    xlab("# of SNVs") + ylab("value") +
-    scale_fill_discrete(name="") + theme(legend.position ="top")
-    ggsave(file.path( figpath, sprintf("scores_mclust%d.pdf", k)), plot=p, width=12, height=10)
-}
+# for(k in c(5)){
+#   p <- res.long %>% filter(mclust ==k, cells==1000) %>%
+#     ggplot(aes(x=snvs, y=value, fill=method_name)) +
+#   geom_boxplot() +
+#     facet_grid(cov~name_label) +
+#     xlab("# of SNVs") + ylab("value") +
+#     scale_fill_discrete(name="") + theme(legend.position ="top")
+#     ggsave(file.path( figpath, sprintf("scores_mclust%d.pdf", k)), plot=p, width=12, height=10)
+# }
 
 
 

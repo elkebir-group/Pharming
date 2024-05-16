@@ -91,7 +91,7 @@ def main(args):
                 )
 
   
-    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores)
+    solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, Tm=T_m)
 
 
 
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
 
     # gtpth = "test"
-    # seed = 13
+    # seed = 14
     # cov = 0.25
     # instance = f"s{seed}_m5000_k25_l5_d2"
     # folder = f"n1000_c{cov}_e0" 
@@ -195,22 +195,25 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "3",
-    #     "-D", f"simulation_study/dcf_clustering_v2/{instance}/{folder}/inf_dcfs.txt",
-    #     # "-T", f"{pth}/{instance}/{folder}/Tm.txt",
-    #     "-n", "2",
-    #     "-k", "5",
-    #      "-L", "1", "2", "3", "5", "10", "11", "12", "20",
-    #     "--ninit-segs", "1",
-    #     "--ninit-tm", "1",
-    #     "--cell-threshold", "5",
+    #     "-j", "5",
+    #     # "-D", "test/test_dcfs_s12.txt",
+    #     "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
+    #     # "-D", f"test/s14_m5000_c0.25_l5/dcfs.txt",
+    #     #  "-D", f"simulation_study/decifer/{instance}/{folder}/post_dcfs.txt",
+    #     # "-T", f"simulation_study/sims/{instance}/{folder}/Tm.txt",
+    #     "-n", "5",
+    #     # "-k", "5",
+    #     #  "-L", "17", "10", "20",
+    #     "--ninit-segs", "10",
+    #     "--ninit-tm", "4",
+    #     "--cell-threshold", "25",
     #     "--order", "weighted-random",
     #     "-s", f"{seed}",
-    #     "-P", f"{gtpth}/solutions_full.pkl",
+    #     "-P", f"test/s14_m5000_c0.25_l5/solutions.pkl",
     #     "--profile", "test/profile.prof",
     #     "--collapse",
-    #     "--ntree-iter", "5",
-    #     "-O", f"{gtpth}"
+    #     "--ntree-iter", "1",
+    #     "-O", "test/s14_m5000_c0.25_l5" #"{gtpth}"
 
     # ])
 

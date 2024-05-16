@@ -95,7 +95,8 @@ class Enumerate:
         model = gp.Model('solveMCTPCR')
         model.Params.PoolSearchMode = 2
         model.Params.PoolSolutions = max_sol
-        model.Params.PoolIgnore =  1
+        # model.Params.PoolIgnore = 1
+ 
         # nsamples =  1 #self.snv_mat.shape[1]
         # assert nsamples == self.cna_mat.shape[1], 'SNV and CNA matrix sizes do not match up.'
         nsamples =self.nsamples

@@ -16,6 +16,8 @@ nsegs <- as.numeric(snakemake@params[['nsegs']])
 selected_sample <- snakemake@wildcards[['sample']]
 seed <- snakemake@params[['seed']]
 
+
+
 set.seed(seed)
 
 
@@ -81,7 +83,7 @@ replace_na(list(m=0))
 med_snvs <- median(seg.dat$m)
 selected_segs <- filter(seg.dat, m >= med_snvs, nstates < 5) %>%
  ungroup() %>%
- slice_sample(n=nsegs) %>% arrange(segment)
+ slice_sample(n=nsegs, weight_by=m) %>% arrange(segment)
 
 p1 <- ggplot(selected_segs %>% pivot_longer(c("m", "nstates")), aes(x=name, y=value)) + facet_wrap(~name, scales="free") +
 geom_boxplot() + xlab(selected_sample) + ylab("count")

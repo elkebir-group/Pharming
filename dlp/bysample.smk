@@ -2,21 +2,24 @@ configfile: "bysample.yml"
 # include --use-conda when running pipeline to activate conda r_env for rule prep_input
 rule all:
    input:
-        expand("{sample}/decifer/dcfs.txt",
-                sample = config["sample"]
-            ),
-        expand("{sample}/pharming/{clust}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/solutions.pkl",
-               sample = config["sample"],
-               clust = ["decifer"],
-               isegs = config["ninit_segs"],
-               tm = config["ninit_tm"],
-               topn = config["topn"],
-               lamb = config["lamb"]
+        expand("{sample}/input/data.pkl",
+            sample = config["sample"]
+        ),
+        # expand("{sample}/decifer/dcfs.txt",
+        #         sample = config["sample"]
+        #     ),
+        # expand("{sample}/pharming/{clust}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/solutions.pkl",
+        #        sample = config["sample"],
+        #        clust = ["decifer"],
+        #        isegs = config["ninit_segs"],
+        #        tm = config["ninit_tm"],
+        #        topn = config["topn"],
+        #        lamb = config["lamb"]
+        # )
+        expand("{sample}/dcf_clustering/k{k}/dcfs.txt",
+                sample = config["sample"],
+                k= range(config['mink'], config['maxk']+1)
         )
-            # expand("dcf_clustering/{sample}/k{k}/dcfs.txt",
-            #     sample = config["sample"],
-            #     k= range(config['mink'], config['maxk']+1)
-            # )
 
 rule prep_input:
     input: 
@@ -134,20 +137,21 @@ rule pharming:
         "--profile {output.profile} "
         "-P {output.sol} > {log.std} 2> {log.err} "
 
-# rule run_dcf_clustering_constrained:
-#     input: 
-#         data=  "{sample}/input/data.pkl",
-#     output: 
-#         output_data= "dcf_clustering/{sample}/k{k}/results.pkl",
-#         dcfs= "dcf_clustering/{sample}/k{k}/dcfs.txt"
-#     params: 
-#         restarts=21,
-#         seed = 21
-#     threads: 3
-#     log: 
-#         std= "dcf_clustering/{sample}/k{k}/run.log",
-#         err= "dcf_clustering/{sample}/k{k}/err.log"
-#     benchmark: "dcf_clustering/{sample}/k{k}/benchmark.log"
-#     shell: 
-#         "python ../src/dcf_clustering_v2.py -d {input.data} -k {wildcards.k} -o {output.output_data} -D {output.dcfs} "
-#          "-r {params.restarts} -c -j {threads} -s {params.seed} > {log.std} 2> {log.err} "    
+rule run_dcf_clustering:
+    input: 
+        data=  "{sample}/input/data.pkl",
+    output: 
+        output_data= "{sample}/dcf_clustering/k{k}/results.pkl",
+        dcfs= "{sample}/dcf_clustering/k{k}/dcfs.txt",
+        post ="{sample}/dcf_clustering/k{k}/post_dcfs.txt"
+    params: 
+        restarts=20,
+        seed = 21
+    threads: 3
+    log: 
+        std= "{sample}/dcf_clustering/k{k}/run.log",
+        err= "{sample}/dcf_clustering/k{k}/err.log"
+    benchmark: "{sample}/dcf_clustering/k{k}/benchmark.log"
+    shell: 
+        "python ../src/dcf_clustering_v2.py -d {input.data} -k {wildcards.k} -o {output.output_data} -D {output.dcfs} "
+         "-P {output.post} -r {params.restarts} -c -j {threads} -s {params.seed} > {log.std} 2> {log.err} "    

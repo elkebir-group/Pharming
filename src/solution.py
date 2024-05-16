@@ -32,4 +32,10 @@ class Solution:
     def collapse(self, k, cell_threshold=10):
         self.ct.collapse(self.phi, k, cell_threshold)
     
+    def compute_likelihood(self, data, lamb):
+        cost= self.ct.compute_likelihood(data, self.phi, lamb)
+        snv = self.ct.snv_cost
+        cna =  self.ct.cna_cost
+        return cost, snv, cna
+    
 

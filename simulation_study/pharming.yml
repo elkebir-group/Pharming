@@ -1,20 +1,24 @@
 #Pharming runtime params
 
 ninit_segs:
-  - 3
+  # - 3
+  - 8
 
 ninit_tm:
-  - 4
+  # - 4
+  - 8
 
 order:
   - "weighted-random"
 
 topn:
-  - 5
+  # - 5
+  - 3
 
 lamb:
   - 1000
 
-max_loops: 5
+# max_loops: 5
+max_loops: 1
 
 thresh_prop: 0.0
