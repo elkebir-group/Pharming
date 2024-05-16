@@ -72,7 +72,7 @@ def load(read_counts,copy_numbers ):
     copy_y = copy_numbers["y"].unstack(level="seg_id").to_numpy()
 
 
-    return Data(var, total, copy_x, copy_y, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup)
+    return Data(var, total, copy_x, copy_y, snv_to_seg, seg_to_snvs, cell_lookup, mut_lookup, seg_lookup)
 
 # def segment(cn_profiles, tol=0.0, pseudo_counts=1e-6):
 #     '''

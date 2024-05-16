@@ -1,14 +1,14 @@
 sample:
-  - SA921
-  - SA922
+  # - SA921
+  # - SA922
   - SA1090
 
 mink: 2
-maxk: 6
+maxk: 5
 
-nsegs: 50
+nsegs: 25
 
-seed: 1026
+seed: 21
 
 thresh: 0.05
 

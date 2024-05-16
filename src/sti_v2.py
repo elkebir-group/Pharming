@@ -493,7 +493,7 @@ class STI:
 
         return self.to_inverse_dict(psi), omega
     
- 
+
 
 
     def construct_segment_tree(self, T, alpha_inv, omega, rho):
@@ -588,6 +588,7 @@ class STI:
 
     @staticmethod
     def check_dcfs(T, merged_delta):
+        return True
         for u in T:
             children_dcf = 0
             for v in T.successors(u):

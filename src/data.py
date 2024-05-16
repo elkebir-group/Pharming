@@ -31,6 +31,7 @@ class Data:
     seg_to_snvs: dict #a dictionary that maps each seg to a list of snvs in that segment
     cell_lookup : pd.Series # an n length series mapping internal cell index to input cell label
     mut_lookup : pd.Series #an m length series mapping interal SNV index to input SNV label
+    seg_lookup: pd.Series
     alpha : float = 0.001 #per base sequencing error rate 
 
     def __post_init__(self):
@@ -102,7 +103,14 @@ class Data:
         return self.likelihood_dict[v][cells[:, np.newaxis],snvs].sum(axis=0)
       
     
-  
+    def compute_cmb(self, cells, snvs):
+        var = self.var[cells,:][:,snvs]
+        nom = np.count_nonzero(var, axis=1)
+        total = self.total[cells,:][:,snvs]
+        denom = np.count_nonzero(total, axis=1)
+      
+        return nom/denom
+
 
     def precompute_likelihood(self, alpha=0.001):
         self.to_sparse()

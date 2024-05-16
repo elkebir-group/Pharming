@@ -1,4 +1,4 @@
-name: pharming
+name: pharming2
 channels:
   - bioconda
   - conda-forge
@@ -398,4 +398,4 @@ dependencies:
       - lemon==1.3.1
       - phertilizer==0.1.0
       - setuptools==69.2.0
-prefix: /home/leahlw2/miniconda3/envs/pharming
+prefix: /scratch/data/leah/anaconda3/envs/pharming2

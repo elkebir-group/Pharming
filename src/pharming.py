@@ -90,6 +90,8 @@ class Pharming:
      
 
     def check_dcfs(self, T, delta):
+        # return True
+
         for u in T:
             desc_dcf = sum( delta[u] for u in  sorted(T.successors(u)))
             if delta[u] < desc_dcf or desc_dcf > 1:
@@ -106,13 +108,11 @@ class Pharming:
         G = nx.DiGraph()
         G.add_nodes_from([q for q in range(self.k)])
         for u,v in itertools.combinations(range(self.k),2):
-            if delta[u] > delta[v]:
+            if delta[u] >= delta[v]:
                 G.add_edge(u,v, weight=1)
             elif delta[u] < delta[v]:
                 G.add_edge(v,u, weight=1)
-            else:
-                G.add_edge(u,v, weight=1)
-                G.add_edge(v,u, weight=1)
+  
             
         trees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
 
@@ -420,19 +420,23 @@ class Pharming:
                         raise ValueError(f" Node {n} does not match a cluster id. \
                                          Each node label in the mutation cluster \
                                          tree must map to a unique value in [k] ")
+        else:
+            scriptTm = self.enumerate_mutcluster_trees(self.delta)
       
         loop = 0
 
                     
-        scriptTm = self.enumerate_mutcluster_trees(self.delta)
+    
   
        
         
         all_best_trees = []
         allscriptTm = []
         delta = self.delta.copy()
+ 
         while loop < self.max_loops and len(scriptTm) > 0:
             print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
+            print(f"DCFs delta: {delta}")
             stis_init = self.preprocess(init_segs, delta)
 
             allscriptTm += scriptTm

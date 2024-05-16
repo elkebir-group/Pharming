@@ -9,25 +9,7 @@ sys.path.append("../src")
 
 rule all:
     input:
-        # expand("pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/scores.csv",
-        #     inpath = ["sims"],
-        #     order = config["order"],
-        #     isegs = config["ninit_segs"],
-        #     tm = config["ninit_tm"],
-        #     topn = config["topn"],
-        #     lamb = config["lamb"],
-        #     s =seeds,
-        #     cells = config["cells"],
-        #     snvs = config["snvs"],
-        #     nsegs = config["nsegs"],
-        #     cov = config["cov"],
-        #     mclust = config['mclust'],
-        #     dirch = config["dirch"],
-        #     err = config["cerror"]
-        # ),
-        expand("pharming/{clust}/{prefix}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
-            clust =["dcf_clustering", "dcf_clustering_gtk" ],  #"decifer"
-            prefix = ["dcfs", "post_dcfs"],
+        expand("pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
             order = config["order"],
             isegs = config["ninit_segs"],
             tm = config["ninit_tm"],
@@ -42,6 +24,23 @@ rule all:
             dirch = config["dirch"],
             err = config["cerror"]
         ),
+        # expand("pharming/{clust}/{prefix}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
+        #     clust =["dcf_clustering", "dcf_clustering_gtk"],  #"decifer"
+        #     prefix = ["dcfs"],
+        #     order = config["order"],
+        #     isegs = config["ninit_segs"],
+        #     tm = config["ninit_tm"],
+        #     topn = config["topn"],
+        #     lamb = config["lamb"],
+        #     s =seeds,
+        #     cells = config["cells"],
+        #     snvs = config["snvs"],
+        #     nsegs = config["nsegs"],
+        #     cov = config["cov"],
+        #     mclust = config['mclust'],
+        #     dirch = config["dirch"],
+        #     err = config["cerror"]
+        # ),
         # expand("pharming/gt/dcfs/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
         #     order = config["order"],
         #     isegs = config["ninit_segs"],
@@ -64,20 +63,22 @@ rule all:
 
 rule pharming_gt_dcfs:
     input:
-        dcfs = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        data= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        dcfs = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     params:
-        cell_thresh = 5,
+        # cell_thresh = 5,
+        cell_thresh = 25, #increasing threshold 16-May
         root_x = 1,
         root_y = 1,
+        opath = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"
     threads: 1
     output:
-        sol = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-        profile = "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
-    benchmark:"pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+        sol = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        profile = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+    benchmark:"pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     log:
-        std= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
-        err= "pharming/{inpath}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+        std= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+        err= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
     shell:
         "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} "
         "-s {wildcards.s} "
@@ -90,6 +91,7 @@ rule pharming_gt_dcfs:
         "--root_x {params.root_x} --root_y {params.root_y} " 
         "--collapse "
         "--profile {output.profile} "
+        "-O {params.opath} "
         "-P {output.sol} > {log.std} 2> {log.err} "
 
 
@@ -112,7 +114,7 @@ rule pharming:
         std= "pharming/{clust}/{prefix}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
         err= "pharming/{clust}/{prefix}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
     shell:
-        "nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} "
+        "timeout 12h nice -n 10 python ../src/main.py -d {input.data} -D {input.dcfs} "
         "-s {wildcards.s} "
         "-l {wildcards.lamb} "
         "-n {wildcards.topn} "
