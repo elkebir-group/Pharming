@@ -576,34 +576,34 @@ if __name__ == "__main__":
     # Parse command line arguments
     args = parser.parse_args()
 
-    gtpth = "test"
-    seed = 13
-    cov = 0.05
-    instance = f"s{seed}_m5000_k25_l5_d2"
-    folder = f"n1000_c{cov}_e0" 
-    pth = f"simulation_study/sims"
+    # gtpth = "test"
+    # seed = 13
+    # cov = 0.05
+    # instance = f"s{seed}_m5000_k25_l5_d2"
+    # folder = f"n1000_c{cov}_e0" 
+    # pth = f"simulation_study/sims"
 
 
 
-    args = parser.parse_args([
+    # args = parser.parse_args([
 
-        "-d", f"{pth}/{instance}/{folder}/data.pkl",
-        # "-k", "5",
-        # "--mink", "4",
-        # "--maxk", "6",
-        "-j", "5",
-        "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
-        "-s", f"{seed}",
-        "-r", "100",
-        "--nsegs", "10",
-        "--nfull", "5",
-        "-D", f"{gtpth}/dcfs.txt",
-        "-P", f"{gtpth}/post_dcfs.txt",
-        "-o",  f"{gtpth}/results.pkl",
-        "--verbose",
-        "-c"
+    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
+    #     # "-k", "5",
+    #     # "--mink", "4",
+    #     # "--maxk", "6",
+    #     "-j", "5",
+    #     "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
+    #     "-s", f"{seed}",
+    #     "-r", "100",
+    #     "--nsegs", "10",
+    #     "--nfull", "5",
+    #     "-D", f"{gtpth}/dcfs.txt",
+    #     "-P", f"{gtpth}/post_dcfs.txt",
+    #     "-o",  f"{gtpth}/results.pkl",
+    #     "--verbose",
+    #     "-c"
 
-    ])
+    # ])
 
 
     # Call the main function with provided arguments
