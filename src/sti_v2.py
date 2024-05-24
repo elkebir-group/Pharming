@@ -28,7 +28,10 @@ class STI:
     seed: int representing the random number seed 
 
     '''
-    def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False, prop_thresh=0, start_state=(1,1)) -> None:
+    def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False, 
+                 prop_thresh=0, start_state=(1,1),
+                 sum_condition = False,
+                 ) -> None:
     
         self.ell = ell 
         nodes = list(S)
@@ -82,6 +85,7 @@ class STI:
         self.cost1, self.cost2 = None, None
         self.prop_thresh = prop_thresh
         self.start_state = start_state
+        self.sum_condition = sum_condition
 
         # print(self.group_desc)
         # for g, trees in enumerate(self.T_SNV_groups):
@@ -588,7 +592,7 @@ class STI:
 
     @staticmethod
     def check_dcfs(T, merged_delta):
-        return True
+   
         for u in T:
             children_dcf = 0
             for v in T.successors(u):
@@ -634,8 +638,9 @@ class STI:
             alpha_inv, omega = self.cluster_snvs(valid_group_snvclusts)
   
             segment_tree= self.construct_segment_tree(T, alpha_inv, omega, rho)
-            if not self.check_dcfs(segment_tree.tree, merged_dcfs):
-                continue
+            if self.sum_condition:
+                if not self.check_dcfs(segment_tree.tree, merged_dcfs):
+                    continue
 
             cost, best_ca = segment_tree.optimize(self.data, self.lamb, 
                                                   max_iterations= self.max_iterations, dcfs=dcfs)

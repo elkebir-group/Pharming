@@ -6,13 +6,13 @@ import networkx as nx
 from collections import defaultdict 
 import argparse
 from scipy.optimize import linear_sum_assignment
-import csv
 import pickle
 import pandas as pd
 from utils import timeit_decorator
 import  multiprocessing
 from decifer_post_process import post_process
-TOLERANCE = 2
+# TOLERANCE = 2
+TOLERANCE = 10
 EPSILON = -1e40
 SEQERROR = 1e-40
 
@@ -74,7 +74,7 @@ def scalar_obj_val(dcf, clust_group_map, q, data):
 #     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100 ):
+    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100, nsegs=15 ):
         self.nrestarts =nrestarts 
         if rng is None:
             self.rng = np.random.default_rng(seed)
@@ -83,31 +83,34 @@ class DCF_Clustering:
 
         self.iterations = iterations
         self.verbose=verbose
+        print(f"Verbose on: {self.verbose}")
 
         self.cna_restriction = cna_restriction
+        self.nsegs= nsegs
+        print(f"# Sampled Segs: {self.nsegs} # Restarts: {self.nrestarts}")
 
 
     
     
 
-    # def init_cluster_centers(self,k, include_truncal=True):
-    #     ''' 
-    #     randomly initialize cluster centers 
-    #     '''
-    #     init = self.rng.uniform(low=0.0, high=1.0, size=k)
-    #     if include_truncal:
-    #         init[np.argmax(init)] = 0.98
-    #     return init
+    def init_cluster_centers(self,k, include_truncal=True):
+        ''' 
+        randomly initialize cluster centers 
+        '''
+        init = self.rng.uniform(low=0.0, high=1.0, size=k)
+        if include_truncal:
+            init[np.argmax(init)] = 0.98
+        return init
   
-    def init_cluster_centers(self, k):
-        block_size = 1.0 / k
-        # Generate random values uniformly in [0, 1] for each block
-        block_uniform_values = self.rng.uniform(size=k)
-        # Calculate the starting point of each block
-        block_starts = np.arange(k) * block_size
-        # Calculate the random sample within each block
-        samples = block_starts + block_uniform_values * block_size
-        return samples
+    # def init_cluster_centers(self, k):
+    #     block_size = 1.0 / k
+    #     # Generate random values uniformly in [0, 1] for each block
+    #     block_uniform_values = self.rng.uniform(size=k)
+    #     # Calculate the starting point of each block
+    #     block_starts = np.arange(k) * block_size
+    #     # Calculate the random sample within each block
+    #     samples = block_starts + block_uniform_values * block_size
+    #     return samples
 
 
         #return [0.056, 0.146, 0.179, 0.996, 0.617, 0.138, 0.382]
@@ -116,6 +119,10 @@ class DCF_Clustering:
     def optimize_cluster_and_tree_assignments(self, snv_trees, dcfs, alt, total, ell):
         snvs = self.data.seg_to_snvs[ell]
         cn_prob = self.data.cn_proportions(ell)
+        snv_trees = sorted(snv_trees,reverse=True, key= lambda T : T.has_loss())
+        # snv_trees_temp = [T for T in snv_trees if not T.has_loss()]
+        # if len(snv_trees_temp) > 0:
+        #     snv_trees = snv_trees_temp
         if (1,1) not in cn_prob:
             cn_prob[(1,1)] = 0
 
@@ -199,10 +206,10 @@ class DCF_Clustering:
             # new_dcfs[q] = minimize_scalar(scalar_obj_val, args=(clust_group_map, q, self.data), 
             #                               method='bounded', bounds=[0,1]).x
             result = minimize(objective_function, x0=[dcfs[q]], args=(clust_group_map, q, self.data), bounds=[(0.025,1)])
-            if result ==0:
-                new_dcfs[q] = self.rng.uniform()
-            else:
-                new_dcfs[q]= result.x[0]
+            # if result ==0:
+            #     new_dcfs[q] = self.rng.uniform()
+            # else:
+            new_dcfs[q]= result.x[0]
 
            
         return new_dcfs
@@ -219,7 +226,7 @@ class DCF_Clustering:
         return likelihood
 
     # @timeit_decorator
-    def decifer(self, data, dcfs):
+    def decifer(self, data, dcfs, segments):
         '''
         See data.py for the data object 
         k = # of SNV clusters 
@@ -227,13 +234,12 @@ class DCF_Clustering:
         init_dcfs =dcfs.copy()
         prev_likelihood = np.NINF
         self.k = len(dcfs)
-        # dcfs = self.init_cluster_centers()
+
         self.data = data 
-        self.segments = list(self.data.seg_to_snvs.keys())
-        #enumerat valid CNA trees for each segment
+        m = sum(data.num_snvs(ell) for ell in segments)
         S = {}
         cn_props ={}
-        for ell in self.segments:
+        for ell in segments:
              cn_props[ell] = self.data.cn_proportions(ell)
              if (1,1) not in cn_props[ell]:
                  cn_props[ell][(1,1)] = 0
@@ -251,12 +257,12 @@ class DCF_Clustering:
             TREE_ASSIGNMENTS = {}
             CNA_tree ={}
             CLUST_GROUP_MAPPING= {}
-            for ell in self.segments: #TO DO: Swap these segments and CNA tree assignment
+            for ell in segments: 
 
                 #skip segments with a lot of copy number states but a small number of SNVs
                 thresh_cn_prop= self.data.thresholded_cn_prop(ell, 0.05)
-                if len(thresh_cn_prop) > 4 and self.data.num_snvs(ell) < 100:
-                    continue
+                # if len(thresh_cn_prop) > 4 and self.data.num_snvs(ell) < 100:
+                #     continue
           
                 seg_like = np.NINF
                 
@@ -340,27 +346,31 @@ class DCF_Clustering:
             new_likelihood = self.compute_likelihood(dcfs,CLUST_GROUP_MAPPING)
             #check for covergence:
             diff = new_likelihood -prev_likelihood
-            if self.verbose:
-                print(f"{j}: Previous likelihood: {prev_likelihood} New likelihood: {new_likelihood} Diff: {diff}")
+            # if self.verbose:
+            #     print(f"{j}: Norm Previous likelihood: {prev_likelihood/m} Norm New likelihood: {new_likelihood/m} Diff: {diff}")
             if abs(diff) <  TOLERANCE:
                  break
             else:
                  prev_likelihood = new_likelihood
 
-            
+        clust_assign = defaultdict(list)
+        for ell in CLUSTER_ASSIGNMENTS:
+            for j, q in CLUSTER_ASSIGNMENTS[ell].items():
+                clust_assign[q].append(j)
+        
+        if len(clust_assign[q]) < 0:
+            del dcfs[q]
+
         if self.verbose:
-            print(f"Restart complete with likelihood: {new_likelihood}")
+            print(f"Restart complete with likelihood: {new_likelihood/m}")
             print(f"Initial DCFs: {init_dcfs}")
             print(f"Inferred DCFs: {dcfs}")
  
-            clust_assign = defaultdict(list)
-            for ell in CLUSTER_ASSIGNMENTS:
-                for j, q in CLUSTER_ASSIGNMENTS[ell].items():
-                    clust_assign[q].append(j)
-            for q in clust_assign:
-                print(f"{q}: {dcfs[q]}: {len(clust_assign[q])} SNVs")
+  
+            # for q in clust_assign:
+            #     print(f"{q}: {dcfs[q]}: {len(clust_assign[q])} SNVs")
 
-        return new_likelihood, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
+        return new_likelihood/m, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
 
     @staticmethod         
     def elbow_criteria_model_selection(objs, mink, maxk, ubleft=0.06):
@@ -386,7 +396,8 @@ class DCF_Clustering:
         return selected, objs, elbow
                             
     @timeit_decorator
-    def run(self, data, k_vals, cores=1):
+    def run(self, data, k_vals, cores=1, nfull=1):
+        print(f"Number intial segs: {self.nsegs}, number restarts: {self.nrestarts}")
        
         #results = {}
         #for k in k_vals:
@@ -401,31 +412,48 @@ class DCF_Clustering:
             if cores <= 1:
                 for i in range(self.nrestarts):
                     init_dcfs =self.init_cluster_centers(k)
-                    results = self.decifer(data, init_dcfs)
+                    init_segs = data.sample_segments(self.nsegs, self.rng)
+                    
+                    results = self.decifer(data, init_dcfs, init_segs)
                     all_results.append(results)
                     if self.verbose:
                         print(f"Restart {i}: {results[0]} ")
                         print(f"DCFS: {results[1]}")
+                
             
             else:
-                args = [(data, self.init_cluster_centers(k)) for _ in range(self.nrestarts)]
+                args = [(data, self.init_cluster_centers(k), data.sample_segments(self.nsegs, self.rng)) for _ in range(self.nrestarts)]
                 with multiprocessing.Pool(cores) as pool:
                     all_results = pool.starmap(self.decifer, args)
                     # print(results)
                     # print("****")
+            sorted_results = sorted(all_results, key=lambda x: x[0])
+            if nfull <= len(sorted_results):
+                sorted_results = sorted_results[:nfull]
+            
+            for res in sorted_results:
+                print(f"Likelihood: {res[0]} DCFs: {res[1]}")
+            
+            all_results = [self.decifer(data, res[1] , data.segments) for res in sorted_results]
+            sorted_results = sorted(all_results, key=lambda x: x[0])
+            for res in sorted_results:
+                print(f"Likelihood: {res[0]} DCFs: {res[1]}")
         
-            for results in all_results:
-                likeli = results[0]
-                if likeli < best_likeli:
-                    best_result = results
-                    best_likeli = likeli
-            likelihoods[k] = best_likeli
-            results_by_k[k] = best_result
+            likelihoods[k] = sorted_results[0]
+            results_by_k[k] = sorted_results[0]
+
+            # for results in all_results:
+            #     likeli = results[0]
+            #     if likeli < best_likeli:
+            #         best_result = results
+            #         best_likeli = likeli
+            # likelihoods[k] = best_likeli
+            # results_by_k[k] = best_result
         
         print("Starting model selection using elbow criteria..")
         selected, updated_obj, elbow =   self.elbow_criteria_model_selection(likelihoods, min(k_vals), max(k_vals))
-        print(updated_obj)
-        print(elbow)
+        # print(updated_obj)
+        # print(elbow)
 
         #add model selection 
                
@@ -438,7 +466,8 @@ def main(args):
     print(data)
     
     dec = DCF_Clustering(nrestarts=args.num_restarts, seed=args.seed, 
-                         verbose=True, cna_restriction=args.restrict_CNA_trees)
+                         cna_restriction=args.restrict_CNA_trees,
+                         nsegs=args.nsegs, verbose=args.verbose)
 
  
 
@@ -446,7 +475,8 @@ def main(args):
 
         ground_truth = read_ground_truth_text_file(args.ground_truth)
         k_vals = [len(ground_truth)]
-        res  = dec.decifer(data, np.array(ground_truth))
+        # segs = data.sample_segments(args.nsegs)
+        res  = dec.decifer(data, np.array(ground_truth), data.segments)
         gt_like = res[0]
         print(f"GT Likelihood: {gt_like}")
         print(f"DCFS: {res[1]}")
@@ -463,13 +493,26 @@ def main(args):
         #do one extra value of k to check to allow maxk to be an elbow point.
         k_vals = [k for k in range(mink, maxk+2)]
 
-    best = dec.run(data, k_vals=k_vals, cores=args.cores)
+    best = dec.run(data, k_vals=k_vals, cores=args.cores, nfull=args.nfull)
 
-
-
-    dcfs = best[1]
     print("Best DCFs:")
-    print(dcfs)
+    print( best[1])
+    print(f"Norm likelihood: {best[0]}")
+    # best = dec.decifer(data, dcfs=best[1], segments=data.segments)
+    # print("DCFs all segments..")
+    # print(f"Norm likelihood: {best[0]}")
+    # print( best[1])
+    dcfs = best[1]
+    
+
+
+
+
+  
+
+    
+    
+    
 
 
     if args.output_path is not None:
@@ -518,6 +561,8 @@ if __name__ == "__main__":
     parser.add_argument("-g", "--ground_truth", type=str, help="Path to the ground truth data")
     parser.add_argument("-o", "--output_path", type=str, help="Path to the output  data")
     parser.add_argument("-r", "--num-restarts", type=int, help="Number of restarts")
+    parser.add_argument( "--nsegs", type=int, default=15, help="number of segments to sample each restart")
+    parser.add_argument( "--nfull", type=int, default=1, help="number of solutions for sampled segments to use to initialize full for full inference")
     parser.add_argument("-c", "--restrict_CNA_trees", action="store_true")
     parser.add_argument("-k", "--clusters", type=int, help="number of clusters")
     parser.add_argument("--mink", type=int, default=2, help="minimum number of clusters")
@@ -526,36 +571,39 @@ if __name__ == "__main__":
     parser.add_argument("-P", "--post-dcfs", type=str, help="output file for post-processed dcfs")
     parser.add_argument("-s", "--seed", type=int, default=21,  help="output file for inferred dcfs")
     parser.add_argument("-j", "--cores", default=1, type=int, help="number of cores to use")
+    parser.add_argument("--verbose", action= "store_true", help="print additional information.")
 
     # Parse command line arguments
     args = parser.parse_args()
 
-    # gtpth = "test"
-    # seed = 10
-    # cov = 0.01
-    # instance = f"s{seed}_m5000_k25_l5_d2"
-    # folder = f"n1000_c{cov}_e0" 
-    # pth = f"simulation_study/sims"
+    gtpth = "test"
+    seed = 13
+    cov = 0.05
+    instance = f"s{seed}_m5000_k25_l5_d2"
+    folder = f"n1000_c{cov}_e0" 
+    pth = f"simulation_study/sims"
 
 
 
-    # args = parser.parse_args([
+    args = parser.parse_args([
 
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     # "-k", "4",
-    #     "--mink", "4",
-    #     "--maxk", "6",
-    #     "-j", "5",
-    #     # "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
-    #     "-s", f"{seed}",
-    #     "-r", "25",
-    #     "-D", f"{gtpth}/dcfs.txt",
-    #     "-P", f"{gtpth}/post_dcfs.txt",
-    #     "-o",  f"{gtpth}/results.pkl",
-        
-    #     "-c"
+        "-d", f"{pth}/{instance}/{folder}/data.pkl",
+        # "-k", "5",
+        # "--mink", "4",
+        # "--maxk", "6",
+        "-j", "5",
+        "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
+        "-s", f"{seed}",
+        "-r", "100",
+        "--nsegs", "10",
+        "--nfull", "5",
+        "-D", f"{gtpth}/dcfs.txt",
+        "-P", f"{gtpth}/post_dcfs.txt",
+        "-o",  f"{gtpth}/results.pkl",
+        "--verbose",
+        "-c"
 
-    # ])
+    ])
 
 
     # Call the main function with provided arguments

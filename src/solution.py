@@ -38,4 +38,15 @@ class Solution:
         cna =  self.ct.cna_cost
         return cost, snv, cna
     
+    def write_flat_files(self, pth, data=None, lamb=1000):
+        self.phi.write_phi(f"{pth}/pred_cell.csv")
+        self.ct.write_psi(f"{pth}/pred_mut.csv")
+        self.ct.write_loss_mapping(f"{pth}/pred_mut_loss.csv")
+        self.ct.write_genotypes(f"{pth}/pred_genos.csv")
+        self.ct.save_text(f"{pth}/pred_tree.txt")
+        if data is not None:
+            cost, snv, cna = self.compute_likelihood(data, lamb)
+        with open(f"{pth}/likelihood.csv", "w+") as file:
+            file.write("cost,snv,cna\n")
+            file.write(f"{cost},{snv},{cna}\n")
 
