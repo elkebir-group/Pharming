@@ -32,6 +32,8 @@ rule run_dcf_clustering_ground_truth_clusters:
         output_data= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
         dcfs= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
         post_dcfs = "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
+    params: 
+        thresh_prop = config["cn_prop_thresh"]
     threads: 5
     log: 
         std= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
@@ -39,7 +41,7 @@ rule run_dcf_clustering_ground_truth_clusters:
     benchmark: "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     shell: 
         "python ../src/dcf_clustering_v2.py -d {input.data} -g {input.dcfs} -o {output.output_data} -D {output.dcfs} "
-        "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} -nfull {wildcards.nfull} "
+        "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
         " -c -j {threads} -P {output.post_dcfs} > {log.std} 2> {log.err}"    
 
 
@@ -53,6 +55,7 @@ rule dcf_clustering_model_selection:
     params: 
         mink = lambda wildcards: int(wildcards.mclust) - 2,
         maxk = lambda wildcards: int(wildcards.mclust)  + 2,
+        thresh_prop = config["cn_prop_thresh"]
     threads: 5
     log: 
         std= "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
@@ -60,7 +63,7 @@ rule dcf_clustering_model_selection:
     benchmark: "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     shell: 
         "python ../src/dcf_clustering_v2.py -d {input.data}  -o {output.output_data} -D {output.dcfs} "
-        "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} -nfull {wildcards.nfull} "
+        "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
         "-P {output.post_dcfs} --mink {params.mink} --maxk {params.maxk} "
         " -c -j {threads} > {log.std} 2> {log.err}"    
 
