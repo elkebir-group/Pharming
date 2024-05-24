@@ -53,7 +53,7 @@ def post_process(old_dcfs, clust_assign, snv_trees, dat, snv_thresh=0.05, cell_t
         X = X[:, snv_marg > 0]
         cells = dat.cells[cell_marg > 0]
         try:
-            clustering = SpectralBiclustering(n_clusters=(2,2), random_state=5, n_init=100).fit(X)
+            clustering = SpectralBiclustering(n_clusters=(2,2), random_state=5, n_init=25).fit(X)
         except:
             print(f"Biclustering could not be found for cluster {q}")
             continue

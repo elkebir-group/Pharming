@@ -89,7 +89,7 @@ class Enumerate:
                 self.cna_root = k
                 break
 
-        print(f'snv root is {self.snv_root} and cna root is {self.cna_root}')
+        # print(f'snv root is {self.snv_root} and cna root is {self.cna_root}')
 
     def solve(self, max_sol=1000):
         model = gp.Model('solveMCTPCR')

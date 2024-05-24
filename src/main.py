@@ -67,6 +67,8 @@ def main(args):
     
     if args.Tm is not None:
         T_m =nx.DiGraph()
+        # edges = [(1,0), (1,2), (0,3)]
+        # T_m.add_edges_from(edges)
         with open(args.Tm, "r+") as file:
             for line in file:
                 edges = line.strip().split("\t")
@@ -87,7 +89,8 @@ def main(args):
                 ninit_Tm = args.ninit_tm,
                 cell_threshold= args.cell_threshold,
                 max_loops= args.ntree_iter,
-                thresh_prop = args.thresh_prop
+                thresh_prop = args.thresh_prop,
+                sum_condition = args.sum_condition,
                 )
 
   
@@ -102,7 +105,10 @@ def main(args):
     if args.out is not None:
         print("Drawing clonal trees...")
         for i,sol in enumerate(solutions):
+            sol.compute_likelihood(dat, args.lamb)
             sol.png(f"{args.out}/ct{i}.png")
+        sol = solutions[0]
+        sol.write_flat_files(args.out, data=dat, lamb=args.lamb)
 
 
      
@@ -149,11 +155,11 @@ if __name__ == "__main__":
                         help="number of segments for initialization of mutation cluster tree")
     parser.add_argument("--ninit-tm", type=int,
                         help="number of mutation cluster trees to consider after pruning with initial segs")
-    parser.add_argument("--ntree-iter", type=int, default=3,
+    parser.add_argument("--ntree-iter", type=int, default=1,
                         help="number of iterations to check for new mutation cluster tree to use for inference")
     parser.add_argument("--thresh-prop", type=float, default=0.0,
                         help="proportion threshold for determining CN states")
-    parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place'], default="weighted-random",
+    parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place', 'cost'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
     parser.add_argument("-S", "--cnatrees",type=str,
                         help="optional filename of a pickled dictionary of CNA tree (nx.digraph) for each segment")
@@ -163,6 +169,8 @@ if __name__ == "__main__":
                         help="starting state for paternal (y) allele")
     parser.add_argument("--collapse", action="store_true",
                         help="whether linear chains of copy number events should be collapsed prior to integration")
+    parser.add_argument("--sum-condition", action="store_true",
+                        help="use the sum condition to filter mutation cluster trees")
     parser.add_argument("--cell-threshold", type=int,
                         help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
@@ -195,24 +203,26 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "5",
+    #     "-j", "10",
     #     # "-D", "test/test_dcfs_s12.txt",
-    #     "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
-    #     # "-D", f"test/s14_m5000_c0.25_l5/dcfs.txt",
-    #     #  "-D", f"simulation_study/decifer/{instance}/{folder}/post_dcfs.txt",
-    #     # "-T", f"simulation_study/sims/{instance}/{folder}/Tm.txt",
+    #     # "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
+    #                   # "-D", f"test/s14_m5000_c0.25_l5/dcfs.txt",
+    #      "-D", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/dcfs.txt",
+    #     # "-T", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/Tm.txt",
     #     "-n", "5",
     #     # "-k", "5",
-    #     #  "-L", "17", "10", "20",
+    #     #  "-L", "1",
+    #     "-l", "100",
     #     "--ninit-segs", "10",
-    #     "--ninit-tm", "4",
+    #     "--ninit-tm", "10",
     #     "--cell-threshold", "25",
-    #     "--order", "weighted-random",
+    #     "--order", "cost",
     #     "-s", f"{seed}",
     #     "-P", f"test/s14_m5000_c0.25_l5/solutions.pkl",
     #     "--profile", "test/profile.prof",
     #     "--collapse",
     #     "--ntree-iter", "1",
+    #     "--sum-condition",
     #     "-O", "test/s14_m5000_c0.25_l5" #"{gtpth}"
 
     # ])

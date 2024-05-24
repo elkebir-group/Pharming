@@ -26,8 +26,11 @@ class Pharming:
                   ninit_Tm = None,
                   cell_threshold=5,
                   max_loops = 3,
-                  thresh_prop = 0
+                  thresh_prop = 0,
+                  sum_condition = True,
                   ) -> None:
+        
+        
         self.verbose =verbose
         self.verbose = True 
         self.rng = np.random.default_rng(seed)
@@ -46,18 +49,28 @@ class Pharming:
         else:
             self.cnatrees = cnatrees
 
-    
+        
         self.start_state = start_state
+        print(f"Start state: {self.start_state}")
+        self.ninit_segs= ninit_segs
+        print(f"# of initial segments: {self.ninit_segs}")
+        self.ninit_Tm = ninit_Tm
+        print(f"# of full inferenece mutation cluster trees {self.ninit_Tm}")
+        self.max_loops = max_loops
+        print(f"Max loops: {self.max_loops}")
         self.top_n = top_n
+        print(f"Top n: {self.top_n}")
         self.ilp = ilp
         self.collapse = collapse
         self.cell_threshold = cell_threshold
+        print(f"Collapse CNA internal nodes: {self.collapse} with cell threshold: {self.cell_threshold}")
         self.order = order
-        self.ninit_segs= ninit_segs
-        self.ninit_Tm = ninit_Tm
-        self.max_loops = max_loops
-        print(f"Max loops: {self.max_loops}")
+        print(f"Integration ordering: {self.order}")
+      
         self.thresh_prop = thresh_prop
+        print(f"CN states threshold proportion of cells per segment: {self.thresh_prop}")
+        self.sum_condition = sum_condition
+        print(f"Filtering mutation cluster trees using the sum condition: {self.sum_condition}")
 
         # if True:
         #     self.ground_truth_tm = np.Inf
@@ -88,9 +101,9 @@ class Pharming:
             #     draw(T_m, f"test/Tm_{i}.png")
                 
      
-
-    def check_dcfs(self, T, delta):
-        # return True
+    @staticmethod
+    def check_dcfs(T, delta):
+   
 
         for u in T:
             desc_dcf = sum( delta[u] for u in  sorted(T.successors(u)))
@@ -98,7 +111,7 @@ class Pharming:
                 return False 
         return True 
 
-    def enumerate_mutcluster_trees(self, delta, ntrees=None):
+    def enumerate_mutcluster_trees(self, delta):
         '''
         Enumerate the set of mutation cluster trees that respect 
         the sum condition of the DCFs
@@ -116,19 +129,12 @@ class Pharming:
             
         trees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
 
-        if ntrees is None:
+        if self.sum_condition:
             return [tree for tree in trees if self.check_dcfs(tree,delta)]
+        else:
+            return trees
         
-        scriptTm = []
-        for tree in trees:
-            if self.check_dcfs(tree, delta):
-                scriptTm.append(tree)
-            
-            if len(scriptTm) == ntrees:
-                return scriptTm
-
-
-        return scriptTm
+   
 
         
     def enumerate_cna_trees(self, cn_states):
@@ -189,6 +195,11 @@ class Pharming:
         else:
             segtrees = utils.concat_and_sort(segtrees)
 
+            print(f" segment | cost | snv | cna")
+        
+            cost,snv, cna = segtrees[0].compute_likelihood(self.data, self.lamb)
+            print(f"|{ell} | {cost} | {snv} | {cna} |")
+
         if self.verbose:
             print(f"Segment {ell} complete!")
 
@@ -222,21 +233,28 @@ class Pharming:
         return segtrees
    
     @utils.timeit_decorator
-    def integrate(self, Tm_edges, segtrees):
+    def integrate(self, Tm_edges, segtrees, init_on_first=False, restarts=1):
             
             print(f"Starting integration for {len(segtrees)} segments...")
-            ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
-                                    collapse=self.collapse, cell_threshold=self.cell_threshold)
+            # ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
+            #                         collapse=self.collapse, cell_threshold=self.cell_threshold)
             
-            Tm = nx.DiGraph(Tm_edges)
+            all_trees = []
+            for i in range(restarts):
+                Tm = nx.DiGraph(Tm_edges)
 
-            #add the normal clone as the root
-            root = [n for n in Tm if Tm.in_degree[n]==0][0]
-            Tm.add_edge(max(Tm)+2, root) 
+                #add the normal clone as the root
+                root = [n for n in Tm if Tm.in_degree[n]==0][0]
+                Tm.add_edge(max(Tm)+2, root) 
+
+                
+                ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
+                                        collapse=self.collapse, cell_threshold=self.cell_threshold,
+                                        init_on_first=init_on_first)
+                
+                top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
+                all_trees.extend(top_trees)
             
-            top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
-
-
             return top_trees
     
 
@@ -279,6 +297,10 @@ class Pharming:
         """
         costs = []
         all_trees = []
+
+        #if given a list of initial trees, then initialize the integrated tree with the first list of tres in the list
+        init_on_first = init_trees is not None
+
         for i,Tm in enumerate(Tm_list):
 
             segtrees = self.segment_trees_inference(Tm, stis)
@@ -286,7 +308,7 @@ class Pharming:
                 tree_list = segtrees
             else:
                 tree_list = [init_trees[i]] + segtrees
-            top_trees = self.integrate(Tm, tree_list )
+            top_trees = self.integrate(Tm, tree_list, init_on_first=init_on_first )
             if len(top_trees) > 0:
                 best_cost = top_trees[0].cost
                 costs.append(best_cost)
@@ -463,6 +485,13 @@ class Pharming:
                 # if i == self.ground_truth_tm:
                 #     print("Including the ground truth mutation cluster tree!")
             
+            best_tree_int = utils.get_top_n(self.clonal_trees, self.top_n)
+            print("Best trees after initial integration ")
+            for i,sol in enumerate(best_tree_int):
+               cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
+               if self.verbose:
+                print(f"{i}: {cost}, {snv}, {cna}")
+            # return best_trees
             print("\nWatering the fields.... ")
             if len(infer_segs) > 0:
                 init_Tm = [scriptTm[i] for i in smallest_indices]
@@ -471,6 +500,10 @@ class Pharming:
             
             best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
 
+            print(f" tree | cost | snv | cna")
+            for i,b in enumerate(best_trees):
+                cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
+                print(f"|{i} | {cost} | {snv} | {cna} |")
                 
             self.post_process(best_trees)
     
@@ -487,6 +520,10 @@ class Pharming:
             
             all_best_trees.append(best_trees)
             best_trees = sorted(best_trees, key=lambda x: x.cost)
+            print(f" tree | cost | snv | cna")
+            for i,b in enumerate(best_trees):
+                cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
+                print(f"|{i} | {cost} | {snv} | {cna} |")
             #check to see if there are any new mutation cluster trees and repeat
             if len(best_trees) > 0:
                 best = best_trees[0]

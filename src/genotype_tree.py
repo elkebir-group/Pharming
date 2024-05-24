@@ -46,6 +46,10 @@ class GenotypeTree:
                 return v
         return None
 
+    def has_loss(self):
+       return all([ g[2] + g[3] ==0 for g in self.desc_genotypes])
+
+
     def get_node_by_cna_genotype(self, cna_geno):
 
         for v in self.tree:

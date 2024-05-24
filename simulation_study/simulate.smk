@@ -99,7 +99,7 @@ rule make_gt:
         genotypes ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/node.tsv",
         data = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     params: 
-        lamb = 1e3
+        lamb = config["lamblikelihood"]
     output:
         png = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.png",
         gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
@@ -119,7 +119,7 @@ rule write_gt_files:
     input:
         gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
         phi = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl",
-    params: 1e3
+    params: config["lamblikelihood"]
     output:
         gt_mut= "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
         gt_mut_loss=   "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mut_loss_clust_gt.csv",

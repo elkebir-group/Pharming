@@ -146,8 +146,13 @@ class Data:
         #         likelihood_dict[v][i, j] = logpmf_entries_per_vaf[k]
 
 
-        
-         
+    def sample_segments(self, k, rng=None,  min_cn_states=1, min_snvs =0):
+        candidates = [ell for ell in self.seg_to_snvs if self.num_snvs(ell) >= min_snvs and self.num_cn_states(ell) >= min_cn_states]
+        if rng is None:
+            rng = np.random.default_rng()
+        return list(rng.choice(candidates, k, replace=False))
+
+
   
 
 # # If needed, convert the result back to a sparse matrix
@@ -260,6 +265,9 @@ class Data:
         df = pd.DataFrame({"index": self.cell_lookup.index, "label": self.cell_lookup.values}).reset_index(drop=True)
         df.to_csv(fname, index=False)
 
+    def export_segment_lookup(self, fname):
+        df = pd.DataFrame({"index": self.seg_lookup.index, "label": self.seg_lookup.values}).reset_index(drop=True)
+        df.to_csv(fname, index=False)
 
     def count_marginals(self, seg):
 

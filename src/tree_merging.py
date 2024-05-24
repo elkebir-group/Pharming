@@ -8,10 +8,10 @@ RANDOM = 'random'
 NSNVS = 'nsnvs'
 INPLACE = "in-place"
 WRANDOM = "weighted-random"
-
+COST = "cost"
 class ClonalTreeMerging:
     def __init__(self, k, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
-         collapse = False, cell_threshold=10, inter_opt=False ):
+         collapse = True, cell_threshold=25, inter_opt=False, init_on_first= False ):
         
         self.k = k
         if rng is not None:
@@ -21,10 +21,10 @@ class ClonalTreeMerging:
 
         self.top_n = top_n
 
-    
+        self.init_on_first = init_on_first
     
         
-        if order not in [RANDOM, NSNVS, INPLACE, WRANDOM]:
+        if order not in [RANDOM, NSNVS, INPLACE, WRANDOM, COST]:
             print("Warning: specified order param not valid, using random instead.")
             self.order = RANDOM
         else:
@@ -69,12 +69,17 @@ class ClonalTreeMerging:
         if self.order == RANDOM:
             ordering = self.rng.permutation(len(tree_list))
             
-        
+        elif self.order == COST:
+            norm_cost = [sol[0].cost/sol[0].m for sol in tree_list]
+            ordering = sorted(range(len(norm_cost)), key=lambda i: norm_cost[i])
+
+
         elif self.order == WRANDOM:
 
             weights = [sol[0].m for sol in tree_list]
             weights = weights/np.sum(weights)
             ordering = self.rng.choice(len(tree_list), size=len(tree_list), replace=False, p=weights)
+           
 
         elif self.order == NSNVS:
             nsnvs = [sol[0].m for sol in tree_list]
@@ -83,6 +88,14 @@ class ClonalTreeMerging:
         else:    
             ordering = [i for i in range(len(tree_list))]
         
+        print("Tree list ordering:")
+        print(ordering)
+        # if self.init_on_first:
+        #     ordered_list = [tree_list[0]]
+        #     for i in ordering:
+        #         if i != 0:
+        #             ordered_list.append(tree_list[i])
+        # else:
         ordered_list = [tree_list[i] for i in ordering]
         cand_merged_lists.append(self.progressive_merge(ordered_list, data, lamb))
         
@@ -146,7 +159,7 @@ class ClonalTreeMerging:
                     candidates.append(merged_tree_list)
                     
             else:
-                print(f"Sol list size: {len(sol_list1)}: {len(sol_list2)}")
+                # print(f"Sol list size: {len(sol_list1)}: {len(sol_list2)}")
                 arguments = [(tree1, tree2, data, lamb) for tree1, tree2 in itertools.product(sol_list1, sol_list2)]
                 with concurrent.futures.ProcessPoolExecutor(max_workers=self.cores) as executor:
                     futures = [executor.submit(self.merge_parallel, *args) for args in arguments]
