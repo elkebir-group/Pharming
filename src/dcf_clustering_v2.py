@@ -74,7 +74,7 @@ def scalar_obj_val(dcf, clust_group_map, q, data):
 #     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100, nsegs=15 ):
+    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100, nsegs=15, thresh_prop= 0.05 ):
         self.nrestarts =nrestarts 
         if rng is None:
             self.rng = np.random.default_rng(seed)
@@ -87,6 +87,7 @@ class DCF_Clustering:
 
         self.cna_restriction = cna_restriction
         self.nsegs= nsegs
+        self.thresh_prop = thresh_prop
         print(f"# Sampled Segs: {self.nsegs} # Restarts: {self.nrestarts}")
 
 
@@ -240,9 +241,10 @@ class DCF_Clustering:
         S = {}
         cn_props ={}
         for ell in segments:
-             cn_props[ell] = self.data.cn_proportions(ell)
-             if (1,1) not in cn_props[ell]:
-                 cn_props[ell][(1,1)] = 0
+             cn_props[ell] =self.data.thresholded_cn_prop(ell, thresh=self.thresh_prop, start_state=(1,1))
+            #  cn_props[ell] = self.data.cn_proportions(ell)
+            #  if (1,1) not in cn_props[ell]:
+            #      cn_props[ell][(1,1)] = 0
 
              #find all copy number states (x,y) and proportions in segment ell
              states = set(cn_props[ell].keys())
@@ -467,7 +469,7 @@ def main(args):
     
     dec = DCF_Clustering(nrestarts=args.num_restarts, seed=args.seed, 
                          cna_restriction=args.restrict_CNA_trees,
-                         nsegs=args.nsegs, verbose=args.verbose)
+                         nsegs=args.nsegs, verbose=args.verbose, thresh_prop=args.thresh_prop )
 
  
 
@@ -565,6 +567,8 @@ if __name__ == "__main__":
     parser.add_argument( "--nfull", type=int, default=1, help="number of solutions for sampled segments to use to initialize full for full inference")
     parser.add_argument("-c", "--restrict_CNA_trees", action="store_true")
     parser.add_argument("-k", "--clusters", type=int, help="number of clusters")
+    parser.add_argument("--thresh-prop", type=float, default=0.05,
+                        help="proportion threshold for determining CN states")
     parser.add_argument("--mink", type=int, default=2, help="minimum number of clusters")
     parser.add_argument("--maxk", type=int, default= 5, help="maximum number of clusters")
     parser.add_argument("-D", "--dcfs", type=str, help="output file for inferred dcfs")
@@ -577,10 +581,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # gtpth = "test"
-    # seed = 13
-    # cov = 0.05
+    # seed = 14
+    # cov = 0.01
     # instance = f"s{seed}_m5000_k25_l5_d2"
-    # folder = f"n1000_c{cov}_e0" 
+    # folder = f"n1000_c{cov}_e0.035" 
     # pth = f"simulation_study/sims"
 
 
@@ -595,7 +599,8 @@ if __name__ == "__main__":
     #     "-g", f"{pth}/{instance}/{folder}/dcfs.txt",
     #     "-s", f"{seed}",
     #     "-r", "100",
-    #     "--nsegs", "10",
+    #     "--thresh-prop", "0.04",
+    #     "--nsegs", "15",
     #     "--nfull", "5",
     #     "-D", f"{gtpth}/dcfs.txt",
     #     "-P", f"{gtpth}/post_dcfs.txt",

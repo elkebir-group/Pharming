@@ -8,3 +8,4 @@ nfull:
 restarts:
   - 100
 
+cn_prop_thresh: 0.05
