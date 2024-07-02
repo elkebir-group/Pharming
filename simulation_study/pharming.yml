@@ -9,8 +9,8 @@ ninit_tm:
   - 10
 
 order:
-  # - "weighted-random"
-  - "cost"
+  - "weighted-random"
+  # - "cost"
 
 topn:
   - 5
@@ -19,9 +19,13 @@ topn:
 lamb:
   - 1000
   # - 100
+  # - 500
+  
 
 
 # max_loops: 5
 max_loops: 1
 
-thresh_prop: 0.0
+thresh_prop: 0.05
+
+cell_threshold: 25

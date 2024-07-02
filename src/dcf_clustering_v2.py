@@ -74,8 +74,11 @@ def scalar_obj_val(dcf, clust_group_map, q, data):
 #     return -obj
 
 class DCF_Clustering:
-    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, rng=None, iterations=100, nsegs=15, thresh_prop= 0.05 ):
+    def __init__(self, nrestarts=25,  seed=1026, verbose=False, cna_restriction=True, 
+                 rng=None, iterations=100, nsegs=15, thresh_prop= 0.05,
+                  max_cn_states=4 ):
         self.nrestarts =nrestarts 
+        self.max_cn_states= max_cn_states
         if rng is None:
             self.rng = np.random.default_rng(seed)
         else:
@@ -360,8 +363,9 @@ class DCF_Clustering:
             for j, q in CLUSTER_ASSIGNMENTS[ell].items():
                 clust_assign[q].append(j)
         
-        if len(clust_assign[q]) < 0:
-            del dcfs[q]
+        for q in clust_assign:
+            if len(clust_assign[q]) < 0:
+                del dcfs[q]
 
         if self.verbose:
             print(f"Restart complete with likelihood: {new_likelihood/m}")
@@ -372,7 +376,7 @@ class DCF_Clustering:
             # for q in clust_assign:
             #     print(f"{q}: {dcfs[q]}: {len(clust_assign[q])} SNVs")
 
-        return new_likelihood/m, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS
+        return new_likelihood/m, dcfs, CNA_tree, CLUSTER_ASSIGNMENTS, TREE_ASSIGNMENTS, new_likelihood, m
 
     @staticmethod         
     def elbow_criteria_model_selection(objs, mink, maxk, ubleft=0.06):
@@ -414,7 +418,8 @@ class DCF_Clustering:
             if cores <= 1:
                 for i in range(self.nrestarts):
                     init_dcfs =self.init_cluster_centers(k)
-                    init_segs = data.sample_segments(self.nsegs, self.rng)
+                    init_segs = data.sample_segments(self.nsegs, self.rng, 
+                                                     max_cn_states=self.max_cn_states, min_snvs=1, thresh=self.thresh_prop)
                     
                     results = self.decifer(data, init_dcfs, init_segs)
                     all_results.append(results)
@@ -424,7 +429,9 @@ class DCF_Clustering:
                 
             
             else:
-                args = [(data, self.init_cluster_centers(k), data.sample_segments(self.nsegs, self.rng)) for _ in range(self.nrestarts)]
+                args = [(data, self.init_cluster_centers(k), data.sample_segments(self.nsegs, self.rng, 
+                                                     max_cn_states=self.max_cn_states, 
+                                                     min_snvs=1,thresh=self.thresh_prop)) for _ in range(self.nrestarts)]
                 with multiprocessing.Pool(cores) as pool:
                     all_results = pool.starmap(self.decifer, args)
                     # print(results)
@@ -436,7 +443,12 @@ class DCF_Clustering:
             for res in sorted_results:
                 print(f"Likelihood: {res[0]} DCFs: {res[1]}")
             
-            all_results = [self.decifer(data, res[1] , data.segments) for res in sorted_results]
+            all_segments = [ell for ell in data.seg_to_snvs if data.num_snvs(ell) >= 1 and 
+                        data.num_cn_states(ell, self.thresh_prop) <= self.max_cn_states]
+            
+       
+
+            all_results = [self.decifer(data, res[1] , all_segments) for res in sorted_results]
             sorted_results = sorted(all_results, key=lambda x: x[0])
             for res in sorted_results:
                 print(f"Likelihood: {res[0]} DCFs: {res[1]}")
@@ -469,7 +481,8 @@ def main(args):
     
     dec = DCF_Clustering(nrestarts=args.num_restarts, seed=args.seed, 
                          cna_restriction=args.restrict_CNA_trees,
-                         nsegs=args.nsegs, verbose=args.verbose, thresh_prop=args.thresh_prop )
+                         nsegs=args.nsegs, verbose=args.verbose, thresh_prop=args.thresh_prop,
+                          max_cn_states=args.max_cn_states )
 
  
 
@@ -564,6 +577,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output_path", type=str, help="Path to the output  data")
     parser.add_argument("-r", "--num-restarts", type=int, help="Number of restarts")
     parser.add_argument( "--nsegs", type=int, default=15, help="number of segments to sample each restart")
+    parser.add_argument( "--max-cn-states", type=int, default=4, help="max number of cn states in a segment")
     parser.add_argument( "--nfull", type=int, default=1, help="number of solutions for sampled segments to use to initialize full for full inference")
     parser.add_argument("-c", "--restrict_CNA_trees", action="store_true")
     parser.add_argument("-k", "--clusters", type=int, help="number of clusters")
@@ -610,6 +624,26 @@ if __name__ == "__main__":
 
     # ])
 
+    # args = parser.parse_args([
+
+    #     "-d", "/scratch/data/leah/Pharming/dlp/input/data.pkl",
+    #     "-k", "4",
+    #     # "--mink", "4",
+    #     # "--maxk", "6",
+    #     "-j", "5",
+  
+    #     "-s", "4",
+    #     "-r", "100",
+    #     "--thresh-prop", "0.05",
+    #     "--nsegs", "20",
+    #     "--nfull", "5",
+    #     "-D", f"../test/dcfs.txt",
+  
+    #     # "-o",  f"{gtpth}/results.pkl",
+    #     "--verbose",
+    #     "-c"
+
+    # ])
 
     # Call the main function with provided arguments
     main(args)

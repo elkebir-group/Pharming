@@ -14,6 +14,10 @@ from tree_merging import ClonalTreeMerging
 import utils
 from dcf_clustering_v2 import DCF_Clustering
 from copy import deepcopy 
+import concurrent.futures
+import time
+import stopit
+
 
 
         
@@ -28,6 +32,7 @@ class Pharming:
                   max_loops = 3,
                   thresh_prop = 0,
                   sum_condition = True,
+                  timeout = 20
                   ) -> None:
         
         
@@ -53,9 +58,9 @@ class Pharming:
         self.start_state = start_state
         print(f"Start state: {self.start_state}")
         self.ninit_segs= ninit_segs
-        print(f"# of initial segments: {self.ninit_segs}")
+        print(f"Max # of initial segments: {self.ninit_segs}")
         self.ninit_Tm = ninit_Tm
-        print(f"# of full inferenece mutation cluster trees {self.ninit_Tm}")
+        print(f"Max # of full inference mutation cluster trees {self.ninit_Tm}")
         self.max_loops = max_loops
         print(f"Max loops: {self.max_loops}")
         self.top_n = top_n
@@ -63,6 +68,7 @@ class Pharming:
         self.ilp = ilp
         self.collapse = collapse
         self.cell_threshold = cell_threshold
+
         print(f"Collapse CNA internal nodes: {self.collapse} with cell threshold: {self.cell_threshold}")
         self.order = order
         print(f"Integration ordering: {self.order}")
@@ -71,6 +77,7 @@ class Pharming:
         print(f"CN states threshold proportion of cells per segment: {self.thresh_prop}")
         self.sum_condition = sum_condition
         print(f"Filtering mutation cluster trees using the sum condition: {self.sum_condition}")
+
 
         # if True:
         #     self.ground_truth_tm = np.Inf
@@ -135,8 +142,30 @@ class Pharming:
             return trees
         
    
+    def enumerate_cna_trees_python(self, cn_states):
+        cn_states = [cn for cn in cn_states if cn != self.start_state]
 
-        
+
+        G = nx.DiGraph()
+        G.add_nodes_from(cn_states)
+        for u in G.nodes:
+            for v in G.nodes:
+                if u == v:
+                    continue
+                if (u[0] == 0 and not v[0] > 0) or (u[1] == 0 and not v[1] > 0):
+                    continue
+                G.add_edge(u,v, weight=1)
+
+        G.add_node(self.start_state)
+        for u in cn_states:
+            G.add_edge(self.start_state, u,weight=1)
+
+        cnatrees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
+        scriptS= list(cnatrees)
+        return scriptS
+       
+
+
     def enumerate_cna_trees(self, cn_states):
    
 
@@ -203,7 +232,8 @@ class Pharming:
         if self.verbose:
             print(f"Segment {ell} complete!")
 
-       
+        # best_tree = segtrees[0]
+        # best_tree.png(f"test/s11/inf{ell}.png")
         return segtrees
 
 
@@ -217,6 +247,7 @@ class Pharming:
 
 
         if self.cores  <= 1:
+        # if True:
             segtrees = []
             for ell in stis:
                 # try:
@@ -230,10 +261,11 @@ class Pharming:
             with multiprocessing.Pool(processes=self.cores) as pool:                
                 segtrees = pool.starmap(self.fit_segment, arguments, chunksize=1)
         
+ 
         return segtrees
    
     @utils.timeit_decorator
-    def integrate(self, Tm_edges, segtrees, init_on_first=False, restarts=1):
+    def integrate(self, Tm_edges, segtrees, restarts=1):
             
             print(f"Starting integration for {len(segtrees)} segments...")
             # ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
@@ -248,25 +280,33 @@ class Pharming:
                 Tm.add_edge(max(Tm)+2, root) 
 
                 
-                ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order=self.order,
-                                        collapse=self.collapse, cell_threshold=self.cell_threshold,
-                                        init_on_first=init_on_first)
+                ctm = ClonalTreeMerging(self.k, self.rng, top_n=self.top_n, order='in-place',
+                                        collapse=self.collapse, cell_threshold=self.cell_threshold)
                 
                 top_trees = ctm.fit(segtrees, Tm, self.data, self.lamb, cores=self.cores)
                 all_trees.extend(top_trees)
             
             return top_trees
-    
+
+    def order_segments(self, segs:set):
+            
+            segs = [ell for ell in segs]
+            weights = [self.data.num_snvs(ell) for ell in segs]
+            weights = weights/np.sum(weights)
+           
+            ordering = self.rng.choice(len(segs), size=len(segs), replace=False, p=weights)   
+            seg_order = [segs[i] for i in ordering]
+            return  seg_order
 
     def partition_segments(self, segments,  min_cn_states=2):
         if self.ninit_segs is None or self.ninit_segs > len(segments):
             init_segs = [ell for ell in segments 
-                         if self.data.num_cn_states(ell, self.thresh_prop) >= min_cn_states and self.data.num_snvs(ell) > 0]
+                         if self.data.num_cn_states(ell, self.thresh_prop, include_start_state=False) >= min_cn_states and self.data.num_snvs(ell) > 0]
 
         else:
       
             init_segs = sorted([ell for ell in segments if 
-                                self.data.num_cn_states(ell, self.thresh_prop) >= min_cn_states],
+                                self.data.num_cn_states(ell, self.thresh_prop, include_start_state=False) >= min_cn_states],
                                 reverse=True, key= lambda x: self.data.num_snvs(x))
             if len(init_segs) > self.ninit_segs:
                 init_segs = init_segs[:self.ninit_segs]
@@ -277,16 +317,26 @@ class Pharming:
 
         
         remaining_segs = set(segments) -  init_segs
-        infer_segs = set([ell for ell in remaining_segs if self.data.num_cn_states(ell, self.thresh_prop) > 1 and self.data.num_snvs(ell)> 0])
-        place_segs = set([ell for ell in segments if self.data.num_cn_states(ell, self.thresh_prop)==1 and self.data.num_snvs(ell)> 0])
+        infer_segs = set([ell for ell in remaining_segs if self.data.num_cn_states(ell, self.thresh_prop, include_start_state=False) > 1 and self.data.num_snvs(ell)> 0])
+        place_segs = set([ell for ell in segments if self.data.num_cn_states(ell, self.thresh_prop, include_start_state=False)==1 and self.data.num_snvs(ell)> 0])
 
         no_snvs_segs = set([ell for ell in segments if  self.data.num_snvs(ell) ==0])
 
-        
+        print("Init Segs:")
+        print(init_segs)
+
+        print("Infer Segs:")
+        print(infer_segs)
+
+        print("Place Segs:")
+        print(place_segs)
+
+        print("No Snvs Segs:")
+        print(no_snvs_segs)
         return init_segs, infer_segs, place_segs, no_snvs_segs
       
 
-    def infer(self, Tm_list, stis, init_trees=None):
+    def infer(self, Tm_list, stis, init_trees=None, init_order=None):
         """
         infer a clonal tree for a list of mutation cluster trees
         and a subset of segments.  
@@ -301,14 +351,27 @@ class Pharming:
         #if given a list of initial trees, then initialize the integrated tree with the first list of tres in the list
         init_on_first = init_trees is not None
 
+        if init_order is not None:
+            order_dict = {ell: i for i,ell in enumerate(init_order)}
+
         for i,Tm in enumerate(Tm_list):
+            print(f"Staring Tm {i}: {list(Tm.edges)}")
+            # if set([(2, 0), (2, 1), (3, 2)]) != set(Tm.edges):
+            #     continue
 
             segtrees = self.segment_trees_inference(Tm, stis)
+      
+            
+            if init_order is not None:
+                segtrees = sorted(segtrees, key=lambda tl: order_dict[list(tl[0].ct.get_segments())[0]])
+        
             if init_trees is None:
                 tree_list = segtrees
             else:
-                tree_list = [init_trees[i]] + segtrees
-            top_trees = self.integrate(Tm, tree_list, init_on_first=init_on_first )
+                tree_list =  [init_trees[i]] + segtrees
+
+            top_trees = self.integrate(Tm, tree_list)
+          
             if len(top_trees) > 0:
                 best_cost = top_trees[0].cost
                 costs.append(best_cost)
@@ -317,6 +380,7 @@ class Pharming:
                 print(f"Integration failed for Tm_{i}")
                 all_trees.append([])
                 costs.append(np.Inf)
+            print(f"Tm {i} complete!")
 
         return all_trees, costs 
 
@@ -334,20 +398,27 @@ class Pharming:
         for ell in segments:
      
             rho[ell] = {}
-            cn_states, _ = self.data.cn_states_by_seg(ell)
-            state = cn_states.pop()
+            cn_prop = self.data.thresholded_cn_prop(ell, self.thresh_prop,
+                                                          self.start_state, include_start_state=False)
+            assert len(cn_prop) == 1
+            for k in cn_prop:
+                state= k 
+                
             states[ell] = state
             T_SNV = nx.DiGraph()
      
-      
+
             T_SNV.add_edge((*state, 0,0), (*state, 1,0))
+            if state != self.start_state:
+                T_SNV.add_edge((*self.start_state, 0,0), (*state, 0,0))
        
             rho[ell] = {q: [T_SNV] for q in range(self.k)}
             seg_to_snvs[ell] = self.data.seg_to_snvs[ell]
 
         for sol in solutions:
-            sol.ct.assign_genotypes(self.data, sol.phi, rho, seg_to_snvs, states)
+            sol.ct.assign_genotypes(self.data, sol.phi, rho, seg_to_snvs, states, start_state=self.start_state)
             sol.ct.add_rho(rho)
+            sol.update_segments()
 
     def place_cnas(self, solutions, segments):
 
@@ -357,23 +428,38 @@ class Pharming:
            states, counts = self.data.cn_states_by_seg(ell)
            setS = self.enumerate_cna_trees(states)
 
-    # @utils.timeit_decorator
-    def preprocess_helper(self, ell, delta):
 
-        stis =[]
+
+    def preprocess_helper(self, ell, delta):
+        print(f"Segment {ell}: starting preprocessing..")
+  
+
+        stis = []
         cn_prop = self.data.thresholded_cn_prop(ell, self.thresh_prop, self.start_state)
         cn_states = set(cn_prop.keys())
-        if len(self.cnatrees) == 0 or ell not in self.cnatrees:
-            cnatrees = self.enumerate_cna_trees(cn_states)
-        else:
-            cnatrees = [self.cnatrees[ell]]
 
-            # Tm_edges = list(T_m.edges)
-        for S in cnatrees:
-            st =STI(ell, S, delta, lamb=self.lamb, ilp=self.ilp)
-            st.precompute_costs(self.data)
-            stis.append(st)
+        try:
+        
+            if len(self.cnatrees) == 0 or ell not in self.cnatrees:
+                # cnatrees =  self.enumerate_cna_trees_python(cn_states)
+                 cnatrees =  self.enumerate_cna_trees(cn_states)
+            else:
+                cnatrees = [self.cnatrees[ell]]
+            for S in cnatrees:
+                st = STI(ell, S, delta, lamb=self.lamb, ilp=self.ilp,prop_thresh=self.thresh_prop, cell_threshold=self.cell_threshold)
+                st.precompute_costs(self.data)
+                stis.append(st)
+        
+
+           
+            print(f"Segment {ell}: preprocessing complete")
+        except Exception as e:
+            print(f"Segment {ell} timed out enumerating CNA trees, skipping..")
+
+ 
         return ell, stis
+
+
     
     def infer_dcfs(self):
        dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
@@ -457,8 +543,9 @@ class Pharming:
         delta = self.delta.copy()
  
         while loop < self.max_loops and len(scriptTm) > 0:
-            print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
             print(f"DCFs delta: {delta}")
+            print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
+           
             stis_init = self.preprocess(init_segs, delta)
 
             allscriptTm += scriptTm
@@ -466,8 +553,13 @@ class Pharming:
     
     
             print("Planting the seeds.... ")
-            init_trees, costs = self.infer(scriptTm, stis_init)
+            init_order = self.order_segments(init_segs)
+            print("Segment integration order:")
+            print(init_order)
+            init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
+
             self.clonal_trees = init_trees
+        
 
             # return utils.concat_and_sort(init_trees)
 
@@ -489,14 +581,23 @@ class Pharming:
             print("Best trees after initial integration ")
             for i,sol in enumerate(best_tree_int):
                cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
+              
+            #    sol.png(f"test/s11/intSol{i}.png")
+            #    print(i)
+            #    print("cna trees 7 and 8")
+            #    print(sol.ct.get_cna_tree(7).edges)
+            #    print(sol.ct.get_cna_tree(8).edges)
                if self.verbose:
                 print(f"{i}: {cost}, {snv}, {cna}")
             # return best_trees
             print("\nWatering the fields.... ")
             if len(infer_segs) > 0:
                 init_Tm = [scriptTm[i] for i in smallest_indices]
+                init_order = self.order_segments(infer_segs)
                 stis_infer = self.preprocess(infer_segs, delta)
-                self.clonal_trees, costs = self.infer(init_Tm, stis_infer, [init_trees[i] for i in smallest_indices] )
+                self.clonal_trees, costs = self.infer(init_Tm, stis_infer, 
+                                                      [init_trees[i] for i in smallest_indices], 
+                                                      init_order = init_order )
             
             best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
 
@@ -549,6 +650,9 @@ class Pharming:
             
         
         best_trees = utils.get_top_n(all_best_trees, self.top_n)
+        for sol in best_trees:
+            sol.prune_leaves(self.k)
+
 
 
         return  best_trees
@@ -573,7 +677,7 @@ class Pharming:
 
         for sol in sol_list:
             sol.optimize(self.data, self.lamb)
-            # sol.prune()
+            
        
 
 

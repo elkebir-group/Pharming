@@ -146,11 +146,14 @@ class Data:
         #         likelihood_dict[v][i, j] = logpmf_entries_per_vaf[k]
 
 
-    def sample_segments(self, k, rng=None,  min_cn_states=1, min_snvs =0):
-        candidates = [ell for ell in self.seg_to_snvs if self.num_snvs(ell) >= min_snvs and self.num_cn_states(ell) >= min_cn_states]
+    def sample_segments(self, k, rng=None,  max_cn_states=1, min_snvs =0, thresh=0):
+        candidates = [ell for ell in self.seg_to_snvs if self.num_snvs(ell) >= min_snvs and 
+                      self.num_cn_states(ell, thresh) <= max_cn_states]
+        print(f"Total candidates: {len(candidates)}")
         if rng is None:
             rng = np.random.default_rng()
-        return list(rng.choice(candidates, k, replace=False))
+        samples = list(rng.choice(candidates, k, replace=False))
+        return samples
 
 
   
@@ -321,14 +324,14 @@ class Data:
         # Convert the defaultdict to a regular dictionary
         return dict(copy_states_dict)
     
-    def thresholded_cn_prop(self, seg, thresh=0, start_state=(1,1) ):
+    def thresholded_cn_prop(self, seg, thresh=0, start_state=(1,1), include_start_state=True ):
         cn_props = self.cn_proportions(seg)
-        cn_states = [state for state, prop in cn_props.items() if prop >= thresh or state==start_state]
+        cn_states = [state for state, prop in cn_props.items() if prop >= thresh]
         
         norm = sum(cn_props[s] for s in cn_states)
         norm_cn_props = {state: cn_props[state]/norm for state in cn_states}
         
-        if start_state not in norm_cn_props:
+        if include_start_state and start_state not in norm_cn_props:
             norm_cn_props[start_state] =0 
         return norm_cn_props
 
@@ -343,10 +346,10 @@ class Data:
 
         return set(cn_states), item_counts 
 
-    def num_cn_states(self, seg, thresh=0):
-        cn_prop =  self.cn_proportions(seg)
+    def num_cn_states(self, seg, thresh=0, start_state=(1,1), include_start_state=False):
+        cn_prop =  self.thresholded_cn_prop(seg, thresh, start_state, include_start_state)
 
-        return len([s for s in cn_prop if cn_prop[s] >= thresh])
+        return len(cn_prop)
 
     def cn_proportions(self, seg):
         cn_props = {}

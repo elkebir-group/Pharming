@@ -31,10 +31,13 @@ def main(args):
         else:
             segments = args.segments
 
+    # segments = [ell for ell in segments if ell not in [226,94, 341]]
+        
+
     print("\t".join(["seg", "snvs", "cn states", "thresh" ] ))
     print("-------------------------------------------")
     for ell in segments:
-        print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}\t{len(dat.thresholded_cn_prop(ell, thresh=args.thresh_prop))}")
+        print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}\t{len(dat.thresholded_cn_prop(ell, thresh=args.thresh_prop, include_start_state=False))}")
     
 
     if args.delta is not None:
@@ -77,6 +80,11 @@ def main(args):
     else:
         T_m = None 
 
+    if args.collapse and args.cell_threshold is None:
+        cell_threshold  = int(args.thresh_prop*dat.N)
+    else:
+        cell_threshold = args.cell_threshold 
+
     ph = Pharming(dcfs = delta,
                 cnatrees = cnatrees,
                 k= k, 
@@ -87,7 +95,7 @@ def main(args):
                 order = args.order,
                 ninit_segs = args.ninit_segs,
                 ninit_Tm = args.ninit_tm,
-                cell_threshold= args.cell_threshold,
+                cell_threshold= cell_threshold,
                 max_loops= args.ntree_iter,
                 thresh_prop = args.thresh_prop,
                 sum_condition = args.sum_condition,
@@ -95,6 +103,22 @@ def main(args):
 
   
     solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, Tm=T_m)
+
+    if len(solutions) >0:
+        sol = solutions[0]
+        if args.tree is not None:
+            sol.drawPrettyTree(args.tree, args.labels)
+
+        print("Model selection scores:")
+        icl, bic = solutions[0].ICL(dat, args.lamb)
+        if args.model_selection is not None:
+            with open(args.model_selection, "w+") as file:
+                file.write("solution,ICL,BIC\n")
+                for i, sol in enumerate(solutions):
+                    icl, bic = sol.ICL(dat, args.lamb)
+                    file.write(f"{i},{icl},{bic}\n")
+                    print(f"{i}: ICL: {icl} BIC: {bic}")
+
 
 
 
@@ -157,7 +181,7 @@ if __name__ == "__main__":
                         help="number of mutation cluster trees to consider after pruning with initial segs")
     parser.add_argument("--ntree-iter", type=int, default=1,
                         help="number of iterations to check for new mutation cluster tree to use for inference")
-    parser.add_argument("--thresh-prop", type=float, default=0.0,
+    parser.add_argument("--thresh-prop", type=float, default=0.05,
                         help="proportion threshold for determining CN states")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place', 'cost'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
@@ -183,6 +207,12 @@ if __name__ == "__main__":
                         help="directory where output files should be written")
     parser.add_argument( "--all-sol", type=str,
         help = "filename of object to pickle all top clonal trees inferred from each mutation cluster tree")
+    parser.add_argument( "--model-selection", type=str,
+        help = "filename to write model selection information")
+    parser.add_argument( "--tree", type=str,
+        help = "filename to draw a pretty clonal tree")
+    parser.add_argument( "--labels", type=str,
+        help = "filename to save the encoding for the labels of the pretty tree.")
     parser.add_argument("--profile", type=str)
 
 
@@ -192,10 +222,11 @@ if __name__ == "__main__":
 
 
     # gtpth = "test"
-    # seed = 14
-    # cov = 0.25
+    # seed = 11
+    # cov = 0.01
+    # err = 0.035
     # instance = f"s{seed}_m5000_k25_l5_d2"
-    # folder = f"n1000_c{cov}_e0" 
+    # folder = f"n1000_c{cov}_e{err}" 
     # pth = f"simulation_study/sims"
 
 
@@ -203,30 +234,145 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "10",
+    #     "-j", "1",
     #     # "-D", "test/test_dcfs_s12.txt",
-    #     # "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
+    #     "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
     #                   # "-D", f"test/s14_m5000_c0.25_l5/dcfs.txt",
-    #      "-D", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/dcfs.txt",
-    #     # "-T", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/Tm.txt",
+    #     #  "-D", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/dcfs.txt",
+    #     # "-T", f"simulation_study/sims/{instance}/{folder}/Tm.txt",
     #     "-n", "5",
     #     # "-k", "5",
-    #     #  "-L", "1",
-    #     "-l", "100",
+    #     #  "-L", "2", "7", "11", "0", 
+    #     "-l", "1000",
+    #     "--thresh-prop", "0.05",
     #     "--ninit-segs", "10",
     #     "--ninit-tm", "10",
     #     "--cell-threshold", "25",
-    #     "--order", "cost",
+    #     "--order", "weighted-random",
     #     "-s", f"{seed}",
-    #     "-P", f"test/s14_m5000_c0.25_l5/solutions.pkl",
+    #     "-P", f"test/solutions.pkl",
     #     "--profile", "test/profile.prof",
     #     "--collapse",
     #     "--ntree-iter", "1",
     #     "--sum-condition",
-    #     "-O", "test/s14_m5000_c0.25_l5" #"{gtpth}"
+    #     "--model-selection", "test/model_selection.csv",
+    #     "-O", "test/s11" #"{gtpth}"
 
     # ])
 
+
+    ######## dlp
+    # gtpth = "dlp"
+    # sample = "SA922"
+    # seed = 20
+    # nsegs = 50
+    # k =4
+    # instance = f"s{seed}_r{nsegs}"
+
+    # pth = f"{gtpth}/{sample}"
+
+
+
+    # args = parser.parse_args([
+
+    #     "-d", f"{pth}/input/data.pkl",
+    #     "-j", "10",
+    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
+    #     "-n", "5",
+    #     "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
+    #     # "-k", f"{k}",
+    #     #  "-L", "341", # "376"
+    #     "-l", "1000",
+    #     "--thresh-prop", "0.05",
+    #     "--ninit-segs", "10",
+    #     "--ninit-tm", "10",
+    #     "--cell-threshold", "10",
+    #     "--order", "weighted-random",
+    #     "-s", f"{seed}",
+    #     "-P", f"{gtpth}/test/solutions.pkl",
+    #     "--collapse",
+    #     "--ntree-iter", "1",
+    #     "--sum-condition",
+    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
+    #     "-O",  f"{gtpth}/test"
+
+    # ])
+
+
+    # gtpth = "dlp"
+    # seed = 20
+    # nsegs = 50
+    # k =6
+    # instance = f"s{seed}_r{nsegs}"
+
+    # pth = f"{gtpth}"
+
+
+
+    # args = parser.parse_args([
+
+    #     "-d", f"{pth}/input/data.pkl",
+    #     "-j", "10",
+    #     "-D", f"{pth}/decifer/k{k}/post_dcfs.txt",
+    #     "-n", "5",
+    #     "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
+    #     # "-k", f"{k}",
+    #     #  "-L", "341", # "376"
+    #     "-l", "1000",
+    #     "--thresh-prop", "0.05",
+    #     "--ninit-segs", "10",
+    #     "--ninit-tm", "10",
+    #     "--cell-threshold", "25",
+    #     "--order", "weighted-random",
+    #     "-s", f"{seed}",
+    #     "-P", f"{gtpth}/test/solutions.pkl",
+    #     "--collapse",
+    #     "--ntree-iter", "1",
+    #     "--tree", f"{pth}/test/prettyTree.png",
+    #     "--labels", f"{pth}/test/labels.csv",
+    #     "--sum-condition",
+    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
+    #     "-O",  f"{gtpth}/test"
+
+    # ])
+
+
+    # gtpth = "act/TN3"
+    # seed = 20
+    # nsegs = 50
+    # k =9
+    # instance = f"s{seed}_r{nsegs}"
+
+    # pth = f"{gtpth}"
+
+
+
+    # args = parser.parse_args([
+
+    #     "-d", f"{pth}/pharming_data/data.pkl",
+    #     "-j", "10",
+    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
+    #     "-n", "5",
+    #     # "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
+    #     # "-k", f"{k}",
+    #     #  "-L", "341", # "376"
+    #     "-l", "1000",
+    #     "--thresh-prop", "0.05",
+    #     "--ninit-segs", "10",
+    #     "--ninit-tm", "10",
+    #     "--cell-threshold", "25",
+    #     "--order", "weighted-random",
+    #     "-s", f"{seed}",
+    #     "-P", f"{gtpth}/test/solutions.pkl",
+    #     "--collapse",
+    #     "--ntree-iter", "1",
+    #     "--tree", f"{pth}/test/prettyTree.png",
+    #     "--labels", f"{pth}/test/labels.csv",
+    #     "--sum-condition",
+    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
+    #     "-O",  f"{gtpth}/test"
+
+    # ])
     profiler = cProfile.Profile()
     profiler.enable()
 

@@ -94,6 +94,8 @@ if __name__ == "__main__":
         help="filename of mutation label to export")
     parser.add_argument("-l", "--cell-lookup", type=str,
         help="filename of cell label to export")
+    parser.add_argument("-s", "--segment-lookup", type=str,
+        help="filename of segment label to export")
     # parser.add_argument("-i", "--index", type=str, default="cell",
     #     help="index of copy number profiles")
     # parser.add_argument("-t", "--tolerance",  type=float, default=0.0,
@@ -132,3 +134,6 @@ if __name__ == "__main__":
     
     if args.cell_lookup is not None:
         dat.export_cell_lookup(args.cell_lookup)
+
+    if args.segment_lookup is not None:
+        dat.export_segment_lookup(args.segment_lookup)

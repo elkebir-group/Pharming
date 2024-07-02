@@ -2,11 +2,15 @@ library(tidyverse)
 library(yaml)
 library(glue)
 figpath <- "figures"
+
+theme_set(theme_grey(base_size = 19))
 xvert <- theme(axis.text.x = element_text(
     angle = 90,  # Rotate labels to be vertical
     hjust = 1,   # Adjust horizontal justification
     vjust = 0.5  # Adjust vertical justification
   ))
+
+meth_cols <- c("Phertilizer"= "#339746", "Pharming"= "#974EA3")
 compute_acc <- function(df){
   df <- df %>%
     mutate(anc_mut_pairs = anc_mut_TP + anc_mut_FN,
@@ -32,29 +36,36 @@ compute_acc <- function(df){
 # metric_names <-  c("Ancestral Pair\nRecall", "Incomparable Pair\nRecall",
 #                 "Clustered Pair\nRecall", "Cell\nARI", "CNA Tree\nAccuracy")
 
-metric_labels <- c(" SNV ancestral pair\n recall (APR)",
+metric_labels <- c(      "Cell placement\naccuracy",
+                         "CNA tree accuracy",
+                         "CNA state similarity",
+                         "SNV placement\naccuracy",
+                         "SNV tree accuracy",
+                         "SNV genotype similarity",
+                  " SNV ancestral pair\n recall (APR)",
                   "SNV incomparable pair\nrecall (IPR)" ,
                   "SNV clustered pair\nrecall (CPR)",
-                  "SNV accuracy",
-                  "cell ancestral pair\n recall (APR)",
-                  "cell incomparable pair\nrecall (IPR)" ,
-                  "cell clustered pair\nrecall (CPR)",
-                  "cell accuracy",
-                  "CNA tree accuracy",
-                  "SNV tree accuracy",
-                  "CNA gentoype similarity",
-                  "SNV genotype similarity",
+                  "Cell ancestral pair\n recall (APR)",
+                  "Cell incomparable pair\nrecall (IPR)" ,
+                  "Cell clustered pair\nrecall (CPR)",
                   "SNV presence similarity",
                   "SNV genotype allele-specific similarity"  )
 
-metric_names <- c("anc_mut_recall", "inc_mut_recall", "mut_recall", "mut_sum_score",
-  "anc_cell_recall", "inc_cell_recall", "cell_recall", "cell_sum_score",
-  "cna_tree_accuracy", "snv_tree_accuracy",
-  "cna_genotype_similarity", "genotype_similarity",
+metric_names <- c( "cell_sum_score",
+                   "cna_tree_accuracy", 
+                   "cna_genotype_similarity", 
+                   "mut_sum_score",
+                   "snv_tree_accuracy",
+                   "genotype_similarity",
+               
+                 
+                  
+                   "anc_mut_recall", "inc_mut_recall", "mut_recall",
+  "anc_cell_recall", "inc_cell_recall", "cell_recall",
   "genotype_pres_similarity","genotype_allele_spec_similarity"
 )
 col_to_name_map <- data.frame(name=metric_names,
-                              full_name = metric_labels)
+                              full_name = factor(metric_labels, levels=metric_labels, ordered = TRUE))
 header <- read.csv("cpp/metric_header.csv")
 
 
@@ -72,6 +83,36 @@ read_csv_wrapper <- function(folder, prefix, suffix){
 
   return(df)
 }
+read_csv_header <- function(folder ,prefix, suffix){
+  fname <- file.path(prefix, folder, suffix)
+  if(file.exists(fname)){
+    df<- read.csv(fname)
+
+    df <- df %>%
+      mutate(folder = folder) 
+  }else{
+    print(glue("{fname} does not exist!"))
+    df <- data.frame()
+  }
+
+return(df)
+}
+
+read_table_wrapper <- function(folder ,prefix, suffix){
+  fname <- file.path(prefix, folder, suffix)
+  print(fname)
+  if(file.exists(fname)){
+    df<- read.table(fname, header=T)
+    
+    df <- df %>%
+      mutate(folder = folder) 
+  }else{
+    print(glue("{fname} does not exist!"))
+    df <- data.frame()
+  }
+  
+  return(df)
+}
 
 bpath <- "/scratch/leah/Pharming"
 config = yaml.load_file("simulate.yml")
@@ -85,16 +126,24 @@ runs <- expand.grid(cells=config$cells,
                     s = seeds, 
                     segs=config$nsegs,
                     dirch = config$dirch) %>%
+                    mutate(err = as.character(err)) %>%
                     mutate_all(factor)
 
 
 phert_runs <- runs %>% 
     mutate(folder = glue("s{s}_m{snvs}_k{segs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
-phert <- bind_rows(lapply(phert_runs$folder,  read_csv_wrapper, "phertilizer/sims", "metrics.csv")) %>%
+ 
+phert <- bind_rows(lapply(phert_runs$folder,  read_csv_wrapper, "phertilizer/sims3", "metrics.csv")) %>%
   group_by(folder) %>%
-  mutate(clust_method = "CN", method="Phertilizer", dcf_values="UMAP") %>% inner_join(phert_runs)
+  mutate(clust_method = "CN", method="Phertilizer") %>% compute_acc() %>% inner_join(phert_runs) 
 
 saveRDS(compute_acc(phert), "data/phertilizer.rds")
+
+phert_time <- bind_rows(lapply(phert_runs$folder,  read_table_wrapper, "phertilizer/sims3", "benchmark.log")) %>%
+  group_by(folder) %>%
+  mutate( method="Phertilizer") %>% rename(seconds=s) %>% inner_join(phert_runs) 
+
+
 
 
 pharm_runs <-  expand.grid(
@@ -103,81 +152,131 @@ pharm_runs <-  expand.grid(
     order = pharming_config$order,
     topn = pharming_config$topn,
     lamb = pharming_config$lamb,
-    clust_method = c("gt", "dcf_clust_gtk")
+    clust_method = c("gt", paste("dcf_clustk", 3:6, sep=""))
     ) %>% 
     merge(runs)  %>%
     mutate_all(factor)   %>%
   mutate(folder = glue("{clust_method}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{segs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"))
 
-# dcf_vals = c("post_dcfs", "dcfs"),
-pharm_res_old <-readRDS("data/pharm_res_5-16-2024.rds")
 
 pharm_res <- bind_rows(lapply(pharm_runs$folder,  read_csv_wrapper, "pharming", "metrics.csv")) %>%
-mutate(method="Pharming") %>% inner_join(pharm_runs)
+  mutate(method="Pharming") %>% inner_join(pharm_runs) %>% compute_acc()
 
-dcf_clust_old <- filter(pharm_res_old, clust_method =="dcf_clustering", 
-                        dcf_vals=="dcfs", snvs==5000, mclust==5) %>%
-  mutate(verison = "old")
 
-dcf_clust_old %>% group_by(folder) %>% count()
-dcf_clust_new <-  filter(pharm_res, clust_method =="dcf_clust_gtk", snvs==5000, lamb==1000) %>%
-  mutate(verison = "new")
 
-dcf_clust_comp.long <- bind_rows(dcf_clust_old, dcf_clust_new) %>%   
-  pivot_longer(cols=c(contains("sum_score"), "cna_tree_accuracy", "snv_tree_accuracy", "genotype_similarity",
-                                                                                    "cna_genotype_similarity")) %>%
+kfolders <- pharm_runs %>% filter(clust_method != "gt") %>% pull(folder)
+
+model_selection <- bind_rows(lapply(kfolders,  read_csv_header, "pharming", "model_selection.csv")) %>%
+  inner_join(pharm_runs) %>% mutate(kval = as.numeric(str_replace(clust_method, "dcf_clustk", ""))) %>%
+  group_by(folder) %>% filter(row_number()==1)
+
+selectedk <-model_selection %>% ungroup()  %>%
+  group_by(cells, snvs, cov, s, mclust, err,  dirch) %>% 
+  arrange(BIC) %>% filter(row_number()==1)
+
+bst <- select( selectedk, folder ,BIC, ENT, ICL, kval)
+
+pharm_model_select <- filter(pharm_res, clust_method != "gt") %>% inner_join(bst) %>% mutate(clust_method="ICL")
+
+
+pharm_time <- bind_rows(lapply(pharm_runs$folder,  read_table_wrapper, "pharming", "benchmark.log")) %>%
+  group_by(folder) %>%
+  mutate( method="Pharming") %>% rename(seconds=s) %>% inner_join(pharm_runs) %>% 
+  inner_join(bst %>% select(folder))
+
+time <- bind_rows(phert_time, pharm_time)
+time_plot <- ggplot(time, aes(x=method, y=seconds/60, fill=method)) + geom_boxplot() + scale_y_log10() + 
+  annotation_logticks(sides="l") + ylab("running time (min)") +
+  scale_fill_manual(name="", values=meth_cols) +guides(fill="none")
+time %>% group_by(method) %>% summarize(median=median(seconds/60))
+time_plot
+ggsave(file.path(figpath, glue("running_time.pdf")), plot=time_plot, width=3.5, height=4.5)
+
+res <- bind_rows(phert %>% mutate(method_name="Phertilizer"),  
+                 pharm_model_select %>% mutate(method_name="Pharming"))
+
+
+# %>%
+#   mutate(method_label = sprintf("%s + %s", clust_method, method))
+
+# res <- pharm_res %>% 
+#   mutate(method_label = sprintf("%s + %s", clust_method, method))
+res.long <- res %>% 
+  pivot_longer(cols=c(contains("sum_score"),   "genotype_similarity")) 
+res.long.no.phert <-  res %>% 
+  pivot_longer(cols=c( "cna_tree_accuracy", "cna_genotype_similarity", "snv_tree_accuracy")) %>%
+ filter(method !="Phertilizer")
+
+res.long.filt <- bind_rows(res.long, res.long.no.phert) %>% inner_join(col_to_name_map)
+for(e in unique(res.long.filt$err)){
+  p <- ggplot(res.long.filt %>% filter(err==e),
+         aes(x=cov, y=value, fill=method)) + 
+    facet_wrap(~full_name) + geom_boxplot() + 
+    scale_fill_manual(name="", values=meth_cols)+
+    xlab("coverage")  + ylab("") + theme(legend.position = "top")
+  ggsave(file.path(figpath, glue("sim_metrics_mclust5_m5000_e{e}.pdf")), plot=p, width=9, height=5)
+}
+
+
+
+
+res.long.filt %>% filter(err=="0.035") %>% group_by( full_name, method) %>% summarize(median=median(value))
+res.long.filt %>% filter(err=="0.035", cov==0.01) %>% group_by( full_name, method) %>% summarize(median=median(value))
+
+cell.long <- res %>% 
+  pivot_longer(cols=c(contains("cell_sum_score"),   contains("cell_recall"))) %>% 
   inner_join(col_to_name_map)
 
-box_plot_dcf_comp <- ggplot(dcf_clust_comp.long, aes(x=clust_method, y=value)) + 
-  facet_grid(full_name ~cov, scales="free") + geom_boxplot() +
-  xlab("method") +
-  scale_x_discrete(labels=c("CN"="Phertilizer", 
-                            "dcf_clust_gtk"= "DCF Clust (GT k)",
-                            "gt" = "GT DCFs")) + xvert
+for(e in unique(cell.long$err)){
+  p <- ggplot(cell.long %>% filter(err==e),
+              aes(x=cov, y=value, fill=method)) + 
+    facet_wrap(~full_name, nrow=1) + geom_boxplot() + 
+    scale_fill_manual(name="", values=meth_cols)+
+    xlab("coverage")  + ylab("") + theme(legend.position = "top")
+  p
+  ggsave(file.path(figpath, glue("cell_acc_supp_e{e}.pdf")), plot=p, width=10.5, height=5)
+}
 
-line_plot_dcf_comp <- ggplot(dcf_clust_comp.long, aes(x=clust_method, y=value, color=s)) + 
-  facet_grid(full_name ~cov) + geom_point() + geom_line(aes(group=s)) +
-  xlab("method") +
-  scale_x_discrete(labels=c("CN"="Phertilizer", 
-                            "dcf_clust_gtk"= "DCF Clust (GT k)",
-                            "gt" = "GT DCFs")) + xvert
-
-ggsave(file.path(figpath, "dcf_comparison_m5000_l5_line.pdf"), plot=line_plot_dcf_comp, height=10, width=8)
-ggsave(file.path(figpath, "dcf_comparison_m5000_l5_box.pdf"), plot=box_plot_dcf_comp, height=10, width=8)
-pharm_res <- compute_acc(pharm_res)
-head(pharm_res)
-ggplot(pharm_res, aes(x=clust_method, y=mut_sum_score, fill=lamb)) + geom_boxplot() +
-  facet_wrap(~cov)
-temp <- bind_rows( pharm_res, compute_acc(phert)) %>% filter(snvs==5000, mclust==5, cells==1000,
-                                                              clust_method %in% c("gt", "dcf_clust_gtk", "CN"))
-temp.long <- temp %>% 
-  pivot_longer(cols=c(contains("sum_score"), "cna_tree_accuracy", "snv_tree_accuracy", "genotype_similarity",
-                      "cna_genotype_similarity")) %>%
-                  inner_join(col_to_name_map)
-
-
-lamb_comp <- ggplot(temp.long, aes(x=clust_method, y=value, fill=lamb)) + 
-  facet_grid(full_name ~cov, scales="free") + geom_boxplot() +
-  xlab("method") +
-  scale_x_discrete(labels=c("CN"="Phertilizer", 
-                            "dcf_clust_gtk"= "DCF Clust (GT k)",
-                            "gt" = "GT DCFs")) + xvert
-ggsave(file.path(figpath, "lambda_comparison_m5000_l5.pdf"), plot=lamb_comp, height=10, width=8)
-pharm_res.long <- pharm_res %>% 
-  pivot_longer(c(contains("sum_score"), "cna_tree_accuracy", "genotype_similarity",
-                 "genotype_pres_similarity"))
-
-
-pharm_res <- pharm_res %>% filter(lamb==1000)
-
-pharm_res.long <- pharm_res %>% 
-  pivot_longer(cols=c(contains("sum_score"), "cna_tree_accuracy", "snv_tree_accuracy", "genotype_similarity",
-                      "cna_genotype_similarity")) %>%
+snv.long <- res %>% 
+  pivot_longer(cols=c(contains("mut_sum_score"),   contains("mut_recall"))) %>% 
   inner_join(col_to_name_map)
 
-ggplot(pharm_res.long, aes(x=clust_method, y=value)) + 
-  facet_grid(full_name ~cov, scales="free") + geom_boxplot() +
-  xlab("clustering method")
+for(e in unique(snv.long$err)){
+  p <- ggplot(snv.long %>% filter(err==e),
+              aes(x=cov, y=value, fill=method)) + 
+    facet_wrap(~full_name, nrow=1) + geom_boxplot() + 
+    scale_fill_manual(name="", values=meth_cols)+
+    xlab("coverage")  + ylab("") + theme(legend.position = "top")
+  p
+  ggsave(file.path(figpath, glue("mut_acc_supp_e{e}.pdf")), plot=p, width=10.5, height=5)
+}
+
+# ggplot(pharm_res, aes(x=clust_method, y=mut_sum_score, fill=lamb)) + geom_boxplot() +
+#   facet_wrap(~cov)
+# temp <- bind_rows( pharm_res, compute_acc(phert)) %>% filter(snvs==5000, mclust==5, cells==1000,
+#                                                               clust_method %in% c("gt", "dcf_clust_gtk", "CN"))
+
+
+# lamb_comp <- ggplot(temp.long, aes(x=clust_method, y=value, fill=lamb)) + 
+#   facet_grid(full_name ~cov, scales="free") + geom_boxplot() +
+#   xlab("method") +
+#   scale_x_discrete(labels=c("CN"="Phertilizer", 
+#                             "dcf_clust_gtk"= "DCF Clust (GT k)",
+#                             "gt" = "GT DCFs")) + xvert
+# ggsave(file.path(figpath, "lambda_comparison_m5000_l5.pdf"), plot=lamb_comp, height=10, width=8)
+# pharm_res.long <- pharm_res %>% 
+#   pivot_longer(c(contains("sum_score"), "cna_tree_accuracy", "genotype_similarity",
+#                  "genotype_pres_similarity"))
+
+
+# pharm_res <- pharm_res %>% filter(lamb==1000)
+# 
+# pharm_res.long <- pharm_res %>% 
+#   pivot_longer(cols=c(contains("sum_score"), "cna_tree_accuracy", "snv_tree_accuracy", "genotype_similarity",
+#                       "cna_genotype_similarity")) %>%
+#   inner_join(col_to_name_map)
+
+
 
 p <- ggplot(pharm_res.long, aes(x=clust_method, y=value, color=s)) + 
   facet_grid(full_name ~cov, scales="free") + geom_point() +
@@ -340,6 +439,35 @@ res.long <- inner_join(res.long, metric_mapping)
 
 
 
+# dcf_clust_old <- filter(pharm_res_old, clust_method =="dcf_clustering", 
+#                         dcf_vals=="dcfs", snvs==5000, mclust==5) %>%
+#   mutate(verison = "old")
+# 
+# dcf_clust_old %>% group_by(folder) %>% count()
+# dcf_clust_new <-  filter(pharm_res, clust_method =="dcf_clust_gtk", snvs==5000, lamb==1000) %>%
+#   mutate(verison = "new")
+# 
+# dcf_clust_comp.long <- bind_rows(dcf_clust_old, dcf_clust_new) %>%   
+#   pivot_longer(cols=c(contains("sum_score"), "cna_tree_accuracy", "snv_tree_accuracy", "genotype_similarity",
+#                                                                                     "cna_genotype_similarity")) %>%
+#   inner_join(col_to_name_map)
+
+# box_plot_dcf_comp <- ggplot(dcf_clust_comp.long, aes(x=clust_method, y=value)) + 
+#   facet_grid(full_name ~cov, scales="free") + geom_boxplot() +
+#   xlab("method") +
+#   scale_x_discrete(labels=c("CN"="Phertilizer", 
+#                             "dcf_clust_gtk"= "DCF Clust (GT k)",
+#                             "gt" = "GT DCFs")) + xvert
+# 
+# line_plot_dcf_comp <- ggplot(dcf_clust_comp.long, aes(x=clust_method, y=value, color=s)) + 
+#   facet_grid(full_name ~cov) + geom_point() + geom_line(aes(group=s)) +
+#   xlab("method") +
+#   scale_x_discrete(labels=c("CN"="Phertilizer", 
+#                             "dcf_clust_gtk"= "DCF Clust (GT k)",
+#                             "gt" = "GT DCFs")) + xvert
+
+# ggsave(file.path(figpath, "dcf_comparison_m5000_l5_line.pdf"), plot=line_plot_dcf_comp, height=10, width=8)
+# ggsave(file.path(figpath, "dcf_comparison_m5000_l5_box.pdf"), plot=box_plot_dcf_comp, height=10, width=8)
 
  
 

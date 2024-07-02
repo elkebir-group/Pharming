@@ -2,13 +2,24 @@ configfile: "simulate.yml"
 configfile: "dcf_clustering.yml"
 seeds = [i+10 for i in range(config["nseeds"])]
 import sys 
-sys.path.append("../src")
 
+# Assuming config["mclust"] is a list of integers
+mclust_values = config["mclust"]
+
+# Create a list of tuples (k, mclust) where k is in the range [mclust-2, mclust+2]
+k_mclust_pairs = [(k, mclust) for mclust in mclust_values for k in range(mclust-2, mclust+3)]
+
+
+
+
+sys.path.append("../src")
+mclust_values = config["mclust"]
+k_mclust_pairs = [(k, mclust) for mclust in mclust_values for k in range(mclust-2, mclust+3)]
 rule all:
     input:
         expand("{folder}/{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
                folder = ["dcf_clustering"],
-               k = ["gtk", "model_selection"],
+               k = ["gtk"],
                nfull = config["nfull"],
                s=seeds,
                restarts = config["restarts"],
@@ -21,13 +32,28 @@ rule all:
                err=config["cerror"],
                dirch = config["dirch"],
                fname = ["dcfs", "post_dcfs"]
-        ),
+        ),  expand("{folder}/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
+    folder=["dcf_clustering"],
+    k=[kval for kval, _ in k_mclust_pairs],
+    mclust=[mclust for _, mclust in k_mclust_pairs],
+    nfull=config["nfull"],
+    s=seeds,
+    restarts=config["restarts"],
+    clustsegs=config["clustsegs"],
+    cells=config["cells"],
+    snvs=config["snvs"],
+    nsegs=config["nsegs"],
+    cov=config["cov"],
+    err=config["cerror"],
+    dirch=config["dirch"],
+    fname=["dcfs"]
+)
    
 
 rule run_dcf_clustering_ground_truth_clusters:
     input: 
-        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-        dcfs= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        dcfs= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
     output: 
         output_data= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
         dcfs= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
@@ -45,26 +71,26 @@ rule run_dcf_clustering_ground_truth_clusters:
         " -c -j {threads} -P {output.post_dcfs} > {log.std} 2> {log.err}"    
 
 
-rule dcf_clustering_model_selection:
+rule dcf_clustering_k:
     input: 
-        data= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     output: 
-        output_data= "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
-        dcfs= "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        post_dcfs = "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
+        output_data= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
+        dcfs= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+        # post_dcfs = "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
     params: 
-        mink = lambda wildcards: int(wildcards.mclust) - 2,
-        maxk = lambda wildcards: int(wildcards.mclust)  + 2,
+        # mink = lambda wildcards: int(wildcards.mclust) - 2,
+        # maxk = lambda wildcards: int(wildcards.mclust)  + 2,
         thresh_prop = config["cn_prop_thresh"]
-    threads: 5
+    threads: 1
     log: 
-        std= "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
-        err= "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
-    benchmark: "dcf_clustering/model_selection/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+        std= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
+        err= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
+    benchmark: "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     shell: 
         "python ../src/dcf_clustering_v2.py -d {input.data}  -o {output.output_data} -D {output.dcfs} "
         "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
-        "-P {output.post_dcfs} --mink {params.mink} --maxk {params.maxk} "
+        " -k {wildcards.k} "
         " -c -j {threads} > {log.std} 2> {log.err}"    
 
 
@@ -72,10 +98,10 @@ rule dcf_clustering_model_selection:
 
 # rule clustering_eval:
 #     input:         
-#         gt_dcfs = "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+#         gt_dcfs = "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
 #         inf_dcfs="{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
 #         result = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
-#         gt_tree= "sims/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl"  
+#         gt_tree= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl"  
 #     output: 
 #         scores = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/scores.csv",
 #         dcfs = "{folder}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}/inf_dcfs.txt",

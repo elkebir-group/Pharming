@@ -4,28 +4,55 @@ from utils import powerset, draw, merge_lists, pickle_object
 from clonal_tree import ClonalTree
 from solution import Solution
 import utils
-
-
+from copy import deepcopy
+from enumerate import Enumerate
+import itertools
 
 class CNA_Merge:
-    def __init__(self, T1, T2, Tm_edges, verbose=False):
-        self.CT1 = T1 
-        self.CT2 = T2
+    def __init__(self, T1, T2, Tm_edges, cell_threshold=0, verbose=False):
+        
+ 
+        self.CT1 = deepcopy(T1) 
+        self.CT2 =  deepcopy(T2)
 
-        self.T1 = T1.get_tree()
+        self.CT1_segments = self.CT1.get_segments()
+
+        self.CT2_segments = self.CT2.get_segments()
+        # print("Integrating..")
+        # print(self.CT1_segments)
+        # print(self.CT2_segments)
+
+        # if self.CT2_segments == {8} and self.CT1_segments == {0,2,6,7,11,14}:
+        #     self.CT1.draw("test/s11/badCT1.png", segments = self.CT1_segments)
+        for ell in self.CT2_segments:
+            assert ell not in self.CT1_segments
+        
+        self.all_segs = self.CT1_segments.union(self.CT2_segments)
+
+        self.init_cna_trees = {}
+        for ell in self.CT1_segments:
+            self.init_cna_trees[ell] = set(self.CT1.get_cna_tree(ell).edges)
+        
+        for ell in self.CT2_segments:
+            self.init_cna_trees[ell] = set(self.CT2.get_cna_tree(ell).edges)
+
+        self.T1 = self.CT1.get_tree()
         self.T_m = nx.DiGraph(Tm_edges)
         # draw(self.T_m, "test/Tm.png")
-        self.T2 = T2.get_tree()
+        self.T2 = self.CT2.get_tree()
         # draw(self.T1, "test/T1_pre.png")
         # draw(self.T2, "test/T2_pre.png")
-        self.genotypes1 = T1.get_genotypes()
-        self.genotypes2 = T2.get_genotypes()
-        self.snvs1 = T1.get_all_muts()
-        self.snvs2 = T2.get_all_muts()
+        self.genotypes1 = self.CT1.get_genotypes()
+        self.genotypes2 = self.CT2.get_genotypes()
+        self.snvs1 = self.CT1.get_all_muts()
+        self.snvs2 = self.CT2.get_all_muts()
         self.old_to_new, self.new_to_old = {}, {}
-        self.mut_to_segs = T1.mut_to_seg.copy() | T2.mut_to_seg.copy()
-        self.rho = T1.rho | T2.rho
+        self.mut_to_segs = self.CT1.mut_to_seg.copy() | self.CT2.mut_to_seg.copy()
+        self.rho = self.CT1.rho | self.CT2.rho
         self.k = max(self.T_m)
+        self.cell_threshold = cell_threshold
+
+
         # assert self.k <= 8
         starting_node = max(self.T1)
         for i,u in enumerate(self.T2):
@@ -64,6 +91,7 @@ class CNA_Merge:
                         desc_v = nx.descendants(self.T2, v).intersection(Tm_nodes)
                         if len(desc_u.intersection(desc_v)) > 0 and not (desc_u <= desc_v or desc_v <= desc_u):
                                 print("Warning: Trees are incompatible!")
+                                print(f"T1: {self.CT1.get_segments()} T2: {self.CT2.get_segments()}")
                                 return False 
         return True
 
@@ -154,7 +182,7 @@ class CNA_Merge:
             # utils.pickle_object(T, "test/T19.png")
         
 
-
+        # cost, ca = ct.optimize(data, lamb,cell_threshold=self.cell_threshold )
         cost , ca = ct.assign_cells_by_likelihood(data, lamb=lamb)
 
         return Solution(cost, ct, ca)
@@ -172,11 +200,34 @@ class CNA_Merge:
 
             sol= self.construct_clonal_tree(tree, data, lamb)
        
+
+            #post process
+            
+       
             all_results.append(sol)
 
         all_results = sorted(all_results, key= lambda x: x.cost)
+        if len(all_results) >=5:
+            all_results = all_results[:5]
+        
+        for sol in all_results:
+            sol.post_process(data, lamb, self.k, cell_threshold = self.cell_threshold)
         if len(all_results) > 0:
-            return [all_results[0]]
+            sol = all_results[0]
+            # for ell, S in self.init_cna_trees.items():
+            #     infS = set(sol.ct.get_cna_tree(ell).edges)
+        
+            #     if S != infS:
+            #         print(f"Inferred CNA tree not consistent with input CNA tree for segment {ell}")
+            #         print(S)
+            #         print(infS)
+            #         print(self.CT1_segments)
+            #         print(self.CT2_segments)
+            #         # pickle_object(self, "test/s11/badmerge.pkl")
+            #         # pickle_object(data, "test/s11/badmerge_data.pkl")
+            #         assert S == infS
+
+            return [sol]
         else:
             return []
         # if top_n <= len(all_results):
@@ -254,11 +305,10 @@ class CNA_Merge:
         return nodes_to_return
 
     def construct_subgraphs(self, u, dict):
-        # if u == 1:
-        #     print("here")
+   
         all_subgraphs  = []
         prev_key = None
-        # if u in [6]:
+        # if u in [2]:
         #     print("here")
         #if the node has no CN states 
         if all(len(cnset)==0 for key, cn_list in dict[u].items() for cnset in cn_list):
@@ -416,6 +466,46 @@ class CNA_Merge:
             return [n for n in nodeset]
         root = [n for n in tree if tree.in_degree[n]==0][0]
         return [n for n in nx.dfs_preorder_nodes(tree, root) if n in nodeset]
+  
+
+  
+    @staticmethod
+    def decode(tree, root):
+        tr = nx.DiGraph()
+        troot = (root, root)
+        nodedict = {troot: root}
+        for u in nx.dfs_preorder_nodes(tree, source=(root,root)):
+            u1, u2 = u
+            if u in nodedict:
+                par = nodedict[u]
+            for v in tree.successors(u):
+                v1, v2 = v
+                if u1 != v1:
+                    tr.add_edge(par, v1)
+                    nodedict[v] = v1 
+                else:
+                    tr.add_edge(par, v2)
+                    nodedict[v] = v2
+        return tr
+                # v1, v2 = v 
+                # if u1 != v1 and u2 == v2 and v2 == root:
+                #     tr.add_edge(u1, v1)
+                
+                # if u1 != v1 and u2 == v2 and v2 != root:
+                #     tr.add_edge(u2, v1)
+                
+             
+                # if u2 != v2 and u1 == v1 and v1 == root:
+                #     tr.add_edge(u2, v2)
+                
+                # if u2 != v2 and u1 == v1 and v1 != root:
+                #     tr.add_edge(u1, v2)
+      
+    
+
+             
+
+
     
     def get_cna_only_subtrees(self, n, perm):
         if n in self.T1:
@@ -467,11 +557,14 @@ class CNA_Merge:
                 tree_list.append((tree, parent_dict))
 
         else:
-            
-            G = nx.DiGraph()
-            G.add_node(u)
+            # if u==2:
+            #     print("here")
+            subgraph_list = []
+     
             for cn_set, tr in zip(cn_node_lists, [self.T1,self.T2]):
-            
+               
+                G = nx.DiGraph()
+                G.add_node(u)
             
                 for n in cn_set:
                     G.add_edge(u,n)
@@ -482,17 +575,52 @@ class CNA_Merge:
                     # Create a subgraph containing the subtree rooted at node `u`
                     subtree = tr.subgraph(descendants)
                     G = nx.compose(G, subtree)
-        
-            for n1 in cn_node_lists[0]:
-                for n2 in cn_node_lists[1]:
-                    G.add_edge(n1,n2)
-                    G.add_edge(n2, n1)
-            for n1,n2 in G.edges:
-                G[n1][n2]["weight"] = 1
+                # draw(G, "test/s11/G.png")
+                subgraph_list.append(G)
+            if len(subgraph_list) > 1:
+                # for i,t in enumerate(subgraph_list):
+                #     draw(t, f"test/s11/t{i}.png")
+                refinements = Enumerate(subgraph_list[0], subgraph_list[1], same_root=True).solve()
+                for ref in refinements:
+                    # draw(ref, "test/s11/ref.png")
+                    tr = self.decode(ref, u)
+                    # draw(tr, "test/s11/tr.png")
+                    tree_list.append((tr, {}))
+            elif len(subgraph_list) ==1:
+                    tree_list.append((subgraph_list[0], {}))
+            else:
+                pass
+
+
                 
-            new_trees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
-            for tr in new_trees:
-                tree_list.append((tr, {}))
+            # G = nx.DiGraph()
+            # G.add_node(u)
+            # for cn_set, tr in zip(cn_node_lists, [self.T1,self.T2]):
+            
+            
+            #     for n in cn_set:
+            #         G.add_edge(u,n)
+            #         descendants = nx.descendants(tr, n)
+            
+            #         descendants.add(n)
+
+            #         # Create a subgraph containing the subtree rooted at node `u`
+            #         subtree = tr.subgraph(descendants)
+            #         G = nx.compose(G, subtree)
+     
+            # for n1 in cn_node_lists[0]:
+            #     for n2 in cn_node_lists[1]:
+            #         G.add_edge(n1,n2)
+            #         G.add_edge(n2, n1)
+            # for n1,n2 in G.edges:
+            #     G[n1][n2]["weight"] = 1
+            # if u ==2:
+            #     draw(G, "test/s11/G2.png") 
+            # new_trees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
+            # for tr in new_trees:
+            #     if u ==2:
+            #         draw(tr, "test/s11/tr.png") 
+            #     tree_list.append((tr, {}))
      
 
 

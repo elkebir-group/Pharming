@@ -26,6 +26,17 @@ class CellAssign:
     def update_phi(self):
         self.phi ={i : v  for v in self.clones for i in self.cell_mapping[v] if v in self.cell_mapping}
 
+    def move_cells(self, u,v):
+        if u in self.clones and v in self.clones:
+            cells = self.cell_mapping[u]
+            for i in cells:
+                self.phi[i] = v
+            del self.cell_mapping[u] 
+            self.cell_mapping[v] = np.union1d(self.cell_mapping[v], cells)
+            self.cell_mapping[v] = self.cell_mapping[v].astype(int)
+        else:
+            print("Warning: node does not exist, cells not moved!")
+ 
 
     def move(self, cell, node):
         if node in self.clones:

@@ -30,7 +30,7 @@ class STI:
     '''
     def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False, 
                  prop_thresh=0, start_state=(1,1),
-                 sum_condition = False,
+                 sum_condition = False, cell_threshold=0,
                  ) -> None:
     
         self.ell = ell 
@@ -80,7 +80,7 @@ class STI:
                 # self.T_SNV_groups[g] = self.generate_snv_trees(g)
 
 
-                
+        self.cell_threshold = cell_threshold        
         self.cn_delta = {}
         self.cost1, self.cost2 = None, None
         self.prop_thresh = prop_thresh
