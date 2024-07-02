@@ -1,7 +1,10 @@
 
-inpath: "sims"
-simpath: "../clonesim/build2/simulate"
-genpath: "../clonesim/build2/generatesinglecells"
+inpath: "sims3"
+# simpath: "../clonesim/build2/simulate"
+# genpath: "../clonesim/build2/generatesinglecells"
+
+simpath: "../clonesim/build3/simulate"
+genpath: "../clonesim/build3/generatesinglecells"
 nseeds: 5
 
 cells: 
@@ -9,7 +12,7 @@ cells:
 
 snvs: 
   - 5000
-  - 10000
+  # - 10000
 
 cov:
   - 0.01
@@ -29,7 +32,7 @@ nsegs: 25
 
 mclust: 
   - 5
-  - 7
+  # - 7
 
 threshold: 0.025
 

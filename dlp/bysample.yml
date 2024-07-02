@@ -1,25 +1,31 @@
 sample:
-  # - SA921
-  # - SA922
+  - SA921
+  - SA922
   - SA1090
 
-mink: 2
-maxk: 5
 
-nsegs: 25
+
+mink: 3
+maxk: 6
+
+nseeds: 1
+nsegs: 
+  # - 25
+  - 50
 
 seed: 21
 
 thresh: 0.05
-
+#preprocess params
+minvar: 2
 
 #Pharming parameters 
 ninit_segs:
-  - 3
+  - 10
 
 ninit_tm:
-  - 4
-
+  - 10
+min_snvs: 20
 order:
   - "weighted-random"
 
@@ -31,3 +37,11 @@ lamb:
 
 max_loops: 5
 
+
+#dcf clustering parameters
+clustsegs: 25
+restarts: 100
+nfull: 5
+maxcn: 4
+
+mincells: 20

@@ -11,13 +11,49 @@ import numpy as np
 import networkx as nx 
 import itertools
 import argparse 
+from collections import defaultdict
+
+
+
+def vaf_validation(ct, ca, dat, min_cells=10):
+    vaf_dict = defaultdict(list)
+    for n in ct.tree:
+        cells = ca.get_cells(n)
+        if len(cells) ==0:
+            continue
+        
+        genos =ct.genotypes[n]
+        for j, g in genos.items():
+            vaf = (g[2] + g[3])/(g[0] + g[1])
+            vaf_dict[vaf, j] += list(cells )
+    results= []
+    for vaf,j in vaf_dict:
+        cells = list(set(vaf_dict[vaf,j]))
+        if len(cells) > min_cells:
+            var = dat.var[cells,:][:,j].sum(axis=0)
+            total = dat.total[cells,:][:,j].sum(axis=0)
+            obs_vaf = var/total
+            results.append([j,vaf, obs_vaf, var, total])
+    df = pd.DataFrame(results, columns=["snv",  "latent_vaf", "obs_vaf", "var", "total"])
+    print(df.head())
+    return df 
+
+    
 
 
 
 
 
 
-def clade_cmb(n, ca, ct, dat):
+        
+
+
+
+
+
+
+
+def clade_cmb(n, ca, ct, dat, min_cells=10):
    
     clade_nodes =  nx.descendants(ct.tree, n) | {n}
     outside_nodes =  ct.clones() - clade_nodes 
@@ -36,31 +72,39 @@ def clade_cmb(n, ca, ct, dat):
         if all(not_lost):
             not_lost_snvs.append(j)
 
-
+    outside_df = None 
+    within_df = None
     #returns a vector of length outside_clade_cells
-    outside_cmb = dat.compute_cmb(outside_clade_cells, not_lost_snvs)
-    within_cmb = dat.compute_cmb(within_clade_cells, not_lost_snvs)
+    if len(outside_clade_cells) >= min_cells:
+        outside_cmb = dat.compute_cmb(outside_clade_cells, not_lost_snvs)
+        outside_df = pd.DataFrame({'cell': outside_clade_cells, 'cmb': outside_cmb})
+        outside_df["within_clade"] = 0
 
+    if len(within_clade_cells) >= min_cells:
+        within_cmb = dat.compute_cmb(within_clade_cells, not_lost_snvs)
+        within_df = pd.DataFrame({'cell': within_clade_cells, 'cmb': within_cmb})
+        within_df["within_clade"] = 1
 
-    outside_df = pd.DataFrame({'cell': outside_clade_cells, 'cmb': outside_cmb})
-    outside_df["within_clade"] = 0
-
-    within_df = pd.DataFrame({'cell': within_clade_cells, 'cmb': within_cmb})
-    within_df["within_clade"] = 1
-
-    df = pd.concat([outside_df, within_df])
+    if outside_df is not None and within_df is not None:
+        df = pd.concat([outside_df, within_df])
+    elif outside_df is not None:
+        df = outside_df
+    elif within_df is not None:
+        df = within_df
+    else:
+         df = pd.DataFrame(columns=['cell', 'cmb', 'within_clade'])
     df["clade_snvs"] = len(not_lost_snvs)
     df["clade"] = n
 
     return df 
 
    
-def cmb_all(ct, ca, dat):
+def cmb_all(ct, ca, dat, min_cells=10):
     ct.update_mappings()
     cmb_list = []
     for n in ct.mut_mapping:
         if len(ct.mut_mapping[n]) > 0:
-            cmb_list.append(clade_cmb(n, ca, ct, dat))
+            cmb_list.append(clade_cmb(n, ca, ct, dat, min_cells=min_cells))
 
     cmb_df = pd.concat(cmb_list)
     cmb_df["cell"] = cmb_df["cell"].astype(int)
@@ -72,9 +116,12 @@ def main(args):
     ct = sol[0].ct
     ca = sol[0].phi
     dat  = pd.read_pickle(args.data)
+    vaf_df = vaf_validation(ct, ca, dat)
+    vaf_df.to_csv("test/vaf.csv", index=False)
 
-    cmb_df = cmb_all(ct, ca, dat)
-    cmb_df.to_csv(args.out, index=False)
+    # cmb_df = cmb_all(ct, ca, dat, args.min_cells)
+    # cmb_df.to_csv(args.out, index=False)
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -82,18 +129,30 @@ if __name__ == '__main__':
                         help="input file of preprocessed data pickle")
     parser.add_argument("-s", "--solution", required=False,
                         help = "pickled solution file")
+    parser.add_argument("--min-cells",  required=False, type=int, default=10,
+                        help = "minimum number of cells to compute the scores for a clade")
     parser.add_argument("-o" ,"--out", required=False, type=str,
                         help="filename where cmb values will be saved")
 
-    pth = "/scratch/data/leah/Pharming/dlp/SA1090_v0"
-    pth2 = "pharming/decifer/isegs3_tm4_top5_lamb1000"
+
+    # args = parser.parse_args()
+    # pth = "/scratch/data/leah/Pharming/dlp/SA921"
+    # pth2 = "pharming/decifer/isegs3_tm4_top5_lamb1000"
+    # args = parser.parse_args([
+    #     "-d", f"{pth}/input/data.pkl",
+    #     "-s", f"dlp/SA921/pharming/decifer_k5/s20_r25/isegs10_tm10_top5_lamb1000/solutions.pkl",
+    #     "-o", f"dlp/SA921/pharming/decifer_k5/s20_r25/isegs10_tm10_top5_lamb1000/cmb.csv",  
+    # ])
+
     args = parser.parse_args()
-    
+    pth = "act/TN3"
+    pth2 = "pharming/decifer_k6/isegs10_tm10_top5_lamb1000"
     args = parser.parse_args([
         "-d", f"{pth}/input/data.pkl",
         "-s", f"{pth}/{pth2}/solutions.pkl",
-        "-o", f"{pth}/{pth2}/cmb.csv"
+        "-o", "test/TN3_k6.csv"
     ])
+
 
 
     # tpath = "/scratch/data/leah/Pharming/simulation_study/sims/s10_m10000_k25_l5_d2/n1000_c0.25_e0"

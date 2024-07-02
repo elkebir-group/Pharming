@@ -21,7 +21,7 @@ class ClonalTreeMerging:
 
         self.top_n = top_n
 
-        self.init_on_first = init_on_first
+ 
     
         
         if order not in [RANDOM, NSNVS, INPLACE, WRANDOM, COST]:
@@ -90,6 +90,7 @@ class ClonalTreeMerging:
         
         print("Tree list ordering:")
         print(ordering)
+        
         # if self.init_on_first:
         #     ordered_list = [tree_list[0]]
         #     for i in ordering:
@@ -97,23 +98,25 @@ class ClonalTreeMerging:
         #             ordered_list.append(tree_list[i])
         # else:
         ordered_list = [tree_list[i] for i in ordering]
+        for i, ord in enumerate(ordered_list):
+            print(f"{i}: {ord[0].segments}")
         cand_merged_lists.append(self.progressive_merge(ordered_list, data, lamb))
         
         return  get_top_n(cand_merged_lists, self.top_n)
 
 
     def merge_parallel(self, tree1, tree2, data, lamb):
-        try:
-            cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, verbose=False)
+        # try:
+        cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, cell_threshold=self.cell_threshold,  verbose=False)
 
         
-            merged_tree_list = cnm.fit(data, lamb, self.top_n)
+        merged_tree_list = cnm.fit(data, lamb, self.top_n)
            
 
-        except Exception as e:
-        # Log the error or perform other actions
-            print(f"An error occurred during tree merging: {e}")
-            merged_tree_list = [[]]
+        # except Exception as e:
+        # # Log the error or perform other actions
+        #     print(f"An error occurred during tree merging: {e}")
+        #     merged_tree_list = [[]]
    
         return merged_tree_list
 
@@ -148,9 +151,9 @@ class ClonalTreeMerging:
             else:
                 tree_list2 = []
 
-            if self.collapse:
-                for sol in sol_list1 + sol_list2:
-                    sol.collapse(self.k, self.cell_threshold)
+            # if self.collapse:
+            #     for sol in sol_list1 + sol_list2:
+            #         sol.collapse(self.k, self.cell_threshold)
                     
             # if self.cores <= 1:
             if True:

@@ -17,15 +17,16 @@ import itertools
 # minimum correction tree parsimonious clone reconciliation problem
 class Enumerate:
 
-    def __init__(self, T, S, threads = 1, timelimit = None, verbose = True):  
+    def __init__(self, T, S, threads = 1, timelimit = None, verbose = False, same_root=False):  
         # self.snv_mat = snv_mat
         # self.cna_mat = cna_mat
  
         self.cna_clones = {}
-        for n in nx.dfs_preorder_nodes(T):
-            if T.in_degree[n] ==0:
-                T.add_edge(-1, n)
-                break
+        if not same_root:
+            for n in nx.dfs_preorder_nodes(T):
+                if T.in_degree[n] ==0:
+                    T.add_edge(-1, n)
+                    break
         sorted_nodes = list(T.nodes)
         sorted_nodes.sort()
         snv_mapping= {n: i for i,n in enumerate(sorted_nodes)}
@@ -91,7 +92,7 @@ class Enumerate:
 
         # print(f'snv root is {self.snv_root} and cna root is {self.cna_root}')
 
-    def solve(self, max_sol=1000):
+    def solve(self, max_sol=10000):
         model = gp.Model('solveMCTPCR')
         model.Params.PoolSearchMode = 2
         model.Params.PoolSolutions = max_sol

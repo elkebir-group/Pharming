@@ -16,7 +16,7 @@ from scipy.stats import beta
 import utils
 from collections import defaultdict
 from constrained_cell_assignment import ConstrainedCellAssign
-
+from scipy.special import logsumexp
 
 EPSILON = -1e5
 
@@ -116,10 +116,10 @@ class ClonalTree:
 
     """
 
-    def __init__(self, tree, genotypes: dict, seg_to_muts:dict=None,  rho:dict=None, key=0):
+    def __init__(self, tree, genotypes: dict, seg_to_muts:dict=None,  rho:dict=None, k=None):
         self.tree: nx.DiGraph = tree
         self.root= self.find_root()
-        self.preorder_nodes = list(nx.dfs_preorder_nodes(self.tree, self.root))
+        # self.preorder_nodes = list(nx.dfs_preorder_nodes(self.tree, self.root))
         self.genotypes = genotypes 
         if seg_to_muts is None:
             self.seg_to_muts = {}
@@ -138,19 +138,30 @@ class ClonalTree:
 
         self.psi = {}
 
-        self.key = key
+  
         self.cost = np.Inf
         self.snv_cost = np.Inf
         self.cna_cost = np.Inf
 
+        if rho is not None:
+            for ell in rho:
+                for q in rho[ell]:
+                    rho[ell][q] = sorted(rho[ell][q], key=lambda t: self.snv_tree_has_loss(t))
+                
         self.rho = rho
+        if k is None and self.rho is not None:
+            for ell in self.rho:
+                self.k = len(self.rho[ell])
+                break 
+        else:
+            self.k = None 
     
 
     
     def __str__(self) -> str:
         # all_cells = self.get_all_cells()
         all_snvs  = self.get_all_muts()
-        mystr =f"\nClonal Tree {self.key}"
+        mystr =f"\nClonal Tree T"
         mystr += "\n--------------------------------"
 
         mystr +=f"\n{len(list(self.tree.nodes))} Nodes and {len(list(self.tree.edges))} Edges"
@@ -196,8 +207,11 @@ class ClonalTree:
     
     def preorder(self, source=None):
 
+        # if source is None:
+        #     return self.preorder_nodes
+
         if source is None:
-            return self.preorder_nodes
+            return list(nx.dfs_preorder_nodes(self.tree, source=self.root))
    
     
         return list(nx.dfs_preorder_nodes(self.tree, source=source))
@@ -659,73 +673,40 @@ class ClonalTree:
         return len(self.mut_mapping[n]) > 0
     
 
-    ##### METHODS TO MODIFY TREE TOPOLOGY
     def collapse(self, phi, k, cell_threshold=10):
-        updated = False
-        cell_counts = phi.get_cell_count()
-        candidates = [n for n in cell_counts if cell_counts[n] < cell_threshold and 
-                      n > k and n != self.root and self.tree.out_degree[n] == 1]
-        chain_dict = {}
-        for n in self.preorder():
-            if len(candidates) == 0:
-                break 
-            if n in candidates:
-                chain_dict[n] = []
-                candidates.remove(n)
-       
-                for u in self.preorder(n):
-                    if u == n:
-                        continue
-                    if u in candidates and self.tree.out_degree[u] ==1:
-                        chain_dict[n].append(u)
-                        candidates.remove(u)
-                    else:
-                        break
+    
 
-        for keep, remove in chain_dict.items():
-            for u in remove:
-                updated = True
-                if cell_counts[u] > 0:
-                    for i in phi.get_cells(u):
-                        phi.move(i, keep)
-                self.prune_tree(u, phi)
-            if self.tree.out_degree[keep] == 1:
-   
-                if cell_counts[keep] > 0:
-                    child = list(self.tree.successors(keep))[0]
-                    for i in phi.get_cells(u):
-                        phi.move(i, child)
-                self.prune_tree(keep, phi)
-
-        if updated:
-            self.preorder_nodes = nx.dfs_preorder_nodes(self.tree, self.root)
-
-
-    def prune(self, cellAssign):
-        updated = False
-        counts = cellAssign.get_cell_count()
-        self.update_mappings()
-        for u in self.preorder():
-            if u ==self.root:
-                continue
-            if len(self.children(u)) ==1:    
-                if counts[u] ==0 and len(self.get_muts(u)) ==0 and len(self.mut_loss_mapping[u]) ==0:
-                    updated = True
-                    self.prune_tree(u,cellAssign)
-   
-        if updated:
+        while True:
             self.update_mappings()
-            self.preorder_nodes = nx.dfs_preorder_nodes(self.tree, self.root)
-        
+            collapsed = False
+            for u in nx.dfs_postorder_nodes(self.tree, self.root):
+                if u == self.root:
+                    continue
+            
+
+                #check if a candidate should be collapsed
+                #must meet cell threshold, not be an SNV cluster and the outdegree of the parent mut be 1
+                if len(phi.get_cells(u)) < cell_threshold and u >= k and self.tree.out_degree[u] ==1:
+                    child = self.children(u)[0]
+                    collapsed = True
+                    phi.move_cells(u, child)
+                    self.prune_tree(u)
+                    phi.update_clones(self.clones())
+                    break 
+            if not collapsed:
+                self.update_mappings()
+                break 
+        # self.update_mappings()
+
     #PRIVATE 
-    def prune_tree(self, node_to_remove, cellAssign):
+    def prune_tree(self, node_to_remove):
         
-        parent = next(self.tree.predecessors(node_to_remove))
+        parent = self.parent(node_to_remove) #next(self.tree.predecessors(node_to_remove))
 
         # Get the children of the node to be removed
         children = list(self.tree.successors(node_to_remove))
 
-        # Remove the node to be removed from the graph
+        # Remove the node
         self.tree.remove_node(node_to_remove)
 
         # Reattach the children to the parent
@@ -736,15 +717,85 @@ class ClonalTree:
         #     del cellAssign.cell_mapping[node_to_remove]
         
         if node_to_remove in self.genotypes:
-            del self.genotypes[node_to_remove]
-        
-        # if node_to_remove in self.mut_mapping:
-        #     del self.mut_mapping[node_to_remove]
+            if len(self.mut_mapping[node_to_remove]) > 0:
+                for j in self.mut_mapping[node_to_remove]:
+                    ell = self.mut_to_seg[j]
+                    del self.mut_to_seg[j]
+                    self.seg_to_muts[ell] = [j2 for j2 in self.seg_to_muts[ell] if j != j2]
 
-        # if node_to_remove in self.mut_loss_mapping:
-        #     del self.mut_loss_mapping[node_to_remove]
+            # self.genotypes[parent] = self.genotypes[node_to_remove]
+            del self.genotypes[node_to_remove]
+
+    def prune_leaves(self, phi, k):
+        to_prune = [l for l in self.get_leaves() if len(phi.get_cells(l)) ==0 and l >= k]
+        for l in to_prune:
+
+            self.prune_tree(l)
         
-        cellAssign.update_clones(self.clones())
+            phi.update_clones(self.clones())
+        self.update_mappings()
+
+
+
+    ##### METHODS TO MODIFY TREE TOPOLOGY
+    # def collapse(self, phi, k, cell_threshold=10):
+    #     updated = False
+    #     cell_counts = phi.get_cell_count()
+    #     candidates = [n for n in cell_counts if cell_counts[n] < cell_threshold and 
+    #                   n > k and n != self.root and self.tree.out_degree[n] == 1]
+    #     chain_dict = {}
+    #     for n in self.preorder():
+    #         if len(candidates) == 0:
+    #             break 
+    #         if n in candidates:
+    #             chain_dict[n] = []
+    #             candidates.remove(n)
+       
+    #             for u in self.preorder(n):
+    #                 if u == n:
+    #                     continue
+    #                 if u in candidates and self.tree.out_degree[u] ==1:
+    #                     chain_dict[n].append(u)
+    #                     candidates.remove(u)
+    #                 else:
+    #                     break
+
+    #     for keep, remove in chain_dict.items():
+    #         for u in remove:
+    #             updated = True
+    #             if cell_counts[u] > 0:
+    #                 for i in phi.get_cells(u):
+    #                     phi.move(i, keep)
+    #             self.prune_tree(u, phi)
+    #         if self.tree.out_degree[keep] == 1:
+   
+    #             if cell_counts[keep] > 0:
+    #                 child = list(self.tree.successors(keep))[0]
+    #                 for i in phi.get_cells(u):
+    #                     phi.move(i, child)
+    #             self.prune_tree(keep, phi)
+
+    #     if updated:
+    #         self.preorder_nodes = nx.dfs_preorder_nodes(self.tree, self.root)
+
+
+    # def prune(self, cellAssign):
+    #     updated = False
+    #     counts = cellAssign.get_cell_count()
+    #     self.update_mappings()
+    #     for u in self.preorder():
+    #         if u ==self.root:
+    #             continue
+    #         if len(self.children(u)) ==1:    
+    #             if counts[u] ==0 and len(self.get_muts(u)) ==0 and len(self.mut_loss_mapping[u]) ==0:
+    #                 updated = True
+    #                 self.prune_tree(u,cellAssign)
+   
+    #     if updated:
+    #         self.update_mappings()
+    #         self.preorder_nodes = nx.dfs_preorder_nodes(self.tree, self.root)
+        
+
 
              
      
@@ -1067,6 +1118,8 @@ class ClonalTree:
                 obj, ca = self.assign_cells_by_likelihood(dat, lamb=lamb)
             else:
                 obj, ca =self.constrained_cell_assignment(dat, lamb, dcfs)
+            
+
 
             # self.draw("test/seg2_test.png", ca, segments=[2])
             
@@ -1089,14 +1142,22 @@ class ClonalTree:
             self.cna_cost = np.NAN
 
             # _ = self.compute_likelihood(dat, best_ca, lamb)
+      
         
             self.update_mappings()
 
         return opt_cost, best_ca 
+    
+    @staticmethod
+    def snv_tree_has_loss(snv_tree):
+        for u,v in snv_tree.edges:
+            if u[2]+u[3] > 0 and v[2] + v[3]==0:
+                return True 
+        return False
 
     # @utils.timeit_decorator
     def assign_genotypes(self, dat, phi, rho={}, seg_to_snvs={}, states=None,
-                          cna_genos={}, has_path={}):
+                          cna_genos={}, has_path={}, start_state=None):
         """
         For a given cell assignment phi and observed data dat=(C,A,D), find the optimal
         assignment of SNV to SNV cluster, i.e., node where SNV is first introduced,
@@ -1134,22 +1195,33 @@ class ClonalTree:
         else:
             cna_genos_all = self.get_cna_genos()
 
+        bfs_nodes= list(nx.bfs_tree(self.tree, self.root))
       
         for ell, snvs in seg_to_snvs.items():
             snv_cluster_mapping = rho[ell]
             snv_clusters = list(snv_cluster_mapping.keys())
+
+            #reorder the nodes so that we priorize snv clusters closer to the root
+            snv_clusters =[u for u in bfs_nodes if u in snv_clusters]
+
             
             if ell in cna_genos_all:
                 cna_genos = cna_genos_all[ell]
             else:
                 cna_genos = {v: states[ell] for v in self.tree}
+                # cna_genos[self.root] = (1,1)
 
-        
+                if start_state is not None:
+                    cna_genos[self.root] = start_state
             all_cluster_costs = []
             tree_assign = {}
+
+            #order the SNV clusters in preorder
             for q in snv_clusters:
             
                 all_tree_costs = []
+                
+                #trees should be ordered from those with no loss to those with loss in rho
                 for snv_tree in snv_cluster_mapping[q]:
                     all_vafs =self.get_vafs(q,  snv_tree, clones, cna_genos, has_path)
              
@@ -1324,6 +1396,78 @@ class ClonalTree:
         self.cna_cost = sum(self.cna_node_cost[u] for u in self.snv_node_cost)
 
         return self.cost 
+    def ICL(self, phi, data, lamb):
+        self.update_mappings()
+        self.bic = self.BIC(phi, data, lamb)
+        # self.entropy = self.ENT(phi, data, lamb)
+        return self.bic #+ self.entropy
+
+    def BIC(self, phi, data, lamb):
+        snvs = self.get_all_muts()
+        m = len(snvs)
+        _ = self.compute_likelihood(data, phi, lamb)
+        like= -1* self.snv_cost 
+        k = len(set([self.psi[j] for j in snvs]))
+        self.bic = np.log(m)*(k) - 2*like
+        return self.bic 
+
+
+    def ENT(self, phi, dat, lamb):
+        
+       
+        rho = self.rho 
+        
+        seg_to_snvs = self.seg_to_muts
+        has_path = self.get_path_map()
+        cell_counts  = phi.get_cell_count()
+        clones  = [u for u in self.clones() if cell_counts[u] >0]
+
+        cna_genos_all = self.get_cna_genos()
+
+        like_by_segment = []
+        for ell, snvs in seg_to_snvs.items():
+            snv_cluster_mapping = rho[ell]
+            snv_clusters = list(snv_cluster_mapping.keys())
+            cna_genos = cna_genos_all[ell]
+            all_cluster_costs = []
+            tree_assign = {}
+
+            for q in snv_clusters:
+            
+                all_tree_costs = []
+                for snv_tree in snv_cluster_mapping[q]:
+                    all_vafs =self.get_vafs(q,  snv_tree, clones, cna_genos, has_path)
+             
+                    cluster_costs = np.vstack([dat.compute_snv_likelihoods(all_vafs[i], snvs, phi.get_cells(u)) for i,u in enumerate(clones)])
+                    all_tree_costs.append(cluster_costs.sum(axis=0))
+               
+                if len(all_tree_costs) == 0:
+                    raise Exception(f"No valid SNV trees for cluster {q} in segment {ell}.")
+                tree_costs= np.vstack(all_tree_costs)
+                tree_assign[q] = tree_costs.argmin(axis=0)
+                all_cluster_costs.append(tree_costs.min(axis=0))
+                
+        
+            clust_costs = np.vstack(all_cluster_costs)
+            like_by_segment.append(clust_costs)
+        #should be a k x m numpy array
+        likes = np.hstack(like_by_segment)
+        log_norm_likes = logsumexp(likes, axis=0)  # Shape (1, m)
+
+        # Compute the posterior probabilities
+        log_gamma = likes - log_norm_likes  # Broadcasting subtraction
+        gamma = np.exp(log_gamma)  # Shape (k, m)
+
+        # Compute the entropy term
+        ent = -np.sum(gamma * log_gamma, axis=0)  # Summing over clusters (axis=0)
+
+        # Total entropy term for all segments
+        total_ent = np.sum(ent) 
+        self.ent = total_ent
+        return self.ent 
+
+
+
 
 
     # def assign_cells(self, data, lamb=0, lamb_vaf= 1, cna_only=False):
@@ -1574,7 +1718,7 @@ class ClonalTree:
                 if segments is not None:
                     labels[n] += "\n" + ",".join([f"{cna_genos[s][n][0]}|{cna_genos[s][n][1]}" for s in segments if s in self.seg_to_muts])
 
-        like_label = f"Segment {self.key}\n"
+        like_label = f"Segment\n"
         tree = pgv.AGraph(strict=False, directed=False)
         tree.node_attr['style']='filled'
         segs = self.get_segments()

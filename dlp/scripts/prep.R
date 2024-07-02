@@ -12,13 +12,14 @@ deep_copy_out <- snakemake@output[['copy_numbers']]
 sample_segs_out <- snakemake@output[['sampled_segs']]
 
 figpath <- snakemake@params[['figpath']]
-nsegs <- as.numeric(snakemake@params[['nsegs']])
+# nsegs <- as.numeric(snakemake@params[['nsegs']])
 selected_sample <- snakemake@wildcards[['sample']]
-seed <- snakemake@params[['seed']]
+# seed <- snakemake@params[['seed']]
+thresh <- snakemake@params[['thresh']]
+minvar <- snakemake@params[['minvar']]
 
 
-
-set.seed(seed)
+# set.seed(seed)
 
 
 
@@ -42,23 +43,27 @@ cp <- select(df.filt, cell,chr, segment, x, y) %>% unite(col=cn, x, y, sep ="|",
 num_states_df <- cp %>% group_by(segment, cn) %>%
   summarize(num_cells =n(), prop= num_cells/ncells )
 
-nstates <- num_states_df %>% group_by(segment) %>% summarize(nstates= sum(prop >= 0.05))
+nstates <- num_states_df %>% group_by(segment) %>% summarize(nstates= sum(prop >= thresh))
 
 
 
 #write_csv(segments.df, "segments.bin.mapping.csv")
 
-var.dat <- read.table(var_reads_in, header = F, sep="\t",
-                      col.names=c("chr", "loci", "cell", "base", "var", "total") )
+# var.dat <- read.table(var_reads_in, header = F, sep="\t",
+#                       col.names=c("chr", "loci", "cell", "base", "var", "total") )
 
+var.dat <- read_csv(var_reads_in)
 var.dat  <- var.dat %>% separate(col=cell, into=c("sample", "clone", "region", "cell_id"), sep="-", remove=F)
 
-var.dat.filt <- var.dat %>% filter(sample %in% selected_sample)
+var.dat.filt <- var.dat %>% filter(sample %in% selected_sample) %>%
+ separate(col=mutation, into =c("chr", "loci")) %>% rename(var = varReads, total= totReads)
 
-var <- var.dat.filt %>% 
-  left_join(seg_mapping %>% mutate(chr=as.character(chr)), by="chr", relationship="many-to-many") %>%
-  filter(loci >= start, loci <= end)
+# var <- var.dat.filt %>% 
+#   left_join(seg_mapping %>% mutate(chr=as.character(chr)), by="chr", relationship="many-to-many") %>%
+#   filter(loci >= start, loci <= end)
 
+var <- var.dat.filt
+print(head(var))
 
 input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
      select(segment, mutation, cell, varReads = var, totReads = total)
@@ -67,7 +72,7 @@ input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
 
 snvs <- input.dat %>% group_by(segment, mutation) %>% 
   summarize(var= sum(varReads), total=sum(totReads)) %>% 
-  filter(var > 0) %>% 
+  filter(var > minvar) %>% 
   select(segment, mutation)
 
 m <- nrow(snvs)
@@ -81,9 +86,8 @@ replace_na(list(m=0))
 
 
 med_snvs <- median(seg.dat$m)
-selected_segs <- filter(seg.dat, m >= med_snvs, nstates < 5) %>%
- ungroup() %>%
- slice_sample(n=nsegs, weight_by=m) %>% arrange(segment)
+selected_segs <-seg.dat %>% arrange(segment)
+#  slice_sample(n=nsegs, weight_by=m) %>% 
 
 p1 <- ggplot(selected_segs %>% pivot_longer(c("m", "nstates")), aes(x=name, y=value)) + facet_wrap(~name, scales="free") +
 geom_boxplot() + xlab(selected_sample) + ylab("count")
@@ -96,9 +100,10 @@ ggsave(file.path(figpath, "snvs_by_num_cn_states.pdf"), plot=p2)
 
 
 
+
 input.dat <- var %>% unite(mutation, chr, loci, sep="_") %>%
      select(segment, mutation, cell, varReads = var, totReads = total) %>% 
-     inner_join(snvs) %>% filter(segment %in% selected_segs$segment)
+     inner_join(snvs) #filter(segment %in% selected_segs$segment)
 write_csv(input.dat, var_reads_out)
 
 write_csv(selected_segs, sample_segs_out)
