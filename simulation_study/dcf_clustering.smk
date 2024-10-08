@@ -17,22 +17,23 @@ mclust_values = config["mclust"]
 k_mclust_pairs = [(k, mclust) for mclust in mclust_values for k in range(mclust-2, mclust+3)]
 rule all:
     input:
-        expand("{folder}/{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
-               folder = ["dcf_clustering"],
-               k = ["gtk"],
-               nfull = config["nfull"],
-               s=seeds,
-               restarts = config["restarts"],
-               clustsegs = config["clustsegs"],
-               cells=config["cells"],
-               snvs=config["snvs"],
-               nsegs=config["nsegs"],
-               cov=config["cov"],
-               mclust=config['mclust'],
-               err=config["cerror"],
-               dirch = config["dirch"],
-               fname = ["dcfs", "post_dcfs"]
-        ),  expand("{folder}/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
+        # expand("{folder}/{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
+        #        folder = ["dcf_clustering"],
+        #        k = ["gtk"],
+        #        nfull = config["nfull"],
+        #        s=seeds,
+        #        restarts = config["restarts"],
+        #        clustsegs = config["clustsegs"],
+        #        cells=config["cells"],
+        #        snvs=config["snvs"],
+        #        nsegs=config["nsegs"],
+        #        cov=config["cov"],
+        #        mclust=config['mclust'],
+        #        err=config["cerror"],
+        #        dirch = config["dirch"],
+        #        fname = ["dcfs", "post_dcfs"]
+        # ),  
+        expand("{folder}/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{fname}.txt",
     folder=["dcf_clustering"],
     k=[kval for kval, _ in k_mclust_pairs],
     mclust=[mclust for _, mclust in k_mclust_pairs],
@@ -48,32 +49,10 @@ rule all:
     dirch=config["dirch"],
     fname=["dcfs"]
 )
-   
-
-rule run_dcf_clustering_ground_truth_clusters:
-    input: 
-        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-        dcfs= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-    output: 
-        output_data= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
-        dcfs= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        post_dcfs = "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
-    params: 
-        thresh_prop = config["cn_prop_thresh"]
-    threads: 5
-    log: 
-        std= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
-        err= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
-    benchmark: "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
-    shell: 
-        "python ../src/dcf_clustering_v2.py -d {input.data} -g {input.dcfs} -o {output.output_data} -D {output.dcfs} "
-        "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
-        " -c -j {threads} -P {output.post_dcfs} > {log.std} 2> {log.err}"    
-
 
 rule dcf_clustering_k:
     input: 
-        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     output: 
         output_data= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
         dcfs= "dcf_clustering/k{k}/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
@@ -92,6 +71,29 @@ rule dcf_clustering_k:
         "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
         " -k {wildcards.k} "
         " -c -j {threads} > {log.std} 2> {log.err}"    
+
+# rule run_dcf_clustering_ground_truth_clusters:
+#     input: 
+#         data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+#         dcfs= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+#     output: 
+#         output_data= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/output.pkl",
+#         dcfs= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+#         post_dcfs = "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/post_dcfs.txt"
+#     params: 
+#         thresh_prop = config["cn_prop_thresh"]
+#     threads: 5
+#     log: 
+#         std= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.log",
+#         err= "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/err.log"
+#     benchmark: "dcf_clustering/gtk/clustsegs{clustsegs}_r{restarts}_nfull{nfull}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+#     shell: 
+#         "python ../src/dcf_clustering_v2.py -d {input.data} -g {input.dcfs} -o {output.output_data} -D {output.dcfs} "
+#         "--verbose --nsegs {wildcards.clustsegs} -r {wildcards.restarts} --nfull {wildcards.nfull} --thresh-prop {params.thresh_prop} "
+#         " -c -j {threads} -P {output.post_dcfs} > {log.std} 2> {log.err}"    
+
+
+
 
 
 

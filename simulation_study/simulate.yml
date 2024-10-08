@@ -1,10 +1,10 @@
 
-inpath: "sims3"
+inpath: "sims4"
 # simpath: "../clonesim/build2/simulate"
 # genpath: "../clonesim/build2/generatesinglecells"
 
-simpath: "../clonesim/build3/simulate"
-genpath: "../clonesim/build3/generatesinglecells"
+simpath: "../clonesim/build4/simulate"
+genpath: "../clonesim/build4/generatesinglecells"
 nseeds: 5
 
 cells: 
@@ -26,13 +26,17 @@ cerror:
 dirch: 
   - 2
 
-
+lossProb: 
+  - 0.1
+  
 alpha: 0.001
 nsegs: 25
 
 mclust: 
   - 5
   # - 7
+
+
 
 threshold: 0.025
 

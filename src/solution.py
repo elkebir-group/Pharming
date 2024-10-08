@@ -3,10 +3,23 @@ from dataclasses import dataclass
 from clonal_tree import ClonalTree
 from cell_mapping import CellAssign
 from draw_pretty_tree import DrawPrettyTree
-from cmb import cmb_all
+from cmb import cmb_all, cmb_loss_all, vaf_validation
+ 
 
 @dataclass
 class Solution:
+    """
+    Solution to the CTI problem.
+
+    Attributes
+    ----------
+    cost : float
+        the cost of the solution
+    ct : ClonalTree
+        the inferred clonal tree
+    phi : CellAssign
+        the inferred assignment of cells to clones in the clonal tree
+    """
     cost: float
     ct: ClonalTree
     phi: CellAssign
@@ -84,3 +97,56 @@ class Solution:
              cmb_df.to_csv(fname, index=False)
      
         return cmb_df
+    
+    def computelossCMB(self, dat, mincells=10, fname=None):
+        cmb_df = cmb_loss_all(self.ct, self.phi, dat, min_cells=mincells)
+        if fname is not None:
+             cmb_df.to_csv(fname, index=False)
+     
+        return cmb_df
+    
+    def computeVAFs(self, dat, mincells=10, fname=None):
+        vaf = vaf_validation(self.ct, self.phi, dat, min_cells=mincells)
+        if fname is not None:
+             vaf.to_csv(fname, index=False)
+     
+        return vaf
+    
+    def get_lost_snvs(self):
+        return self.ct.get_lost_snvs()
+    
+    def get_snv_cluster_tree(self):
+        return self.ct.mutation_cluster_tree()
+
+    def assess_loss(self, snvs:list ):
+        prec = self.ct.loss_precision(snvs)
+        recall = self.ct.loss_recall(snvs)
+        fps_leaves = self.ct.fp_leaves(snvs)
+        return prec, recall, fps_leaves
+
+    def cna_loss(self, snvs:list):
+        tp, tn, fn, fp = self.ct.cna_loss(snvs)
+        prec = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        acc =   (tp + tn) / (tp + tn + fn + fp)
+
+        return prec, recall, acc
+
+
+    def all_snv_tree_costs(self, data):
+        return self.ct.compute_genotype_costs(data, self.phi)
+    
+    def compute_snv_likelihoods(self, data):
+        return self.ct.compute_snv_likelihoods(data, self.phi)
+
+    # def refit_segment(self, segment, data,lamb, cna_tree=None, threshold=0.05):
+    #     self.ct.filter_segments([segment])
+    #     Tm = self.get_snv_cluster_tree()
+    #     if not cna_tree:
+    #         cn_prop = self.data.thresholded_cn_prop(segment, threshold,
+    #                                                        start_state= (1,1), include_start_state=False)
+    #         if len(cn_prop) == 1:
+
+
+
+    

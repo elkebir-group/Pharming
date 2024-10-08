@@ -107,6 +107,8 @@ if __name__ == "__main__":
                         help="path where the pickled solution wil be saved")
     parser.add_argument("--png", required=False, type=str,
                         help="path where the pickled solution wil be saved")
+    parser.add_argument("--collapse", action="store_true",
+                        help="flag to collapse linear chains of SNVs")
 
 
     
@@ -163,7 +165,9 @@ if __name__ == "__main__":
             else:
                 phi[name_to_cluster[u]] = cell_cluster_mapping[cell_cluster]
 
-    collapse_linear_chains(T, name_to_cluster["Root"], mut_mapping, phi)
+
+    if args.collapse:
+        collapse_linear_chains(T, name_to_cluster["Root"], mut_mapping, phi)
 
 
     genotypes = make_genotypes(T, mut_mapping, phi, dat)

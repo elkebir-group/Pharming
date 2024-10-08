@@ -88,15 +88,13 @@ if __name__ == "__main__":
                         help="random number seed")             
     parser.add_argument("--scite", type=str, 
                         help="name of SCITE input file")
-    parser.add_argument("--clusters", type=str,
-                         help=  "mapping of cell ids to clusters")
     parser.add_argument("--genes", type=str,
                          help= "filename for SCITE geneNames")
     parser.add_argument("--umap", type=str,
                          help=  "filename for png of umap embedding")
-    parser.add_argument("--cell-clusters", type=str,
+    parser.add_argument("-c", "--cell-clusters", type=str,
                          help=  "mapping of cell labels to clusters")
-    parser.add_argument("--mut-clusters", type=str,
+    parser.add_argument("-m", "--mut-clusters", type=str,
                          help=  "mapping of mut labels to clusters")
             
     args = parser.parse_args()

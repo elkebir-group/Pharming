@@ -28,7 +28,7 @@ def main(args):
     if args.counts is not None:
         with open(args.counts, "w+") as file:
             for i in range(dat.N):
-                for j in range(dat.M):
+                for j in range(dat.m):
                     if dat.total[i,j] > 0:
                         #|chr | snv | cell |variant base | variant_reads  total_reads |
                         file.write(f"{dat.snv_to_seg[j]}\t{j}\t{i}\tA\t{dat.var[i,j]}\t{dat.total[i,j]}\n")

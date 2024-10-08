@@ -30,6 +30,17 @@ rule all:
             dirch = config["dirch"],
             err = config["cerror"]
         ),
+        expand("{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/loss_error_report.csv",
+            inpath = config["inpath"],
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            dirch = config["dirch"],
+            err = config["cerror"]
+        ),
 
 
 rule simulate:
@@ -46,6 +57,7 @@ rule simulate:
         alpha=  config["alpha"],
         truncalSegs = config["truncalsegs"],
         threshold = config["threshold"],
+        lossProb = config["lossProb"],
         simout_dir = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}",
     log:
         std ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/run.log", 
@@ -56,6 +68,7 @@ rule simulate:
         " -kk {params.truncalSegs} -f "
         "-dirich_param {wildcards.dirch}   -threshold {params.threshold} "
         "-s {wildcards.s}  -l {wildcards.mclust} "
+        "-lossProb {params.lossProb} "
         "-k {wildcards.nsegs} -n {wildcards.snvs} -m {params.sample} "
         "-output_file_dir {params.simout_dir}  > {log.std} 2> {log.err}  "
 
@@ -88,9 +101,20 @@ rule make_data:
     input: 
         sparse ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/sparse.p0",
         copy_profiles ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cells.p0",
-    output: "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+    params: 
+        alpha = config["alpha"]
+    output: 
+        data = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        cell_lookup = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cells_lookup.csv",
+        mut_lookup = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mut_lookup.csv",
+        # seg_lookup = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/segment_lookup.csv",
+
     shell:
-        "python ../src/make_data.py -f {input.sparse} -c {input.copy_profiles} -D {output} " 
+        "python ../src/make_data.py -f {input.sparse} -c {input.copy_profiles} -D {output.data} "
+        "-a {params.alpha} -l {output.cell_lookup} -m {output.mut_lookup} " 
+
+
+
 
 rule make_gt:
     input: 
@@ -140,7 +164,47 @@ rule write_gt_files:
         
 
 
+rule filter_loss_list:
+    input: 
+        gt = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
+        phi ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl"
+    output: 
+        filtered_snvs = "{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_filtered_loss.csv",
+        loss_err ="{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/loss_error_report.csv"
+    run:
+        import networkx as nx
+        import pandas as pd 
+        gt = pd.read_pickle(input.gt)
+        phi = pd.read_pickle(input.phi)
+        gt_loss_snvs = gt.get_lost_snvs()
+        filtered_snvs = []
+        good_snvs =[]
+        for j in gt_loss_snvs:
 
+            for n in gt.preorder():
+
+               if n in gt.mut_mapping and j in gt.mut_mapping[n]:
+                    for u, lsnvs in gt.mut_loss_mapping.items():
+                        if j in lsnvs:
+                            lost_node = u 
+                            break
+                    lost_path = nx.shortest_path(gt.tree, n, lost_node)
+                    has_cells = False
+                    for p in lost_path:
+                        if p == lost_node:
+                            continue
+                        if len(phi.get_cells(p)) > 0:
+                            has_cells = True
+                            filtered_snvs.append([j,lost_node])
+                            good_snvs.append(j)
+                            break 
+  
+        with open(output['loss_err'], "w+") as file:
+            file.write("num_lost,num_retained,num_filtered\n")
+            num_filtered = len(gt_loss_snvs) - len(good_snvs)
+            file.write(f"{len(gt_loss_snvs)},{len(good_snvs)},{num_filtered}\n")
+
+        pd.DataFrame(filtered_snvs, columns=["mutation", "cluster"]).to_csv(output['filtered_snvs'], index=False)
 
 
 

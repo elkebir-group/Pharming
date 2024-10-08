@@ -161,7 +161,20 @@ class Pharming:
             G.add_edge(self.start_state, u,weight=1)
 
         cnatrees = nx.algorithms.tree.branchings.ArborescenceIterator(G)
-        scriptS= list(cnatrees)
+
+        #check the CNA  tree to make sure we don't get a ressurrection of an allele
+        def check_tree(T):
+            for u,v in T.edges:
+                if u[0] ==0 and v[0] > 0:
+                    return False 
+                if u[1] ==0 and v[1] > 1:
+                    return False
+            return True
+
+        scriptS = [S for S in cnatrees if check_tree(S)]
+
+
+     
         return scriptS
        
 
@@ -438,23 +451,23 @@ class Pharming:
         cn_prop = self.data.thresholded_cn_prop(ell, self.thresh_prop, self.start_state)
         cn_states = set(cn_prop.keys())
 
-        try:
+        # try:
         
-            if len(self.cnatrees) == 0 or ell not in self.cnatrees:
-                # cnatrees =  self.enumerate_cna_trees_python(cn_states)
-                 cnatrees =  self.enumerate_cna_trees(cn_states)
-            else:
-                cnatrees = [self.cnatrees[ell]]
-            for S in cnatrees:
-                st = STI(ell, S, delta, lamb=self.lamb, ilp=self.ilp,prop_thresh=self.thresh_prop, cell_threshold=self.cell_threshold)
-                st.precompute_costs(self.data)
-                stis.append(st)
-        
+        if len(self.cnatrees) == 0 or ell not in self.cnatrees:
+            cnatrees =  self.enumerate_cna_trees_python(cn_states)
+            #  cnatrees =  self.enumerate_cna_trees(cn_states)
+        else:
+            cnatrees = [self.cnatrees[ell]]
+        for S in cnatrees:
+            st = STI(ell, S, delta, lamb=self.lamb, prop_thresh=self.thresh_prop)
+            st.precompute_costs(self.data)
+            stis.append(st)
+    
 
-           
-            print(f"Segment {ell}: preprocessing complete")
-        except Exception as e:
-            print(f"Segment {ell} timed out enumerating CNA trees, skipping..")
+        
+        print(f"Segment {ell}: preprocessing complete")
+        # except Exception as e:
+            # print(f"Segment {ell} timed out enumerating CNA trees, skipping..")
 
  
         return ell, stis
