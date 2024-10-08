@@ -240,9 +240,11 @@ rule cmb:
         sol = "{sample}/pharming/{clust}_k{k}/s{seed}_r{nsegs}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/solutions.pkl",
     params:
         min_cells = config["mincells"]
-    output:  "{sample}/pharming/{clust}_k{k}/s{seed}_r{nsegs}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/cmb.csv",
+    output:  
+        cmb = "{sample}/pharming/{clust}_k{k}/s{seed}_r{nsegs}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/cmb.csv",
+       vaf = "{sample}/pharming/{clust}_k{k}/s{seed}_r{nsegs}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/vaf.csv",
     shell:
-        "python ../src/cmb.py -d {input.data} -s {input.sol} -o {output} --min-cells {params.min_cells} "
+        "python ../src/cmb.py -d {input.data} -s {input.sol} -o {output.cmb} --min-cells {params.min_cells} -v {output.vafs} "
 
 
 rule write_flat_files:

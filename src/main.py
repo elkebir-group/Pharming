@@ -1,11 +1,11 @@
 # Created by: L.L. Weber
 # Created on: 2024-02-29 17:30:46
+"""Main module for Pharming CLI"""
 
 import argparse
-from data import Data
+import networkx as nx
 from pharming import Pharming
 from utils import load_pickled_object, pickle_object
-import networkx as nx
 
 def main(args):
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
@@ -312,12 +312,12 @@ if __name__ == "__main__":
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/input/data.pkl",
-    #     "-j", "10",
-    #     "-D", f"{pth}/decifer/k{k}/post_dcfs.txt",
+    #     "-j", "1",
+    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
     #     "-n", "5",
-    #     "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
+    #     # "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
     #     # "-k", f"{k}",
-    #     #  "-L", "341", # "376"
+    #      "-L", "342", # "376"
     #     "-l", "1000",
     #     "--thresh-prop", "0.05",
     #     "--ninit-segs", "10",

@@ -6,29 +6,12 @@ seeds = [i+10 for i in range(config["nseeds"])]
 
 import sys 
 sys.path.append("../src")
-
+import pandas as pd
 
 rule all:
     input:
-        expand("pharming/{dcf_source}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
-            dcf_source = ["gt"],
-            order = config["order"],
-            isegs = config["ninit_segs"],
-            tm = config["ninit_tm"],
-            topn = config["topn"],
-            lamb = config["lamb"],
-            s =seeds,
-            cells = config["cells"],
-            snvs = config["snvs"],
-            nsegs = config["nsegs"],
-            cov = config["cov"],
-            mclust = config['mclust'],
-            dirch = config["dirch"],
-            err = config["cerror"]
-        ),
-        expand("pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/model_selection2.csv",
+        expand("pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
             k = [3,4,5,6],
-            dcf_source = ["gt"],
             order = config["order"],
             isegs = config["ninit_segs"],
             tm = config["ninit_tm"],
@@ -43,6 +26,40 @@ rule all:
             dirch = config["dirch"],
             err = config["cerror"]
         ),
+        expand("pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
+            k = [3,4,5,6],
+            order = config["order"],
+            isegs = config["ninit_segs"],
+            tm = config["ninit_tm"],
+            topn = config["topn"],
+            lamb = config["lamb"],
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            dirch = config["dirch"],
+            err = config["cerror"]
+        ),
+        expand("pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_tree_assignment_costs.csv",
+            k = [3,4,5,6],
+            order = config["order"],
+            isegs = config["ninit_segs"],
+            tm = config["ninit_tm"],
+            topn = config["topn"],
+            lamb = config["lamb"],
+            s =seeds,
+            cells = config["cells"],
+            snvs = config["snvs"],
+            nsegs = config["nsegs"],
+            cov = config["cov"],
+            mclust = config['mclust'],
+            dirch = config["dirch"],
+            err = config["cerror"]
+        ),
+
+       
         # expand("pharming/{clust}/{prefix}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv",
         #     clust =["dcf_clustering", "dcf_clustering_gtk"],  #"decifer"
         #     prefix = ["dcfs"],
@@ -80,76 +97,76 @@ rule all:
         #              inpath = config["inpath"],
         # )
 
-rule pharming_gt_dcfs:
-    input:
-        dcfs = "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-    params:
-        cell_thresh = config["cell_threshold"], #increasing threshold 16-May
-        root_x = 1,
-        root_y = 1,
-        max_loops = 1, #config["max_loops"],
-        thresh_prop = config["thresh_prop"],
-        opath = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"
-    threads: 1
-    output:
-        sol = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-        profile = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
-        pred_genos = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
-        pred_mut= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
-        pred_mut_loss=   "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut_loss.csv",
-        pred_cell =  "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
-        pred_tree = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt"
+# rule pharming_gt_dcfs:
+#     input:
+#         dcfs = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
+#         data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+#     params:
+#         cell_thresh = config["cell_threshold"], #increasing threshold 16-May
+#         root_x = 1,
+#         root_y = 1,
+#         max_loops = 1, #config["max_loops"],
+#         thresh_prop = config["thresh_prop"],
+#         opath = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"
+#     threads: 1
+#     output:
+#         sol = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+#         profile = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+#         pred_genos = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
+#         pred_mut= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
+#         pred_mut_loss=   "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut_loss.csv",
+#         pred_cell =  "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
+#         pred_tree = "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt"
 
-    benchmark:"pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
-    log:
-        std= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
-        err= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
-    shell:
-        "python ../src/main.py -d {input.data} -D {input.dcfs} "
-        "-s {wildcards.s} "
-        "-l {wildcards.lamb} "
-        "-n {wildcards.topn} "
-        "-j {threads} "
-        "--ninit-segs {wildcards.isegs} "
-        "--ninit-tm {wildcards.tm} "
-        "--cell-threshold {params.cell_thresh} "
-        "--order {wildcards.order} "
-        "--root_x {params.root_x} --root_y {params.root_y} " 
-        "--collapse "
-        "--thresh-prop {params.thresh_prop} "
-        "--ntree-iter {params.max_loops} "
-        "--sum-condition "
-        "--profile {output.profile} "
-        "-O {params.opath} "
-        "-P {output.sol} > {log.std} 2> {log.err} "
+#     benchmark:"pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+#     log:
+#         std= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+#         err= "pharming/gt/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+#     shell:
+#         "python ../src/main.py -d {input.data} -D {input.dcfs} "
+#         "-s {wildcards.s} "
+#         "-l {wildcards.lamb} "
+#         "-n {wildcards.topn} "
+#         "-j {threads} "
+#         "--ninit-segs {wildcards.isegs} "
+#         "--ninit-tm {wildcards.tm} "
+#         "--cell-threshold {params.cell_thresh} "
+#         "--order {wildcards.order} "
+#         "--root_x {params.root_x} --root_y {params.root_y} " 
+#         "--collapse "
+#         "--thresh-prop {params.thresh_prop} "
+#         "--ntree-iter {params.max_loops} "
+#         "--sum-condition "
+#         "--profile {output.profile} "
+#         "-O {params.opath} "
+#         "-P {output.sol} > {log.std} 2> {log.err} "
 
 
 rule pharming_k:
     input:
         dcfs = "dcf_clustering/k{k}/clustsegs10_r100_nfull5/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/dcfs.txt",
-        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
     params:
         cell_thresh = config["cell_threshold"], #increasing threshold 16-May
         root_x = 1,
         root_y = 1,
         max_loops = 1, #config["max_loops"],
         thresh_prop = config["thresh_prop"],
-        opath = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"
+        opath = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}"
     threads: 1
     output:
-        sol = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-        profile = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
-        pred_genos = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
-        pred_mut= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
-        pred_mut_loss=   "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut_loss.csv",
-        pred_cell =  "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
-        pred_tree = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt",
-        model_selection= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/model_selection.csv"
-    benchmark:"pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        profile = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/run.prof",
+        pred_genos = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
+        pred_mut= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
+        pred_mut_loss=   "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut_loss.csv",
+        pred_cell =  "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
+        pred_tree = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt",
+        model_selection= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/model_selection.csv"
+    benchmark:"pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/benchmark.log"
     log:
-        std= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
-        err= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
+        std= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.log",
+        err= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pharm.err.log"
     shell:
         "python ../src/main.py -d {input.data} -D {input.dcfs} "
         "-s {wildcards.s} "
@@ -173,26 +190,26 @@ rule pharming_k:
 
 rule score_tree:
     input:
-        gt_phi ="sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cellclust_gt.csv",
-        gt_mut= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
-        gt_tree ="sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
-        gt_genos ="sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/genotypes.csv",
-        pred_mut= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
-        pred_cell =  "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
-        pred_genos = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
-        pred_tree = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt"
+        gt_phi ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cellclust_gt.csv",
+        gt_mut= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/mutclust_gt.csv",
+        gt_tree ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/tree.txt",
+        gt_genos ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/genotypes.csv",
+        pred_mut= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_mut.csv",
+        pred_cell =  "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_cell.csv",
+        pred_genos = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_genos.csv",
+        pred_tree = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/pred_tree.txt"
     log:
-        err= "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.err.log"
-    output:"pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv"
+        err= "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.err.log"
+    output:"pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/metrics.csv"
     shell:
         "timeout 20m ./cpp/metrics {input.gt_tree} {input.gt_phi} {input.gt_mut} {input.gt_genos} "
         " {input.pred_tree} {input.pred_cell} {input.pred_mut} {input.pred_genos} > {output} 2> {log.err} "
 
 rule model_selection:
     input:         
-        sol = "pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
-        data= "sims3/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
-    output:"pharming/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/model_selection2.csv"
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+    output:"pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/model_selection2.csv"
     run:
        import pandas as pd
        from solution import Solution 
@@ -204,6 +221,163 @@ rule model_selection:
        with open(output[0], "w+") as file:
             file.write("ICL,BIC,ENT,cost,snv_cost,cna_cost\n")
             file.write(f"{icl},{bic},{ent},{cost},{snv},{cna}\n")
+
+rule compute_loss:
+    input:
+        gt_tree ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl"
+    output: 
+        loss_scores = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/loss_scores.csv",   
+        fps = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/fps_leaves.csv",
+        snv_tree_cost = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_tree_assignment_costs.csv"
+    run:
+        import pandas as pd
+        from solution import Solution 
+        from clonal_tree import ClonalTree 
+        gt = pd.read_pickle(input.gt_tree)
+        dat = pd.read_pickle(input.data)
+        solutions = pd.read_pickle(input.sol)
+        gt_loss_snvs = gt.get_lost_snvs()
+        loss_scores = []
+     
+        for i, sol in enumerate(solutions):
+            if i > 0:
+                break
+            prec, recall, fps_leaves = sol.assess_loss(gt_loss_snvs)
+            cna_prec, cna_recall, cna_acc = sol.cna_loss(gt_loss_snvs)
+            inf_loss = sol.ct.get_lost_snvs()
+            loss_scores.append([i, prec, recall, len(gt_loss_snvs), len(inf_loss), cna_prec, cna_recall, cna_acc])
+            snv_tree_costs = sol.all_snv_tree_costs(dat)
+        df = pd.DataFrame(loss_scores,columns=["solution", "precision", "recall", "num_gt_lost", "num_inf_lost", "cna_precision", "cna_recall", "cna_acc"])
+        df.to_csv(output['loss_scores'], index=False)
+        fps_leaves.to_csv(output['fps'], index=False)
+        snv_tree_costs.to_csv(output['snv_tree_cost'], index=False)
+
+rule compute_cmbs:
+    input:
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl"
+    output: 
+        loss_cmb = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/loss_cmb.csv",   
+        cmb = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cmb.csv",
+        vaf_validation = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/vaf_validation.csv"
+    params:
+        mincells = 10
+    run:
+
+        dat = pd.read_pickle(input['data'])
+        solutions = pd.read_pickle(input['sol'])
+        sol = solutions[0]
+        cmb_df = sol.computeCMB(dat,mincells=params['mincells'], fname=output['cmb'])
+        cmb_loss_df = sol.computelossCMB(dat, mincells=params['mincells'], fname=output['loss_cmb'])    
+        vaf_val = sol.computeVAFs(dat, mincells=params['mincells'], fname=output['vaf_validation']) 
+
+rule snv_likelihoods:
+    input:
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        gt_tree ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
+        gt_phi = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl"
+    output:
+        snv_comp = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_likelihood_comp.csv",   
+    run:    
+        dat = pd.read_pickle(input['data'])
+        solutions = pd.read_pickle(input['sol'])
+        sol = solutions[0]
+        gt_tree = pd.read_pickle(input['gt_tree'])
+        gt_phi = pd.read_pickle(input['gt_phi'])
+        gt_like = gt_tree.compute_snv_likelihoods(dat, gt_phi)
+        gt_like["source"] = "gt"
+        print("done gt")
+        inf_like = sol.compute_snv_likelihoods(dat)
+        inf_like["source"] = "inf"
+        pd.concat([gt_like, inf_like]).to_csv(output['snv_comp'], index=False)
+
+        
+# rule filter_loss_list:
+#     input: 
+#         gt = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl",
+#         phi ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/phi.pkl"
+#     output: 
+#         filtered_snvs = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_filtered_loss.csv",
+#         loss_err ="sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/loss_error_report.csv"
+#     run:
+#         import networkx as nx
+#         gt = pd.read_pickle(input.gt)
+#         phi = pd.read_pickle(input.phi)
+#         gt_loss_snvs = gt.get_lost_snvs()
+#         filtered_snvs = []
+#         good_snvs =[]
+#         for j in gt_loss_snvs:
+
+#             for n in gt.preorder():
+
+#                if n in gt.mut_mapping and j in gt.mut_mapping[n]:
+#                     for u, lsnvs in gt.mut_loss_mapping.items():
+#                         if j in lsnvs:
+#                             lost_node = u 
+#                             break
+#                     lost_path = nx.shortest_path(gt.tree, n, lost_node)
+#                     has_cells = False
+#                     for p in lost_path:
+#                         if p == lost_node:
+#                             continue
+#                         if len(phi.get_cells(p)) > 0:
+#                             has_cells = True
+#                             filtered_snvs.append([j,lost_node])
+#                             good_snvs.append(j)
+#                             break 
+  
+#         with open(output['loss_err'], "w+") as file:
+#             file.write("num_lost,num_retained,num_filtered\n")
+#             num_filtered = len(gt_loss_snvs) - len(good_snvs)
+#             file.write(f"{len(gt_loss_snvs)},{len(good_snvs)},{num_filtered}\n")
+
+#         pd.DataFrame(filtered_snvs, columns=["mutation", "cluster"]).to_csv(output['filtered_snvs'], index=False)
+
+
+             
+
+
+rule compute_filtered_loss:
+    input:
+        filtered_snvs = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/snv_filtered_loss.csv",
+        sol = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solutions.pkl",
+        data= "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/data.pkl",
+        gt =  "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl"
+    output: 
+        loss_scores = "pharming_recomb/dcf_clustk{k}/{order}/isegs{isegs}_tm{tm}_top{topn}_lamb{lamb}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/filtered_loss_scores.csv",   
+    run:
+        import pandas as pd
+        lost_snvs = pd.read_csv(input['filtered_snvs'])
+        gt_loss_snvs = lost_snvs["mutation"].values
+        from solution import Solution 
+        from clonal_tree import ClonalTree 
+        dat = pd.read_pickle(input.data)
+        solutions = pd.read_pickle(input.sol)
+        gt = pd.read_pickle(input.gt)
+        all_gt_lost_snvs = gt.get_lost_snvs()
+        ignore_list = [j for j in all_gt_lost_snvs if j not in gt_loss_snvs]
+
+        loss_scores = []
+     
+        for i, sol in enumerate(solutions):
+            if i > 0:
+                break
+            prec, recall, fps_leaves = sol.assess_loss(gt_loss_snvs)
+    
+            inf_loss = sol.ct.get_lost_snvs()
+            inf_loss = [j for j in inf_loss if j not in ignore_list]
+
+            loss_scores.append([i, prec, recall, len(gt_loss_snvs), len(inf_loss)])
+
+        df = pd.DataFrame(loss_scores,columns=["solution", "precision", "recall", "num_gt_lost", "num_inf_lost"])
+        df.to_csv(output['loss_scores'], index=False)
+
+
+
+
 # rule pharming:
 #     input:
 #         dcfs = "{clust}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/{prefix}.txt",

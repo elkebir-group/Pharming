@@ -21,26 +21,79 @@ def parse_tree(fname):
             else:
               break
     return nx.DiGraph(edge_list)
+# def make_genotypes(tree, mut_mapping, phi, dat):
+#     root = [n for n in tree if tree.in_degree[n]==0][0]
+#     snvs = set(dat.snv_to_seg.keys())
 
 
+#     genotypes = {u: {} for u in tree}
+#     for v in tree:
+#         if v not in mut_mapping:
+#             mut_mapping[v] =[]
+#     for u in tree:
+#         consensus_profiles = get_consenus_profile(phi, u, tree, dat, root)
+#         present = nx.ancestors(tree, u) | {u}
+#         pres_snvs =set(int(j) for v in present for j in mut_mapping[v])
+#         not_present = snvs - pres_snvs
+#         for j in pres_snvs:
+#             ell = dat.snv_to_seg[j]
+#             cn = consensus_profiles[ell]
+#             genotypes[u][j] =(*cn,1,0)
+#         for j in not_present:
+#             ell = dat.snv_to_seg[j]
+#             cn = consensus_profiles[ell]
+#             genotypes[u][j] =(*cn,0,0)
+#     return genotypes
 
-def make_genotypes(tree, psi):
+
+def get_consenus_profile(phi, n, tree, dat, root):
+    copy_number_node = None
+    if n not in phi:
+        reverse_root_to_node_path =nx.shortest_path(tree, root, n)[::-1]
+        for u in reverse_root_to_node_path:
+            if u in phi:
+                copy_number_node = u
+                break
+        
+    else: 
+        copy_number_node = n
+    if copy_number_node is None:
+        return {ell: (1,1) for ell in dat.segments}
+    
+    cells = phi[copy_number_node].tolist()
+
+    return {ell: dat.consensus_profile(cells, ell) for ell in dat.segments}
+
+
+def make_genotypes(tree, psi, phi, dat):
 
     mut_mapping = utils.inverse_dict(psi)
-    snvs = set(psi.keys())
+    root = [n for n in tree if tree.in_degree[n]==0][0]
+    snvs = set(dat.snv_to_seg.keys())
+    to_del = [n for n in phi if len(phi[n])==0]
+    for n in to_del:
+        del phi[n]
+
     genotypes = {u: {} for u in tree}
     for v in tree:
         if v not in mut_mapping:
             mut_mapping[v] =[]
     for u in tree:
+ 
+        consensus_profiles = get_consenus_profile(phi, u, tree, dat, root)
         present = nx.ancestors(tree, u) | {u}
         pres_snvs =set(int(j) for v in present for j in mut_mapping[v])
         not_present = snvs - pres_snvs
         for j in pres_snvs:
-            genotypes[u][j] =(1,1,1,0)
+            ell = dat.snv_to_seg[j]
+            cn = consensus_profiles[ell]
+            genotypes[u][j] =(*cn,1,0)
         for j in not_present:
-            genotypes[u][j] =(1,1,0,0)
+            ell = dat.snv_to_seg[j]
+            cn = consensus_profiles[ell]
+            genotypes[u][j] =(*cn,0,0)
     return genotypes
+    
     # root= [n for n in tree if tree.in_degree[n]==0][0]
     # new_root = max(tree)+1
     # tree.add_edge(new_root, root)
@@ -114,12 +167,12 @@ if __name__ == "__main__":
     # cov = 0.25
     # instance = f"s{seed}_m5000_k25_l5_d2"
     # folder = f"n1000_c{0.25}_e0" 
-    # ppth = f"simulation_study/phertilizer/sims"
+    # ppth = f"simulation_study/phertilizer/sims4"
 
 
     # args = parser.parse_args([
 
-    #     "-d", f"simulation_study/sims/{instance}/{folder}/data.pkl",
+    #     "-d", f"simulation_study/sims4/{instance}/{folder}/data.pkl",
     #     "-t", f"{ppth}/{instance}/{folder}/tree.txt",
     #     "-n", f"{ppth}/{instance}/{folder}/phi.csv",
     #     "-m", f"{ppth}/{instance}/{folder}/psi.csv",
@@ -132,6 +185,7 @@ if __name__ == "__main__":
     cell_df =  pd.read_csv(args.phi)
     phi_dict =dict(zip(cell_df["cell"], cell_df["cluster"]))
     phi = CellAssign(phi_dict, set(T.nodes()))
+    phi_dict_inverse =phi.cell_mapping
     df =  pd.read_csv(args.psi)
     df[['segment', 'snv']] = df['mutation'].str.split('_', expand=True)
     df["segment"] = df["segment"].astype(int)
@@ -140,7 +194,7 @@ if __name__ == "__main__":
     snv_to_seg = dict(zip(df["snv"], df["segment"]))
     seg_to_snvs = utils.inverse_dict(snv_to_seg)
 
-    genotypes = make_genotypes(T, psi)
+    genotypes = make_genotypes(T, psi, phi_dict_inverse, dat)
 
     ct = ClonalTree(T, genotypes, seg_to_snvs)
   

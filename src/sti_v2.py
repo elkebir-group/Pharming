@@ -1,14 +1,14 @@
+"""Module to infer a segment tree."""
 
+from itertools import chain, combinations
 import networkx as nx
 import numpy as np
-import pandas as pd 
-from itertools import chain, combinations
-from clonal_tree import ClonalTree
 import clonelib
-from cell_mapping import CellAssign
+from clonal_tree import ClonalTree
+# from cell_mapping import CellAssign
 from enumerate import Enumerate
 from solution import Solution
-from utils import load_pickled_object, pickle_object, timeit_decorator,draw
+from utils import draw
 from genotype_tree import GenotypeTree
 
 
@@ -19,68 +19,71 @@ from genotype_tree import GenotypeTree
 
 
 class STI:
-    '''
-    a class to solve the segment tree inference problem
+    """A class to solve the segment tree inference problem.
     
-    S: a nx:Digraph represnting the CNA tree
-    k: int representing the number of SNV clusters
-    r: int representing the number of cell clusters
-    seed: int representing the random number seed 
+    Attributes
+    ----------
+    ell : int 
+        segment id 
+    S : nx:Digraph 
+        a CNA tree
+    k: int 
+        the number of SNV clusters
+    r: int 
+        number of cell clusters
+    start_state: tuple
+        the initial CNA state at the root
+    lamb : float 
+        the objective function weight for CNA deviations 
+    S_root : int 
+        the root of the CNA tree
+    delta : dict
+        the DCFs corresponding to the SNV clusters 
+    T_SNVs : list
+        a list of valid SNV trees for a given CNA tree S
+    T_SNV_groups : list
+        a list of lists of SNV trees that are in the same group
+    group_desc : dict
+        a dictionary of group descriptions of the T_SNV_groups, keys are split state ('sscn') and children
+    max_iterations : int
+        the maximum number of iterations for the optimization algorithm
+    """
 
-    '''
-    def __init__(self, ell, S, delta, lamb =5, niter=10, ilp=False, 
+    def __init__(self, ell, S, delta, lamb =5, niter=10,
                  prop_thresh=0, start_state=(1,1),
-                 sum_condition = False, cell_threshold=0,
+                 sum_condition = False,
                  ) -> None:
     
-        self.ell = ell 
+        self.ell = ell
+
         nodes = list(S)
-        if len(nodes) == 0:
-                 raise ValueError("CNA Tree S is not valid!")
-        else:
-            self.S = S 
-        self.delta = delta
+        if len(nodes) <= 1:
+            raise ValueError("CNA Tree S is not valid!")
     
-  
-
+        self.S = S 
+        self.delta = delta
         self.lamb = lamb
-        self.ilp = ilp 
-
         self.max_iterations = niter
         self.S_root = [n for n in self.S if S.in_degree[n]==0][0]
+        
         self.cn_states = {}
         self.k = len(self.delta)
         for i, u in enumerate(nx.dfs_preorder_nodes(self.S, self.S_root)):
-            self.cn_states[u] = self.k +i + 1 
+            self.cn_states[u] = self.k +i + 1
         
         self.cn_states_inv = {val: key for key,val in self.cn_states.items()}
 
-
-        if len(list(self.S)) > 0:
-            snv_tree_edgelists = clonelib.get_genotype_trees(list(self.S.edges))
-        else:
-            snv_tree_edgelists = []
-         
-            root = nodes[0]
-            for i in range(2):
-                if i == 0:
-                    snv_tree_edgelists.append( [((root[0], root[1], 0, 0), 
-                                                 (root[0], root[1], 1, 0))])
-                else:
-                    snv_tree_edgelists.append( [((root[0], root[1], 0, 0),
-                                                  (root[0], root[1], 0, 1))])
-
-  
-        self.T_SNVs = [nx.DiGraph(edges) for edges in snv_tree_edgelists]
+        self.T_SNVs = [nx.DiGraph(edges) for edges in clonelib.get_genotype_trees(list(self.S.edges))]
         self.T_SNV_groups, self.group_desc = self.group_snv_trees()
 
-        for g in self.group_desc:
-            if len(self.T_SNV_groups[g])==0:
-                print(f"Missing additional SNV trees for group {g}: {self.group_desc[g]}")
+        # for g in self.group_desc:
+        #     if len(self.T_SNV_groups[g])==0:
+        #         draw(S, "test/S.png")
+        #         print(f"Missing additional SNV trees for group {g}: {self.group_desc[g]}")
                 # self.T_SNV_groups[g] = self.generate_snv_trees(g)
 
 
-        self.cell_threshold = cell_threshold        
+      
         self.cn_delta = {}
         self.cost1, self.cost2 = None, None
         self.prop_thresh = prop_thresh
@@ -624,10 +627,10 @@ class STI:
 
    
         results = []
-        if not self.ilp:
-            dcfs = {}
-        else:
-            dcfs = self.delta
+        # if not self.ilp:
+        #     dcfs = {}
+        # else:
+        #     dcfs = self.delta
 
         merged_dcfs = self.cn_dcfs | self.delta
 
@@ -643,7 +646,7 @@ class STI:
                     continue
 
             cost, best_ca = segment_tree.optimize(self.data, self.lamb, 
-                                                  max_iterations= self.max_iterations, dcfs=dcfs)
+                                                  max_iterations= self.max_iterations, dcfs={})
 
             results.append(Solution(cost, segment_tree, best_ca))
         
