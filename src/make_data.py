@@ -148,22 +148,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    # instance = "s11_m5000_k25_l5_d2"
-    # # instance = "s12_m5000_k25_l7"
-    # folder = "n1000_c0.25_e0" 
-    # pth = f"simulation_study/sims4"
-
-    # opth = "test"
-
-    # args = parser.parse_args([
-
-    #     "-f", f"{pth}/{instance}/{folder}/sparse.p0",
-    #     "-c", f"{pth}/{instance}/{folder}/cells.p0",
-    #     "-D", f"{opth}/data.pkl",
-
-    # ])
-
-
 
     dat = load_from_files(args.file, args.profiles, args.alpha)
     if args.data is not None:
