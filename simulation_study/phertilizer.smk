@@ -119,6 +119,21 @@ rule score_tree:
         "timeout 20m ./cpp/metrics {input.gt_tree} {input.gt_phi} {input.gt_mut} {input.gt_genos} "
         " {input.pred_tree} {input.pred_cell} {input.pred_mut} {input.pred_genos} > {output} 2> {log.err} "
 
+rule cna_metrics:
+    input: 
+        inf = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/solution.pkl",
+        gt = "sims4/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/gt.pkl"
+    output: 
+        metrics = "phertilizer/{inpath}/s{s}_m{snvs}_k{nsegs}_l{mclust}_d{dirch}/n{cells}_c{cov}_e{err}/cna_metrics.csv"
+    run:
+        s=1
+        d =1
+        inf_sol =pd.read_pickle(input.inf)
+        gt_sol = pd.read_pickle(input.gt)
+        inf_sol.cna_metrics(gt_sol, output.metrics)
+    
+
+
 
 # rule eval_solutions:
 #     input:

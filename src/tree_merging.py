@@ -11,7 +11,7 @@ WRANDOM = "weighted-random"
 COST = "cost"
 class ClonalTreeMerging:
     def __init__(self, k, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
-         collapse = True, cell_threshold=25, inter_opt=False, init_on_first= False ):
+         collapse = True, cell_threshold=25, inter_opt=False, init_on_first= False, maxtrees=5000, verbose=False ):
         
         self.k = k
         if rng is not None:
@@ -21,8 +21,9 @@ class ClonalTreeMerging:
 
         self.top_n = top_n
 
+        self.verbose = verbose
  
-    
+        self.maxtrees = maxtrees
         
         if order not in [RANDOM, NSNVS, INPLACE, WRANDOM, COST]:
             print("Warning: specified order param not valid, using random instead.")
@@ -107,7 +108,8 @@ class ClonalTreeMerging:
 
     def merge_parallel(self, tree1, tree2, data, lamb):
         # try:
-        cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, cell_threshold=self.cell_threshold,  verbose=False)
+        cnm = CNA_Merge(tree1.get_tree(), tree2.get_tree(), self.T_m.edges, cell_threshold=self.cell_threshold, 
+                        maxtrees=self.maxtrees, verbose=self.verbose)
 
         
         merged_tree_list = cnm.fit(data, lamb, self.top_n)
@@ -151,9 +153,9 @@ class ClonalTreeMerging:
             else:
                 tree_list2 = []
 
-            # if self.collapse:
-            #     for sol in sol_list1 + sol_list2:
-            #         sol.collapse(self.k, self.cell_threshold)
+            if self.collapse:
+                for sol in sol_list1 + sol_list2:
+                    sol.collapse(self.k, self.cell_threshold)
                     
             # if self.cores <= 1:
             if True:

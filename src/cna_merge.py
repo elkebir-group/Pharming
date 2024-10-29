@@ -7,9 +7,10 @@ import utils
 from copy import deepcopy
 from enumerate import Enumerate
 import itertools
+import numpy as np
 
 class CNA_Merge:
-    def __init__(self, T1, T2, Tm_edges, cell_threshold=0, verbose=False):
+    def __init__(self, T1, T2, Tm_edges, cell_threshold=0,  maxtrees=5000, verbose=False):
         
  
         self.CT1 = deepcopy(T1) 
@@ -51,6 +52,7 @@ class CNA_Merge:
         self.rho = self.CT1.rho | self.CT2.rho
         self.k = max(self.T_m)
         self.cell_threshold = cell_threshold
+        self.maxtrees = maxtrees
 
 
         # assert self.k <= 8
@@ -195,8 +197,17 @@ class CNA_Merge:
         if not self.is_compatible():
             return all_results
         all_trees = self.enumerate_trees()
-    
-        for tree in all_trees:
+        if self.verbose:
+            print(f"Enumerated {len(all_trees)} integrated clonal trees")
+        if len(all_trees) > self.maxtrees:
+            rng = np.random.default_rng(self.k)
+            rng.shuffle(all_trees)
+            all_trees = all_trees[:self.maxtrees]
+            print(f"Downsampling to {len(all_trees)} integrated clonal trees")
+        for i,tree in enumerate(all_trees):
+        
+            if i % 250 == 0 and self.verbose:
+                print(f"Scoring tree {i} of {len(all_trees)}")
 
             sol= self.construct_clonal_tree(tree, data, lamb)
        
@@ -207,8 +218,8 @@ class CNA_Merge:
             all_results.append(sol)
 
         all_results = sorted(all_results, key= lambda x: x.cost)
-        if len(all_results) >=5:
-            all_results = all_results[:5]
+        if len(all_results) >= top_n:
+            all_results = all_results[:top_n]
         
         for sol in all_results:
             sol.post_process(data, lamb, self.k, cell_threshold = self.cell_threshold)
@@ -272,9 +283,9 @@ class CNA_Merge:
     # @utils.timeit_decorator
     def enumerate_trees(self):
         desc_nodes   = self.get_desc_dict()
-        if self.verbose:
-            for key,val in desc_nodes.items():
-                print(f"{key}: {val}")
+        # if self.verbose:
+        #     for key,val in desc_nodes.items():
+        #         print(f"{key}: {val}")
 
         trees_by_node = {u: self.construct_subgraphs(u, desc_nodes)  for u in desc_nodes }
         

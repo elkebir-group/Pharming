@@ -374,7 +374,7 @@ class Pharming:
 
             segtrees = self.segment_trees_inference(Tm, stis)
       
-            
+            print("All specified segment tree inference complete!")
             if init_order is not None:
                 segtrees = sorted(segtrees, key=lambda tl: order_dict[list(tl[0].ct.get_segments())[0]])
         
@@ -382,9 +382,9 @@ class Pharming:
                 tree_list = segtrees
             else:
                 tree_list =  [init_trees[i]] + segtrees
-
+            print("Starting integration...")
             top_trees = self.integrate(Tm, tree_list)
-          
+            print("Integration complete...")
             if len(top_trees) > 0:
                 best_cost = top_trees[0].cost
                 costs.append(best_cost)

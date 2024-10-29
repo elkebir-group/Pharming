@@ -402,9 +402,9 @@ class DCF_Clustering:
         return selected, objs, elbow
                             
     @timeit_decorator
-    def run(self, data, k_vals, cores=1, nfull=1):
+    def run(self, data, k_vals, cores=1, nfull=1, segs=None):
         print(f"Number intial segs: {self.nsegs}, number restarts: {self.nrestarts}")
-       
+        print(segs)
         #results = {}
         #for k in k_vals:
         #    for i in range(self.nrestarts):
@@ -418,8 +418,11 @@ class DCF_Clustering:
             if cores <= 1:
                 for i in range(self.nrestarts):
                     init_dcfs =self.init_cluster_centers(k)
-                    init_segs = data.sample_segments(self.nsegs, self.rng, 
+                    if segs is None:
+                        init_segs = data.sample_segments(self.nsegs, self.rng, 
                                                      max_cn_states=self.max_cn_states, min_snvs=1, thresh=self.thresh_prop)
+                    else:
+                        init_segs = self.rng.choice(segs, self.nsegs, replace=False)
                     
                     results = self.decifer(data, init_dcfs, init_segs)
                     all_results.append(results)
@@ -429,9 +432,13 @@ class DCF_Clustering:
                 
             
             else:
-                args = [(data, self.init_cluster_centers(k), data.sample_segments(self.nsegs, self.rng, 
-                                                     max_cn_states=self.max_cn_states, 
-                                                     min_snvs=1,thresh=self.thresh_prop)) for _ in range(self.nrestarts)]
+                if segs is None:
+                    sample_segs = [data.sample_segments(self.nsegs, self.rng, 
+                                                        max_cn_states=self.max_cn_states, 
+                                                        min_snvs=1,thresh=self.thresh_prop) for _ in range(self.nrestarts)]
+                else:
+                    sample_segs = [self.rng.choice(segs, self.nsegs, replace=False) for _ in range(self.nrestarts)]
+                args = [(data, self.init_cluster_centers(k), sample_segs[i]) for i in range(self.nrestarts)]
                 with multiprocessing.Pool(cores) as pool:
                     all_results = pool.starmap(self.decifer, args)
                     # print(results)
@@ -442,9 +449,11 @@ class DCF_Clustering:
             
             for res in sorted_results:
                 print(f"Likelihood: {res[0]} DCFs: {res[1]}")
-            
-            all_segments = [ell for ell in data.seg_to_snvs if data.num_snvs(ell) >= 1 and 
-                        data.num_cn_states(ell, self.thresh_prop) <= self.max_cn_states]
+            if segs is None:
+                all_segments = [ell for ell in data.seg_to_snvs if data.num_snvs(ell) >= 1 and 
+                            data.num_cn_states(ell, self.thresh_prop) <= self.max_cn_states]
+            else:
+                all_segments = segs
             
        
 
@@ -485,7 +494,15 @@ def main(args):
                           max_cn_states=args.max_cn_states )
 
  
+    if args.segments is not None:
+        with open(args.segments, "r") as file:
+            segs = [int(line.strip()) for line in file] 
+    else:
+        segs = data.segments
 
+    if args.excl_segments is not None:
+        print(args.excl_segments)
+        segs = [s for s in segs if s not in args.excl_segments]
     if args.ground_truth is not None:
 
         ground_truth = read_ground_truth_text_file(args.ground_truth)
@@ -508,7 +525,7 @@ def main(args):
         #do one extra value of k to check to allow maxk to be an elbow point.
         k_vals = [k for k in range(mink, maxk+2)]
 
-    best = dec.run(data, k_vals=k_vals, cores=args.cores, nfull=args.nfull)
+    best = dec.run(data, k_vals=k_vals, cores=args.cores, nfull=args.nfull, segs=segs)
 
     print("Best DCFs:")
     print( best[1])
@@ -590,7 +607,9 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--seed", type=int, default=21,  help="output file for inferred dcfs")
     parser.add_argument("-j", "--cores", default=1, type=int, help="number of cores to use")
     parser.add_argument("--verbose", action= "store_true", help="print additional information.")
-
+    parser.add_argument("--segments", type=str, help="segments to use for inference")
+    parser.add_argument( "--excl-segments", required=False, type=int, nargs='+',
+                    help="segment ids to exclude")
     # Parse command line arguments
     args = parser.parse_args()
 
