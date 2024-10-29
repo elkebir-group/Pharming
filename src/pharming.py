@@ -1,9 +1,6 @@
 
 # Created by: L.L. Weber
 # Created on: 2024-02-29 18:40:59
-
-
-
 import networkx as nx 
 import numpy as np
 from sti_v2 import STI
@@ -15,10 +12,10 @@ import utils
 from dcf_clustering_v2 import DCF_Clustering
 
 
-        
 class Pharming:
     def __init__(self, 
-                 dcfs=None, k=3,
+                dcfs=None, 
+                k=3,
                 start_state=(1,1), 
                 seed=102,
                 verbose=False, 
@@ -29,7 +26,7 @@ class Pharming:
                 ninit_Tm = None,
                 cell_threshold=5,
                 thresh_prop = 0,
-                sum_condition = True,
+                sum_condition = True
                   ) -> None:
         
         
