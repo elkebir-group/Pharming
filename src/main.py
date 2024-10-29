@@ -56,12 +56,6 @@ def main(args):
                 except:
      
                      raise ValueError("DCF file is not properly formatted.")
-
-    
-    if args.cnatrees is not None:
-        cnatrees = load_pickled_object(args.cnatrees)
-    else:
-         cnatrees = None 
     
     if delta is None:
         k = args.snv_clusters
@@ -88,7 +82,6 @@ def main(args):
         cell_threshold = args.cell_threshold 
 
     ph = Pharming(dcfs = delta,
-                cnatrees = cnatrees,
                 k= k, 
                 start_state=(args.root_x, args.root_y), 
                 seed = args.seed,
@@ -98,7 +91,6 @@ def main(args):
                 ninit_segs = args.ninit_segs,
                 ninit_Tm = args.ninit_tm,
                 cell_threshold= cell_threshold,
-                max_loops= args.ntree_iter,
                 thresh_prop = args.thresh_prop,
                 sum_condition = args.sum_condition,
                 )
@@ -148,7 +140,6 @@ def main(args):
     else:
         print("Error: no trees inferred, check input data and try again!")
 
-import cProfile
 
 if __name__ == "__main__":
 
@@ -181,14 +172,10 @@ if __name__ == "__main__":
                         help="number of segments for initialization of mutation cluster tree")
     parser.add_argument("--ninit-tm", type=int,
                         help="number of mutation cluster trees to consider after pruning with initial segs")
-    parser.add_argument("--ntree-iter", type=int, default=1,
-                        help="number of iterations to check for new mutation cluster tree to use for inference")
     parser.add_argument("--thresh-prop", type=float, default=0.05,
                         help="proportion threshold for determining CN states")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place', 'cost'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
-    parser.add_argument("-S", "--cnatrees",type=str,
-                        help="optional filename of a pickled dictionary of CNA tree (nx.digraph) for each segment")
     parser.add_argument("--root_x", type=int, default=1,
                         help="starting state for maternal (x) allele")
     parser.add_argument("--root_y", type=int, default=1,
@@ -217,170 +204,14 @@ if __name__ == "__main__":
         help = "filename to draw a pretty clonal tree")
     parser.add_argument( "--labels", type=str,
         help = "filename to save the encoding for the labels of the pretty tree.")
-    parser.add_argument("--profile", type=str)
+
 
 
     args = parser.parse_args()
     
 
 
-
-    # gtpth = "test"
-    # seed = 11
-    # cov = 0.01
-    # err = 0.035
-    # instance = f"s{seed}_m5000_k25_l5_d2"
-    # folder = f"n1000_c{cov}_e{err}" 
-    # pth = f"simulation_study/sims"
-
-
-
-    # args = parser.parse_args([
-
-    #     "-d", f"{pth}/{instance}/{folder}/data.pkl",
-    #     "-j", "1",
-    #     # "-D", "test/test_dcfs_s12.txt",
-    #     "-D", f"simulation_study/sims/{instance}/{folder}/dcfs.txt",
-    #                   # "-D", f"test/s14_m5000_c0.25_l5/dcfs.txt",
-    #     #  "-D", f"simulation_study/dcf_clustering_gtk/clustsegs10_r100/{instance}/{folder}/dcfs.txt",
-    #     # "-T", f"simulation_study/sims/{instance}/{folder}/Tm.txt",
-    #     "-n", "5",
-    #     # "-k", "5",
-    #     #  "-L", "2", "7", "11", "0", 
-    #     "-l", "1000",
-    #     "--thresh-prop", "0.05",
-    #     "--ninit-segs", "10",
-    #     "--ninit-tm", "10",
-    #     "--cell-threshold", "25",
-    #     "--order", "weighted-random",
-    #     "-s", f"{seed}",
-    #     "-P", f"test/solutions.pkl",
-    #     "--profile", "test/profile.prof",
-    #     "--collapse",
-    #     "--ntree-iter", "1",
-    #     "--sum-condition",
-    #     "--model-selection", "test/model_selection.csv",
-    #     "-O", "test/s11" #"{gtpth}"
-
-    # ])
-
-
-    ##### dlp
-    # pth = "dlp"
-
-    # seed = 20
-    # nsegs = 50
-    # k =4
-    # instance = f"s{seed}_r{nsegs}"
-
-  
-
-
-
-    # args = parser.parse_args([
-
-    #     "-d", f"{pth}/input/data.pkl",
-    #     "-j", "1",
-    #     "-D", f"{pth}/dcf_clustering/k{k}/dcfs.txt",
-    #     "-n", "3",
-    #     # "-L", "381",
-    #     "--segfile", f"{pth}/input/sample_all.txt",
-    #     # "-k", f"{k}",
-    #     #  "-L", "341", # "376"
-    #     "-l", "1000",
-    #     "--thresh-prop", "0.05",
-    #     "--ninit-segs", "5",
-    #     "--ninit-tm", "1",
-    #     "--cell-threshold", "25",
-    #     "--order", "weighted-random",
-    #     "-s", f"{seed}",
-    #     "-P", f"{pth}/test/solutions.pkl",
-    #     "--collapse",
-    #     "--ntree-iter", "1",
-    #     "--sum-condition"
-    # ])
-
-
-    # gtpth = "dlp"
-    # seed = 20
-    # nsegs = 50
-    # k =6
-    # instance = f"s{seed}_r{nsegs}"
-
-    # pth = f"{gtpth}"
-
-
-
-    # args = parser.parse_args([
-
-    #     "-d", f"{pth}/input/data.pkl",
-    #     "-j", "1",
-    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
-    #     "-n", "5",
-    #     # "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
-    #     # "-k", f"{k}",
-    #      "-L", "342", # "376"
-    #     "-l", "1000",
-    #     "--thresh-prop", "0.05",
-    #     "--ninit-segs", "10",
-    #     "--ninit-tm", "10",
-    #     "--cell-threshold", "25",
-    #     "--order", "weighted-random",
-    #     "-s", f"{seed}",
-    #     "-P", f"{gtpth}/test/solutions.pkl",
-    #     "--collapse",
-    #     "--ntree-iter", "1",
-    #     "--tree", f"{pth}/test/prettyTree.png",
-    #     "--labels", f"{pth}/test/labels.csv",
-    #     "--sum-condition",
-    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
-    #     "-O",  f"{gtpth}/test"
-
-    # ])
-
-
-    # gtpth = "act/TN3"
-    # seed = 20
-    # nsegs = 50
-    # k =9
-    # instance = f"s{seed}_r{nsegs}"
-
-    # pth = f"{gtpth}"
-
-
-
-    # args = parser.parse_args([
-
-    #     "-d", f"{pth}/pharming_data/data.pkl",
-    #     "-j", "10",
-    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
-    #     "-n", "5",
-    #     # "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
-    #     # "-k", f"{k}",
-    #     #  "-L", "341", # "376"
-    #     "-l", "1000",
-    #     "--thresh-prop", "0.05",
-    #     "--ninit-segs", "10",
-    #     "--ninit-tm", "10",
-    #     "--cell-threshold", "25",
-    #     "--order", "weighted-random",
-    #     "-s", f"{seed}",
-    #     "-P", f"{gtpth}/test/solutions.pkl",
-    #     "--collapse",
-    #     "--ntree-iter", "1",
-    #     "--tree", f"{pth}/test/prettyTree.png",
-    #     "--labels", f"{pth}/test/labels.csv",
-    #     "--sum-condition",
-    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
-    #     "-O",  f"{gtpth}/test"
-
-    # ])
-    profiler = cProfile.Profile()
-    profiler.enable()
-
     main(args)
 
-    profiler.disable()
-    if args.profile is not None:
-        profiler.dump_stats(args.profile)
+
 

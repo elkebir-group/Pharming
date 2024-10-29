@@ -13,26 +13,23 @@ import multiprocessing
 from tree_merging import ClonalTreeMerging
 import utils
 from dcf_clustering_v2 import DCF_Clustering
-from copy import deepcopy 
-import concurrent.futures
-import time
-import stopit
-
 
 
         
 class Pharming:
-    def __init__(self, dcfs=None, cnatrees=None, k=3,
-                  start_state=(1,1), seed=102,
-                  verbose=False, top_n=3, ilp=False, collapse=False,
-                  order = "weighted-random",
-                  ninit_segs = None,
-                  ninit_Tm = None,
-                  cell_threshold=5,
-                  max_loops = 3,
-                  thresh_prop = 0,
-                  sum_condition = True,
-                  timeout = 20
+    def __init__(self, 
+                 dcfs=None, k=3,
+                start_state=(1,1), 
+                seed=102,
+                verbose=False, 
+                top_n=3, 
+                collapse=False,
+                order = "weighted-random",
+                ninit_segs = None,
+                ninit_Tm = None,
+                cell_threshold=5,
+                thresh_prop = 0,
+                sum_condition = True,
                   ) -> None:
         
         
@@ -49,10 +46,9 @@ class Pharming:
         
  
 
-        if cnatrees is None:
-            self.cnatrees = {} 
-        else:
-            self.cnatrees = cnatrees
+      
+        self.cnatrees = {} 
+
 
         
         self.start_state = start_state
@@ -61,11 +57,9 @@ class Pharming:
         print(f"Max # of initial segments: {self.ninit_segs}")
         self.ninit_Tm = ninit_Tm
         print(f"Max # of full inference mutation cluster trees {self.ninit_Tm}")
-        self.max_loops = max_loops
-        print(f"Max loops: {self.max_loops}")
         self.top_n = top_n
         print(f"Top n: {self.top_n}")
-        self.ilp = ilp
+
         self.collapse = collapse
         self.cell_threshold = cell_threshold
 
@@ -78,40 +72,11 @@ class Pharming:
         self.sum_condition = sum_condition
         print(f"Filtering mutation cluster trees using the sum condition: {self.sum_condition}")
 
-
-        # if True:
-        #     self.ground_truth_tm = np.Inf
-   
-            #self.enumerate_mutcluster_trees()
-            # print(f"\nTotal number of mutation cluster trees: {len(self.scriptTm)}")
-            # for i,T in enumerate(self.scriptTm):
-            #     if set(T.edges) == set(T_m.edges):
-            #         print(f"Found ground truth tree at index {i}!")
-            #         self.ground_truth_tm = i
-            # utils.pickle_object(self.scriptTm, "test/scriptTm.pkl")
-
-     
-                # all_trees =  self.enumerate_mutcluster_trees()
-                # choices = self.rng.choice(len(all_trees), size=10)
-                # sample_trees = [all_trees[i] for i in choices]
-                # for i,t in enumerate(sample_trees):
-               
-                #     if len(set(T_m.edges).difference(t.edges))==0:
-                #         print(f"sampled tree {i} is ground truth tree")
-                #         raise Exception("sampled tree is ground truth tree")
-                # self.scriptTm += sample_trees
-
-            
-
-            
-            # for i, T_m in enumerate(self.scriptTm):
-            #     draw(T_m, f"test/Tm_{i}.png")
                 
      
     @staticmethod
     def check_dcfs(T, delta):
    
-
         for u in T:
             desc_dcf = sum( delta[u] for u in  sorted(T.successors(u)))
             if delta[u] < desc_dcf or desc_dcf > 1:
@@ -144,7 +109,6 @@ class Pharming:
    
     def enumerate_cna_trees_python(self, cn_states):
         cn_states = [cn for cn in cn_states if cn != self.start_state]
-
 
         G = nx.DiGraph()
         G.add_nodes_from(cn_states)
@@ -181,7 +145,6 @@ class Pharming:
 
     def enumerate_cna_trees(self, cn_states):
    
-
         trees = clonelib.get_cna_trees(cn_states, *self.start_state )
     
         def convert_to_CNAtree(tree):
@@ -197,11 +160,7 @@ class Pharming:
 
         T_CNAS = [convert_to_CNAtree(tree) for tree in trees]
         
-        # if self.verbose:
-        #     print(f"Enumerated CNA trees for {cn_states}")
-        #     for T in T_CNAS:
-        #         print(T)
-        
+
         return T_CNAS
 
 
@@ -530,8 +489,6 @@ class Pharming:
         print("Plowing the field.... ")
         if self.delta is None:
             self.delta = self.infer_dcfs()
-        # else:
-        #     self.delta  = self.check_for_duplicates()
 
         if Tm is not None:
             scriptTm = [Tm]
@@ -543,8 +500,7 @@ class Pharming:
                                          tree must map to a unique value in [k] ")
         else:
             scriptTm = self.enumerate_mutcluster_trees(self.delta)
-      
-        loop = 0
+
 
                     
     
@@ -552,116 +508,81 @@ class Pharming:
        
         
         all_best_trees = []
-        allscriptTm = []
+
         delta = self.delta.copy()
  
-        while loop < self.max_loops and len(scriptTm) > 0:
-            print(f"DCFs delta: {delta}")
-            print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
-           
-            stis_init = self.preprocess(init_segs, delta)
-
-            allscriptTm += scriptTm
+        # while loop < self.max_loops and len(scriptTm) > 0:
+        print(f"DCFs delta: {delta}")
+        print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
         
+        stis_init = self.preprocess(init_segs, delta)
+    
+        print("Planting the seeds.... ")
+        init_order = self.order_segments(init_segs)
+        print("Segment integration order:")
+        print(init_order)
+        init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
+
+        self.clonal_trees = init_trees
+    
+
+        # return utils.concat_and_sort(init_trees)
+
+        #identify the mutation cluster trees that yield minimum cost over the initial segments
+        sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
+        if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
+            smallest_indices = sorted_indices
+        else:
+            smallest_indices = sorted_indices[:self.ninit_Tm]
+    
+        
+        print(f"Best mutation cluster trees:")
+        for i in smallest_indices:
+            print(f"{i}: {list(scriptTm[i].edges)}")
+            # if i == self.ground_truth_tm:
+            #     print("Including the ground truth mutation cluster tree!")
+        
+        best_tree_int = utils.get_top_n(self.clonal_trees, self.top_n)
+        print("Best trees after initial integration ")
+        for i,sol in enumerate(best_tree_int):
+            cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
+            
+
+    
+        print("\nWatering the fields.... ")
+        if len(infer_segs) > 0:
+            init_Tm = [scriptTm[i] for i in smallest_indices]
+            init_order = self.order_segments(infer_segs)
+            stis_infer = self.preprocess(infer_segs, delta)
+            self.clonal_trees, costs = self.infer(init_Tm, stis_infer, 
+                                                    [init_trees[i] for i in smallest_indices], 
+                                                    init_order = init_order )
+        
+        best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
+
+        # print(f" tree | cost | snv | cna")
+        for i,b in enumerate(best_trees):
+            cost, snv, cna = b.compute_likelihood(self.data, self.lamb)
+            # print(f"|{i} | {cost} | {snv} | {cna} |")
+            
+        self.post_process(best_trees)
+
+        self.place_snvs(best_trees, place_segs)
+
     
     
-            print("Planting the seeds.... ")
-            init_order = self.order_segments(init_segs)
-            print("Segment integration order:")
-            print(init_order)
-            init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
-
-            self.clonal_trees = init_trees
+        print("\nHarvesting....")
+        for sol in best_trees:
+            sol.optimize(self.data, self.lamb)
         
-
-            # return utils.concat_and_sort(init_trees)
-
-            #identify the mutation cluster trees that yield minimum cost over the initial segments
-            sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
-            if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
-                smallest_indices = sorted_indices
-            else:
-                smallest_indices = sorted_indices[:self.ninit_Tm]
-        
-            
-            print(f"Best mutation cluster trees:")
-            for i in smallest_indices:
-                print(f"{i}: {list(scriptTm[i].edges)}")
-                # if i == self.ground_truth_tm:
-                #     print("Including the ground truth mutation cluster tree!")
-            
-            best_tree_int = utils.get_top_n(self.clonal_trees, self.top_n)
-            print("Best trees after initial integration ")
-            for i,sol in enumerate(best_tree_int):
-               cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
-              
-            #    sol.png(f"test/s11/intSol{i}.png")
-            #    print(i)
-            #    print("cna trees 7 and 8")
-            #    print(sol.ct.get_cna_tree(7).edges)
-            #    print(sol.ct.get_cna_tree(8).edges)
-               if self.verbose:
-                print(f"{i}: {cost}, {snv}, {cna}")
-            # return best_trees
-            print("\nWatering the fields.... ")
-            if len(infer_segs) > 0:
-                init_Tm = [scriptTm[i] for i in smallest_indices]
-                init_order = self.order_segments(infer_segs)
-                stis_infer = self.preprocess(infer_segs, delta)
-                self.clonal_trees, costs = self.infer(init_Tm, stis_infer, 
-                                                      [init_trees[i] for i in smallest_indices], 
-                                                      init_order = init_order )
-            
-            best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
-
-            print(f" tree | cost | snv | cna")
-            for i,b in enumerate(best_trees):
-                cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
-                print(f"|{i} | {cost} | {snv} | {cna} |")
-                
-            self.post_process(best_trees)
+        all_best_trees.append(best_trees)
+        best_trees = sorted(best_trees, key=lambda x: x.cost)
+        # print(f" tree | cost | snv | cna")
+        for i,b in enumerate(best_trees):
+            cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
+            # print(f"|{i} | {cost} | {snv} | {cna} |")
+ 
     
-            self.place_snvs(best_trees, place_segs)
-
-            
-
-        # self.place_cnas(best_trees, no_snvs_segs)
-        
-        
-            print("\nHarvesting....")
-            for sol in best_trees:
-                sol.optimize(self.data, self.lamb)
-            
-            all_best_trees.append(best_trees)
-            best_trees = sorted(best_trees, key=lambda x: x.cost)
-            print(f" tree | cost | snv | cna")
-            for i,b in enumerate(best_trees):
-                cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
-                print(f"|{i} | {cost} | {snv} | {cna} |")
-            #check to see if there are any new mutation cluster trees and repeat
-            if len(best_trees) > 0:
-                best = best_trees[0]
-                delta = best.ct.compute_dcfs(best.phi)
-                if len(delta) < self.k:
-                    for q in range(self.k):
-                        if q not in delta:
-                            delta[q] = self.rng.uniform()
-           
-
-                newTms = self.enumerate_mutcluster_trees(delta)
-                scriptTm = []
-                for T in newTms:
-                    present = False 
-                    for T_prime in allscriptTm:
-                        if set(T.edges) == set(T_prime.edges):
-                            present = True 
-                            break 
-                    if not present:
-                        scriptTm.append(T)
-            loop += 1
-                            
-            
-        
         best_trees = utils.get_top_n(all_best_trees, self.top_n)
         for sol in best_trees:
             sol.prune_leaves(self.k)
@@ -692,16 +613,5 @@ class Pharming:
             sol.optimize(self.data, self.lamb)
             
        
-
-
-            # ct = sol.ct 
-            # for ell in self.data.segments:
-            #     if 
-            # snvs = dat_snvs - inf_snvs
-
-        
-
-
-        #TODO: assign SNVs to mutation cluster nodes only
         
         
