@@ -18,7 +18,7 @@ def cluster_cells(X, min_samples=10, eps=3):
     highest_label = np.max(clustering.labels_)
     highest_label += 1
     labs = clustering.labels_
-    labs[labs==-1] = highest_label
+    # labs[labs==-1] = highest_label
     
 
     return  labs

@@ -14,12 +14,12 @@ def main(args):
         dat = load_pickled_object(args.data)
     elif args.file and args.copy_numbers is not None:
         dat = load_pickled_object(args.file, args.copy_numbers )
+
     else:
         IOError("Either both read counts and copy number files \
                 must be specified or alternatively, the path to the \
                 preprocessed pharming data object!")
-    
-
+  
     if args.segfile is not None:
         with open(args.segfile, "r+") as file:
             segments = [int(line.strip()) for line in file]
@@ -31,6 +31,8 @@ def main(args):
         else:
             segments = args.segments
 
+    if args.excl_segments is not None:
+        segments = [ell for ell in segments if ell not in args.excl_segments]
     # segments = [ell for ell in segments if ell not in [226,94, 341]]
         
 
@@ -199,6 +201,8 @@ if __name__ == "__main__":
                         help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")
+    parser.add_argument( "--excl-segments", required=False, type=int, nargs='+',
+                    help="segment ids to exclude")
     parser.add_argument("--segfile", required=False, type=str,
                     help="filename with list of segments")
     parser.add_argument("-P" ,"--pickle", required=False, type=str,
@@ -261,41 +265,39 @@ if __name__ == "__main__":
     # ])
 
 
-    ######## dlp
-    # gtpth = "dlp"
-    # sample = "SA922"
+    ##### dlp
+    # pth = "dlp"
+
     # seed = 20
     # nsegs = 50
     # k =4
     # instance = f"s{seed}_r{nsegs}"
 
-    # pth = f"{gtpth}/{sample}"
+  
 
 
 
     # args = parser.parse_args([
 
     #     "-d", f"{pth}/input/data.pkl",
-    #     "-j", "10",
-    #     "-D", f"{pth}/decifer/k{k}/dcfs.txt",
-    #     "-n", "5",
-    #     "--segfile", f"{pth}/input/{instance}/sampled_segments.csv",
+    #     "-j", "1",
+    #     "-D", f"{pth}/dcf_clustering/k{k}/dcfs.txt",
+    #     "-n", "3",
+    #     # "-L", "381",
+    #     "--segfile", f"{pth}/input/sample_all.txt",
     #     # "-k", f"{k}",
     #     #  "-L", "341", # "376"
     #     "-l", "1000",
     #     "--thresh-prop", "0.05",
-    #     "--ninit-segs", "10",
-    #     "--ninit-tm", "10",
-    #     "--cell-threshold", "10",
+    #     "--ninit-segs", "5",
+    #     "--ninit-tm", "1",
+    #     "--cell-threshold", "25",
     #     "--order", "weighted-random",
     #     "-s", f"{seed}",
-    #     "-P", f"{gtpth}/test/solutions.pkl",
+    #     "-P", f"{pth}/test/solutions.pkl",
     #     "--collapse",
     #     "--ntree-iter", "1",
-    #     "--sum-condition",
-    #     "--model-selection", f"{gtpth}/test/model_selection.csv",
-    #     "-O",  f"{gtpth}/test"
-
+    #     "--sum-condition"
     # ])
 
 

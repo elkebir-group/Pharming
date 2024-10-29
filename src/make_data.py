@@ -176,4 +176,5 @@ if __name__ == "__main__":
         dat.export_cell_lookup(args.cell_lookup)
 
     if args.segment_lookup is not None:
+        print("saving segments...")
         dat.export_segment_lookup(args.segment_lookup)

@@ -375,6 +375,7 @@ class ClonalTree:
     def get_cna_tree(self, seg):
         self.get_cna_genos()
         S = nx.DiGraph()
+
         for u,v in self.tree.edges:
             u_cna = self.cna_genotypes[seg][u] 
             v_cna = self.cna_genotypes[seg][v]
@@ -383,6 +384,27 @@ class ClonalTree:
         if len(S) ==0:
             S.add_node(self.cna_genotypes[seg][self.root])
         return S
+    
+    def get_non_infinite_alleles_cna_tree(self, seg):
+        S = nx.DiGraph()
+        state_dict ={}
+        for u,v in self.tree.edges:
+            u_cna = self.cna_genotypes[seg][u] 
+            v_cna = self.cna_genotypes[seg][v]
+            if u_cna != v_cna:
+                S.add_edge(u, v)
+                if u not in state_dict:
+                    state_dict[u] = u_cna
+                if v not in state_dict:
+                    state_dict[v] = v_cna
+        return S, state_dict
+                
+
+            
+            
+
+                    
+
     
     def parent(self, v):
         if v ==self.root:
@@ -935,6 +957,7 @@ class ClonalTree:
     
     def get_latent_cna_genos(self, latent_genos):
         return  {m: (geno[0], geno[1]) for m, geno in latent_genos.items()}    
+
 
   
 
@@ -1583,10 +1606,15 @@ class ClonalTree:
     def BIC(self, phi, data, lamb):
         snvs = self.get_all_muts()
         m = len(snvs)
+  
         _ = self.compute_likelihood(data, phi, lamb)
         like= -1* self.snv_cost 
+
+
         k = len(set([self.psi[j] for j in snvs]))
+  
         self.bic = np.log(m)*(k) - 2*like
+        # print(self.bic)
         return self.bic 
 
 
@@ -2115,8 +2143,7 @@ class ClonalTree:
     def recall(gt_pairs, inf_pairs) -> float:
         if sum(gt_pairs.values()) == 0:
             return 1
-        return  sum((gt_pairs & inf_pairs).values())\
-                           / sum(gt_pairs.values())
+        return  len(set(gt_pairs.keys()) & set(inf_pairs.keys())) / len(gt_pairs)
 
 
     @staticmethod
@@ -2144,15 +2171,32 @@ class ClonalTree:
          return self.ari(df["gt"].values, df["pred"].values)
 
 
-    @staticmethod
-    def is_incomparable(graph: nx.DiGraph, u, v) -> bool:
-        for path in nx.all_simple_paths(graph, source=0, target=v):
-            if u in path:
-                return False
-        for path in nx.all_simple_paths(graph, source=0, target=u):
-            if v in path:
-                return False
+    # @staticmethod
+    # def is_incomparable(graph: nx.DiGraph, u, v) -> bool:
+        
+    #     root = [n for n in graph if graph.in_degree(n) == 0]
+  
+    #     if len(root) == 0:
+    #         raise ValueError("Graph must have a root node.")
+    #     else:
+    #         root = root[0]
+    #     for path in nx.all_simple_paths(graph, source=root, target=v):
+    #         if u in path:
+    #             return False
+    #     for path in nx.all_simple_paths(graph, source=root, target=u):
+    #         if v in path:
+    #             return False
+    #     return True
+
+    def is_incomparable(self, u, v) -> bool:    
+        if u ==v:
+            return False 
+        if u in nx.ancestors(self.tree, v):
+            return False 
+        if v in nx.ancestors(self.tree, u):
+            return False
         return True
+
 
     def ancestor_pair_recall(self, obj, include_loss=False):
         if type(obj) != ClonalTree:
@@ -2194,7 +2238,51 @@ class ClonalTree:
         recall = self.recall(clustered, obj.get_cluster_pairs(obj_mapping))
         return recall 
     
+    @staticmethod
+    def compare_CNA_trees(gt, inf, segment):
+    
+            S_gt = gt.get_cna_tree(segment)
+
+    
+            S_inf= inf.get_cna_tree(segment)
+        
+
+            return set(S_gt.edges) == set(S_inf.edges)
+
+    def cna_metrics(self, gt):
+        if type(gt) != ClonalTree:
+            raise TypeError("Comparable must be a ClonalTree") 
+        else:
+           
+            cna_tree_by_seg =[self.compare_CNA_trees(gt, self, ell) for ell in self.seg_to_muts]
+            cna_tree_acc = sum(cna_tree_by_seg)/len(cna_tree_by_seg)
+            ancestral, incomp = self.get_cna_pairs()
+        
+            gt_ancestral, gt_incomp = gt.get_cna_pairs()
+            
+            anc_recall = self.recall(ancestral, gt_ancestral)
+            incomp_recall = self.recall(incomp, gt_incomp)
+        
+            clustered_pairs = self.get_cna_cluster_pairs()
   
+
+            gt_clustered_pairs = gt.get_cna_cluster_pairs()
+
+            clust_recall =self.recall(clustered_pairs, gt_clustered_pairs)
+            # print(f"Ancestral Recall: {anc_recall} | Incomparable Recall: {incomp_recall} | Clustered Recall {clust_recall} | CNA Tree Accuracy: {cna_tree_acc}")
+
+            res = {
+                'ancestral_recall': anc_recall,
+                'ancestral_pairs':  sum(gt_ancestral.values()),
+                'incomp_recall': incomp_recall,
+                'incomp_pairs': sum(gt_incomp.values()),
+                'clustered_recall': clust_recall,
+                'clustered_pairs': sum(gt_clustered_pairs.values()),
+                'cna_tree_accuracy': cna_tree_acc
+            }
+
+
+            return res
     
     def incomp_cell_pair_recall(self, obj):
         if type(obj) != ClonalTree:
@@ -2218,12 +2306,14 @@ class ClonalTree:
         cna_genos = self.get_cna_genos()
         
         pairs = Counter()
-
+        print()
         for u, v in combinations(self.tree.nodes, 2):
+            print(u)
+            print(v)
             if self.is_incomparable(self.tree, u, v):
                 for ell in self.seg_to_muts:
-                    cn_u = cna_genos[u][ell]
-                    cn_v = cna_genos[v][ell]
+                    cn_u = cna_genos[ell][v]
+                    cn_v = cna_genos[ell][u]
 
                     # Ensure comparison works on tuples
                     if cn_u < cn_v:
@@ -2289,30 +2379,39 @@ class ClonalTree:
         ancestral_pairs = Counter()
         incomp_pairs = Counter()
         for ell in self.seg_to_muts:
-           S = self.get_cna_tree(ell)
+           S, state_dict = self.get_non_infinite_alleles_cna_tree(ell)
            for n in S:
                for m in nx.dfs_preorder_nodes(S, n):
                     if m != n:
-                        ancestral_pairs.update([(ell, n, m)])
+                        ancestral_pairs.update([(ell, state_dict[n], state_dict[m])])
            for u, v in combinations(S.nodes, 2):
+            
                if self.is_incomparable(S, u, v):
-                   incomp_pairs.update([(ell, min(u,v), max(u,v))])
+                   u_state = state_dict[u]
+                   v_state= state_dict[v]
+                   incomp_pairs.update([(ell, min(u_state,v_state), max(u_state,v_state))])
         return ancestral_pairs, incomp_pairs
 
                    
             
     
-    def get_cna_cluster_pairs(self, mapping) -> Counter:
+    def get_cna_cluster_pairs(self) -> Counter:
         pairs = Counter()
         cna_genos = self.get_cna_genos()
         for n in self.preorder(self.root):
+            if n==self.root:
+                continue
             new_states = []
-            par = self.tree.parent(n)
-            par_geno = cna_genos[par]
-            node_geno = cna_genos[n]
+            par = self.parent(n)
+     
+
+       
             for ell in self.seg_to_muts:
-                if par_geno[ell] != node_geno[ell]:
-                    new_states.append((ell, node_geno[ell]))
+                par_geno = cna_genos[ell][par]
+                node_geno = cna_genos[ell][n]
+            
+                if par_geno != node_geno:
+                    new_states.append((ell, node_geno))
             if len(new_states) >= 2:
                 pairs.update(combinations(new_states, 2))
                 pairs.update(combinations(new_states, 2))
@@ -2321,12 +2420,12 @@ class ClonalTree:
 
             
     
-    def get_cna_cluster_pairs(self, mapping) -> Counter:
-        cna_genos = self.get_cna_genos()
-        pairs = Counter()
-        for node in self.tree.nodes:
-                pairs.update(combinations(sorted(mapping[node]), 2))
-        return pairs
+    # def get_cna_cluster_pairs(self, mapping) -> Counter:
+    #     cna_genos = self.get_cna_genos()
+    #     pairs = Counter()
+    #     for node in self.tree.nodes:
+    #             pairs.update(combinations(sorted(mapping[node]), 2))
+    #     return pairs
 
         # if include_loss:
         #     raise NotImplementedError("not impletmented")
@@ -2443,12 +2542,12 @@ class ClonalTree:
         return latent_x, latent_y
 
     def cna_genotype_similarity(self, gt_phi, inf_ct, inf_phi):
-
+        segments = len(self.seg_to_muts)
         total_dist = 0
         # if len(gt_phi.get_all_cells() ^ inf_phi.get_all_cells()) ==0:
 
         
-        all_u_dist = []
+        # all_u_dist = []
         for u in gt_phi.clones:
             gt_cells = gt_phi.get_cells(u)
             if len(gt_cells) ==0:
@@ -2465,18 +2564,14 @@ class ClonalTree:
             for v, inf_cells in node_mapping.items():
                 ncells = len(inf_cells)
                 inf_x, inf_y = inf_ct.gt_latent_genos(v)
-                x_dist =  np.abs(inf_x - gt_x)
-                y_dist  = np.abs(inf_y - gt_y)
-                geno_diff = (x_dist + y_dist).sum() 
-                # if geno_diff > 0:
-                #     print(f"gt node: {u} inf node: {v}")
-                #     print(x_dist)
-                #     print(y_dist)
-    
+                x_acc = inf_x == gt_x
+                y_acc = inf_y == gt_y
+                geno_diff =  np.sum(np.logical_and(x_acc, y_acc))
+           
                 total_dist  += ncells*geno_diff
         
     
-        mad = total_dist/ inf_phi.n
+        mad = total_dist/ (inf_phi.n * segments)
         return  mad
                     
 

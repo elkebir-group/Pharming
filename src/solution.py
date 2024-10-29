@@ -4,7 +4,10 @@ from clonal_tree import ClonalTree
 from cell_mapping import CellAssign
 from draw_pretty_tree import DrawPrettyTree
 from cmb import cmb_all, cmb_loss_all, vaf_validation
- 
+import pandas as pd 
+import numpy as np
+from scipy.special import logsumexp
+import networkx as nx 
 
 @dataclass
 class Solution:
@@ -68,25 +71,38 @@ class Solution:
     def update_segments(self):
         self.segments = self.ct.get_segments()
     
-    def write_flat_files(self, pth, data=None, lamb=1000):
-        self.phi.write_phi(f"{pth}/pred_cell.csv")
-        self.ct.write_psi(f"{pth}/pred_mut.csv")
-        self.ct.write_loss_mapping(f"{pth}/pred_mut_loss.csv")
-        self.ct.write_genotypes(f"{pth}/pred_genos.csv")
-        self.ct.save_text(f"{pth}/pred_tree.txt")
+    def write_flat_files(self, pth, data=None, lamb=1000, stub="pred"):
+        self.phi.write_phi(f"{pth}/{stub}_cell.csv")
+        self.ct.write_psi(f"{pth}/{stub}_mut.csv")
+        self.ct.write_loss_mapping(f"{pth}/{stub}_mut_loss.csv")
+        self.ct.write_genotypes(f"{pth}/{stub}_genos.csv")
+        self.ct.save_text(f"{pth}/{stub}_tree.txt")
         if data is not None:
             cost, snv, cna = self.compute_likelihood(data, lamb)
-            with open(f"{pth}/likelihood.csv", "w+") as file:
+            with open(f"{pth}/{stub}_likelihood.csv", "w+") as file:
                 file.write("cost,snv,cna\n")
                 file.write(f"{cost},{snv},{cna}\n")
 
     def ICL(self, data, lamb):
        icl =  self.ct.ICL(self.phi, data, lamb)
        return icl, self.ct.bic #, #self.ct.entropy
+    
+    def model_selection(self, data, lamb, fname=None):
+    
+        bic = self.ct.BIC(self.phi, data, lamb)
 
-    def drawPrettyTree(self, tname, lname=None, include_CNAs=True):
-        dtp = DrawPrettyTree(self, include_CNAs=include_CNAs)
-        dtp.draw(tname)
+        if fname is not None:
+            with open(fname, "w+") as file:
+                file.write("solution,SNV_likelihood,BIC,cost\n")
+                file.write(f"0,{self.ct.snv_cost},{bic},{self.cost}\n")
+           
+
+    def drawPrettyTree(self, tname, lname=None, include_CNAs=True, 
+                       min_cells=1, segment_dict=None, include_cell_counts=True,
+                       horizontal=False):
+        dtp = DrawPrettyTree(self, include_CNAs=include_CNAs, min_cells=1,
+                              segment_dict=segment_dict, include_cell_counts=include_cell_counts)
+        dtp.draw(tname, horizontal=horizontal)
         if lname is not None:
             dtp.save_labels(lname)
 
@@ -131,6 +147,53 @@ class Solution:
         acc =   (tp + tn) / (tp + tn + fn + fp)
 
         return prec, recall, acc
+    
+    def cna_metrics(self, gt, fname=None):
+        res=  self.ct.cna_metrics(gt)
+        if fname is not None:
+            
+            df = pd.DataFrame([res])
+            df.to_csv(fname, index=False)
+        else:
+            return res
+
+    def snv_assignment_posterior(self, data, fname=None):
+        df = self.all_snv_tree_costs(data)
+
+        df_sorted = df.sort_values(['snv', 'cluster', 'cost', 'tree_id'])
+        filtered_df = df_sorted.groupby(['snv', 'cluster'], as_index=False).first()
+        filtered_df = filtered_df[['snv', 'cluster', 'cost', 'tree_id']]
+        filtered_df = pd.merge( df,filtered_df, on=['snv', 'cluster', 'cost', 'tree_id'])
+
+        filtered_df['cost'] = -1 * filtered_df['cost']
+
+
+     
+
+        # Step 3: Compute the log denominator using logsumexp for each group of 'folder' and 'snvs'
+        log_denom_df = filtered_df.groupby(['snv'], as_index=False).agg(
+            log_denom=('cost', lambda x: logsumexp(x))
+        )
+
+        # Step 4: Merge log_denom back into snv_tree_min DataFrame
+        filtered_df = pd.merge(filtered_df, log_denom_df, on=['snv'])
+  
+
+        # Step 5: Calculate log posterior and posterior probabilities
+        filtered_df['log_posterior'] = filtered_df['cost'] - filtered_df['log_denom']
+        filtered_df['posterior'] = np.exp(filtered_df['log_posterior'])
+
+        # Step 6: Avoid zero posterior by using the smallest float value if posterior is zero
+        filtered_df['posterior'] =filtered_df['posterior'].replace(0, np.finfo(float).eps)
+
+        # Step 7: Filter where 'cluster' equals 'assignment'
+        snv_tree_post =filtered_df[filtered_df['cluster'] ==filtered_df['assigment']]
+        snv_tree_post = snv_tree_post[[ 'snv','cluster', 'posterior']]
+
+        if fname is not None:
+            snv_tree_post.to_csv(fname, index=False)
+        return snv_tree_post
+
 
 
     def all_snv_tree_costs(self, data):
@@ -148,5 +211,21 @@ class Solution:
     #         if len(cn_prop) == 1:
 
 
+    def is_ancestral(self, i,j):
+        
+        u = self.phi.phi[i]
+        v = self.phi.phi[j]
+        if u==v: return True
+        return u in nx.ancestors(self.ct.tree, v)
+
+    def is_clustered(self, i,j):
+        u = self.phi.phi[i]
+        v = self.phi.phi[j]
+        return u == v
+
+    def is_incomparable(self, i,j):
+        u = self.phi.phi[i]
+        v = self.phi.phi[j]
+        return self.ct.is_incomparable(u,v)
 
     

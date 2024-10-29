@@ -177,10 +177,20 @@ class Data:
       
         return nom/denom
 
-    def sample_segments(self, k, rng=None,  max_cn_states=1, min_snvs =0, thresh=0):
+    def max_alleles(self, ell):
+        """Return the maximum number of alleles in a given list of segments."""
+
+  
+        x = self.copy_x[:,ell].max()
+        y = self.copy_y[:,ell].max()
+            
+        return max(x,y)
+    
+    def sample_segments(self, k, rng=None,  max_cn_states=1, min_snvs =0, thresh=0, max_cn=10):
         """Randomly sample k segments with at least min_snvs and at most max_cn_states."""
         candidates = [ell for ell in self.seg_to_snvs if self.num_snvs(ell) >= min_snvs and 
-                      self.num_cn_states(ell, thresh) <= max_cn_states]
+                      self.num_cn_states(ell, thresh) <= max_cn_states and self.max_alleles(ell) <= max_cn]
+        
         print(f"Total candidates: {len(candidates)}")
         if rng is None:
             rng = np.random.default_rng()
@@ -248,10 +258,13 @@ class Data:
 
     def export_segment_lookup(self, fname):
         """Export the segment lookup table to a CSV file."""
-        df = pd.DataFrame({"index": self.seg_lookup.index, "label": self.seg_lookup.values}).reset_index(drop=True)
-        df.to_csv(fname, index=False)
+        print(self.seg_lookup.head())
+        # df = pd.DataFrame({"index": self.seg_lookup.index, "label": self.seg_lookup.values}).reset_index(drop=True)
+        self.seg_lookup.to_csv(fname, index=False)
 
     def num_snvs(self, ell):
+        if ell not in self.seg_to_snvs:
+            return 0
         """Return the number of SNVs in a given segment."""
         return len(self.seg_to_snvs[ell])
     

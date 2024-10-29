@@ -80,6 +80,7 @@ if __name__ == "__main__":
                         help="input file of ground truth tree")
     parser.add_argument("-o" ,"--out", required=False, type=str,
                         help="path where the pickled solution wil be saved")
+    parser.add_argument("-r", "--rev_node_mapping", required=False, type=str)
 
 
 
@@ -110,12 +111,15 @@ if __name__ == "__main__":
 
     node_mapping = {n: i for i,n in enumerate(tree.nodes)}
     rev_node_mapping = {i: n for n,i in node_mapping.items()}
-    T = nx.relabel_nodes(tree, node_mapping, copy=tree)
+    T = nx.relabel_nodes(tree, node_mapping)
 
 
     ct = ClonalTree(T, make_genotypes(T, dat, rev_node_mapping, x_labels, y_labels), dat.seg_to_snvs)
     if args.out is not None:
         pd.to_pickle(ct, args.out)
+    
+    if args.rev_node_mapping is not None:
+        pd.to_pickle(rev_node_mapping, args.rev_node_mapping)
 
     # ct.draw("test/lazac.png", segments=dat.segments)
 
