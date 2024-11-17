@@ -2,20 +2,12 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
-from collections import Counter
-from itertools import product, chain, combinations
+from itertools import  chain
 import pickle 
 import pygraphviz as pgv
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
-from sklearn.metrics.cluster import adjusted_rand_score
 from cell_mapping import CellAssign
-from tree_to_json import convertToJson
 from scipy.stats import binom
-from scipy.stats import beta
-import utils
 from collections import defaultdict
-from constrained_cell_assignment import ConstrainedCellAssign
 from scipy.special import logsumexp
 
 
@@ -571,10 +563,10 @@ class ClonalTree:
         return pd.DataFrame(fps, columns=["node", "snv", "is_leaf", "TP"])
 
 
-    def toJson(self, fname, segment_csv=None, snv_csv=None):
-        json = convertToJson(self, segment_csv, snv_csv)
-        with open(fname, "w") as f:
-            f.write(str(json))
+    # def toJson(self, fname, segment_csv=None, snv_csv=None):
+    #     json = convertToJson(self, segment_csv, snv_csv)
+    #     with open(fname, "w") as f:
+    #         f.write(str(json))
     
     def filter_snvs(self,  snvs):
       
@@ -1139,10 +1131,10 @@ class ClonalTree:
         return cell_scores, nodes
 
 
-    def constrained_cell_assignment(self, data, lamb, dcfs):
-            cell_scores, nodes = self.compute_node_likelihoods(data, lamb=lamb)
-            obj, ca = ConstrainedCellAssign(self, cell_scores, nodes, dcfs_lb=dcfs).solve()
-            return obj,ca 
+    # def constrained_cell_assignment(self, data, lamb, dcfs):
+    #         cell_scores, nodes = self.compute_node_likelihoods(data, lamb=lamb)
+    #         obj, ca = ConstrainedCellAssign(self, cell_scores, nodes, dcfs_lb=dcfs).solve()
+    #         return obj,ca 
 
 
     def assign_cells_by_likelihood(self, data, cells=None, lamb=1000, cellassign=True):
@@ -1208,14 +1200,9 @@ class ClonalTree:
         best_phi = None
         cna_genos = self.get_cna_genos()
         for i in range(max_iterations):
-            if not dcfs:
-                obj, ca = self.assign_cells_by_likelihood(dat, lamb=lamb)
-            else:
-                obj, ca =self.constrained_cell_assignment(dat, lamb, dcfs)
-            
 
+            obj, ca = self.assign_cells_by_likelihood(dat, lamb=lamb)
 
-            # self.draw("test/seg2_test.png", ca, segments=[2])
             
             if obj < opt_cost:
                 best_phi = ca.phi.copy()
@@ -1225,7 +1212,7 @@ class ClonalTree:
                     break
 
             self.assign_genotypes(dat, ca, rho=rho, cna_genos=cna_genos, has_path= has_path)
-            # self.draw("test/seg2_test.png", ca, segments=[2])
+    
        
         
         if best_phi is not None:
@@ -2138,496 +2125,4 @@ class ClonalTree:
             if len(muts) > 0:
                 clusters[mut_indices] = cluster
         return clusters
-    #----------------------------- Performance Metric Functions ------------------------------------#
-    @staticmethod
-    def recall(gt_pairs, inf_pairs) -> float:
-        if sum(gt_pairs.values()) == 0:
-            return 1
-        return  len(set(gt_pairs.keys()) & set(inf_pairs.keys())) / len(gt_pairs)
-
-
-    @staticmethod
-    def ari(v1, v2) -> float:
-        return adjusted_rand_score(v1, v2)
-    
-    # def compute_cell_ari(self, obj) -> float:
-    #     gt_cell = pd.Series(self.phi).values
-    #     pred_cell = pd.Series(obj.phi).values
-    #     return self.ari(gt_cell, pred_cell)
-
-    
-    def compute_mut_ari(self,obj) -> float:
-        #  gt_mut = self.get_mut_clusters()
-         gt_mut =   pd.Series(self.get_psi())
-         pred_mut = pd.Series(obj.get_psi())
-         if gt_mut.shape != pred_mut.shape:
-             inf_missing_snvs= set(gt_mut.index).difference(set(pred_mut.index))
-             gt_missing_snvs= set(pred_mut.index).difference(set(gt_mut.index))
-             print(f"Inf missing snvs: {inf_missing_snvs}")
-             print(f"GT missing snvs: {gt_missing_snvs}")
-         df = pd.concat([gt_mut, pred_mut], axis=1, keys=['gt', 'pred'])
-        #  pred_mut = obj.get_mut_clusters()
-      
-         return self.ari(df["gt"].values, df["pred"].values)
-
-
-    # @staticmethod
-    # def is_incomparable(graph: nx.DiGraph, u, v) -> bool:
-        
-    #     root = [n for n in graph if graph.in_degree(n) == 0]
-  
-    #     if len(root) == 0:
-    #         raise ValueError("Graph must have a root node.")
-    #     else:
-    #         root = root[0]
-    #     for path in nx.all_simple_paths(graph, source=root, target=v):
-    #         if u in path:
-    #             return False
-    #     for path in nx.all_simple_paths(graph, source=root, target=u):
-    #         if v in path:
-    #             return False
-    #     return True
-
-    def is_incomparable(self, u, v) -> bool:    
-        if u ==v:
-            return False 
-        if u in nx.ancestors(self.tree, v):
-            return False 
-        if v in nx.ancestors(self.tree, u):
-            return False
-        return True
-
-
-    def ancestor_pair_recall(self, obj, include_loss=False):
-        if type(obj) != ClonalTree:
-            raise TypeError("Comparable must be a ClonalTree") 
-        else:
-           
-            ancestral = self.get_ancestor_pairs(include_loss)
-            
-            return self.recall(ancestral, obj.get_ancestor_pairs(include_loss))
-    
-    # def ancestor_cell_pair_recall(self, obj):
-    #     if type(obj) != ClonalTree:
-    #         raise TypeError("Comparable must be a ClonalTree") 
-    #     else:
-           
-    #         ancestral = self.get_cell_ancestor_pairs()
-    #         return self.recall(ancestral, obj.get_cell_ancestor_pairs())
-
-    def incomp_pair_recall(self, obj, include_loss=False):
-        if type(obj) != ClonalTree:
-            raise TypeError("Comparable must be a ClonalTree") 
-        else:
-           
-            ancestral = self.get_incomparable_pairs(include_loss)
-            
-            return self.recall(ancestral, obj.get_incomparable_pairs(include_loss))
-    
-    def clustered_pair_recall(self, obj, feature="cell") -> float:
-        if self.mut_mapping is None:
-            self.update_mappings()
-        if feature == "cell":
-            mapping= self.cell_mapping 
-            obj_mapping = obj.cell_mapping
-        else:
-            mapping = self.mut_mapping
-            obj_mapping = obj.mut_mapping
-        
-        clustered = self.get_cluster_pairs(mapping)
-        recall = self.recall(clustered, obj.get_cluster_pairs(obj_mapping))
-        return recall 
-    
-    @staticmethod
-    def compare_CNA_trees(gt, inf, segment):
-    
-            S_gt = gt.get_cna_tree(segment)
-
-    
-            S_inf= inf.get_cna_tree(segment)
-        
-
-            return set(S_gt.edges) == set(S_inf.edges)
-
-    def cna_metrics(self, gt):
-        if type(gt) != ClonalTree:
-            raise TypeError("Comparable must be a ClonalTree") 
-        else:
-           
-            cna_tree_by_seg =[self.compare_CNA_trees(gt, self, ell) for ell in self.seg_to_muts]
-            cna_tree_acc = sum(cna_tree_by_seg)/len(cna_tree_by_seg)
-            ancestral, incomp = self.get_cna_pairs()
-        
-            gt_ancestral, gt_incomp = gt.get_cna_pairs()
-            
-            anc_recall = self.recall(ancestral, gt_ancestral)
-            incomp_recall = self.recall(incomp, gt_incomp)
-        
-            clustered_pairs = self.get_cna_cluster_pairs()
-  
-
-            gt_clustered_pairs = gt.get_cna_cluster_pairs()
-
-            clust_recall =self.recall(clustered_pairs, gt_clustered_pairs)
-            # print(f"Ancestral Recall: {anc_recall} | Incomparable Recall: {incomp_recall} | Clustered Recall {clust_recall} | CNA Tree Accuracy: {cna_tree_acc}")
-
-            res = {
-                'ancestral_recall': anc_recall,
-                'ancestral_pairs':  sum(gt_ancestral.values()),
-                'incomp_recall': incomp_recall,
-                'incomp_pairs': sum(gt_incomp.values()),
-                'clustered_recall': clust_recall,
-                'clustered_pairs': sum(gt_clustered_pairs.values()),
-                'cna_tree_accuracy': cna_tree_acc
-            }
-
-
-            return res
-    
-    def incomp_cell_pair_recall(self, obj):
-        if type(obj) != ClonalTree:
-            raise TypeError("Comparable must be a ClonalTree") 
-        else:
-           
-            ancestral = self.get_cell_incomparable_pairs()
-            return self.recall(ancestral, obj.get_cell_incomparable_pairs())
-
-    # def get_clone_proportions(self):
-    #     clone_prop = {}
-    #     ncells = sum([len(val) for key,  val in self.cell_mapping.items()])
-    #     for n in self.tree:
-    #         if n in self.cell_mapping:
-    #             clone_prop[n] = len(self.cell_mapping[n])/ncells
-    #         else:
-    #             clone_prop[n] = 0
-    #     return pd.Series(clone_prop).sort_index()
-        
-    def get_cna_incomparable_pairs(self) -> Counter:
-        cna_genos = self.get_cna_genos()
-        
-        pairs = Counter()
-        print()
-        for u, v in combinations(self.tree.nodes, 2):
-            print(u)
-            print(v)
-            if self.is_incomparable(self.tree, u, v):
-                for ell in self.seg_to_muts:
-                    cn_u = cna_genos[ell][v]
-                    cn_v = cna_genos[ell][u]
-
-                    # Ensure comparison works on tuples
-                    if cn_u < cn_v:
-                        pairs.update([(ell, cn_u, cn_v)])
-                    else:
-                        pairs.update([(ell, cn_v, cn_u)])
-        
-        return pairs
-
-    @staticmethod
-    def update_mapping(tree, mapping):
-        full_mapping = mapping.copy()
-        for n in tree:
-            if n not in full_mapping:
-                full_mapping[n] = []
-        return full_mapping
-
-    # def score_cells(self, obj) -> dict:
-       
-    #     if type(obj) != ClonalTree:
-    #         raise TypeError("Comparable must be a ClonalTree") 
-    #     else:
-             
-    #          scores = {
-    #              'feature' : 'cell',
-    #              'ari' : self.compute_cell_ari(obj),
-    #              'anc_pair_recall' : self.ancestor_cell_pair_recall(obj),
-    #              'incomp_pair_recall': self.incomp_cell_pair_recall(obj),
-    #              'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="cell"),
-    #              'gt_nodes' : len(self.cell_mapping),
-    #              'n_assigned': len(self.get_all_cells()),
-    #              'inf_nodes' : len(obj.cell_mapping)
-    #          }
-    #          return scores 
-    
-    def score_snvs(self, obj) -> dict:
-        self.update_mappings()
-        if type(obj) != ClonalTree:
-            raise TypeError("Comparable must be a ClonalTree")
-        else:
-             
-             scores = {
-                 'feature' : 'SNV',
-                #  'ari' : self.compute_mut_ari(obj),
-                 'anc_pair_recall' : self.ancestor_pair_recall(obj),
-                 'incomp_pair_recall': self.incomp_pair_recall(obj),
-                 'clustered_pair_recall' : self.clustered_pair_recall(obj, feature="snv"),
-                 'n_assigned': len(obj.get_all_muts())
-         
-             }
-             return scores 
-    
-    # def score(self, obj):
-    #     if type(obj) != ClonalTree:
-    #         raise TypeError("Comparable must be a ClonalTree")
-    #     else:
-    #         cell_scores = self.score_cells(obj)
-    #         snv_scores = self.score_snvs(obj)   
-
-    #         return pd.concat([pd.DataFrame(cell_scores, index=[self.key]), pd.DataFrame(snv_scores,index=[self.key])])     
-    
-    def get_cna_pairs(self):
-        ancestral_pairs = Counter()
-        incomp_pairs = Counter()
-        for ell in self.seg_to_muts:
-           S, state_dict = self.get_non_infinite_alleles_cna_tree(ell)
-           for n in S:
-               for m in nx.dfs_preorder_nodes(S, n):
-                    if m != n:
-                        ancestral_pairs.update([(ell, state_dict[n], state_dict[m])])
-           for u, v in combinations(S.nodes, 2):
-            
-               if self.is_incomparable(S, u, v):
-                   u_state = state_dict[u]
-                   v_state= state_dict[v]
-                   incomp_pairs.update([(ell, min(u_state,v_state), max(u_state,v_state))])
-        return ancestral_pairs, incomp_pairs
-
-                   
-            
-    
-    def get_cna_cluster_pairs(self) -> Counter:
-        pairs = Counter()
-        cna_genos = self.get_cna_genos()
-        for n in self.preorder(self.root):
-            if n==self.root:
-                continue
-            new_states = []
-            par = self.parent(n)
-     
-
-       
-            for ell in self.seg_to_muts:
-                par_geno = cna_genos[ell][par]
-                node_geno = cna_genos[ell][n]
-            
-                if par_geno != node_geno:
-                    new_states.append((ell, node_geno))
-            if len(new_states) >= 2:
-                pairs.update(combinations(new_states, 2))
-                pairs.update(combinations(new_states, 2))
-        return pairs
-
-
-            
-    
-    # def get_cna_cluster_pairs(self, mapping) -> Counter:
-    #     cna_genos = self.get_cna_genos()
-    #     pairs = Counter()
-    #     for node in self.tree.nodes:
-    #             pairs.update(combinations(sorted(mapping[node]), 2))
-    #     return pairs
-
-        # if include_loss:
-        #     raise NotImplementedError("not impletmented")
-        #     for node in self.tree.nodes:
-        #         if include_loss and node in self.mut_loss_mapping:
-        #             node_loss = self.mut_loss_mapping[node]
-        #         else:
-        #             node_loss = []
-        #         for mut1, mut2 in combinations(
-        #             chain(
-        #                 product(self.mut_mapping[node], [1]),
-        #                 product(node_loss, [0])
-        #             ),
-        #             2
-        #         ):
-        #             if mut1 < mut2:
-        #                 pairs[(mut1, mut2)] += 1
-        #             else:
-        #                 pairs[(mut2, mut1)] += 1
-        # else:
-    
-    # def get_cell_ancestor_pairs(self) -> Counter:
-
-    #     mapping = self.update_mapping(self.tree,self.cell_mapping)
-    #     pairs = Counter()
-    #     for node in self.tree.nodes:
-    #         for children in nx.dfs_successors(self.tree, source=node).values():
-    #             for child in children:
-    #                 pairs.update(product(mapping[node], mapping[child]))
-    #     return pairs
-
-    # def get_cell_cluster_pairs(self) -> Counter:
-    #     pairs = Counter()
-    #     for node in self.tree.nodes:
-    #         pairs.update(combinations(sorted(self.cell_mapping[node][0]), 2))
-    #     return pairs
-
-    # def get_cell_incomparable_pairs(self) -> Counter:
-    #     cell_mapping= self.update_mapping(self.tree, self.cell_mapping)
-    #     pairs = Counter()
-    #     for u, v in combinations(self.tree.nodes, 2):
-    #         if self.is_incomparable(self.tree, u, v):
-    #             pairs.update((min(a, b), max(a, b)) for a, b in product(cell_mapping[u], cell_mapping[v]))
-           
-        # return pairs
-
-    def get_cna_ancestor_pairs(self) -> Counter:
-        pairs = Counter()
-        cna_genos = self.get_cna_genos()
-
-        for node in self.tree.nodes:
-            # Find all children of the node using depth-first search
-            for children in nx.dfs_successors(self.tree, source=node).values():
-                for child in children:
-                    for ell in self.seg_to_muts:
-                        # Create a tuple (ell, cna_genos[node][ell], cna_genos[child][ell])
-                        cn_node = cna_genos[node][ell]
-                        cn_child = cna_genos[child][ell]
-                        
-                        # Update the Counter with this tuple wrapped in a list
-                        pairs.update([(ell, cn_node, cn_child)])
-        
-        return pairs
-    
-    def get_ancestor_pairs(self, include_loss: bool=True) -> Counter:
-        if self.mut_mapping is None:
-            self.update_mappings()
-        mut_mapping = self.update_mapping(self.tree, self.mut_mapping)
-        pairs = Counter()
-        if include_loss:
-            raise NotImplementedError("not impletmented")
-            # for node in self.tree.nodes:
-            #     for children in nx.dfs_successors(self.tree, source=node).values():
-            #         for child in children:
-            #             if include_loss and node in self.mut_loss_mapping:
-            #                 node_loss = self.mut_loss_mapping[node]
-            #             else:
-            #                 node_loss = []
-
-            #             for mut1 in chain(
-            #                 product(self.mut_mapping[node], [1]),
-            #                 product(node_loss, [0])
-            #             ):
-            #                 if include_loss and child in self.mut_loss_mapping:
-            #                     child_loss = self.mut_loss_mapping[child]
-            #                 else:
-            #                     child_loss = []
-            #                 for mut2 in chain(
-            #                     product(self.mut_mapping[child], [1]),
-            #                     product(child_loss, [0])
-            #                 ):
-            #                     pairs[(mut1, mut2)] += 1
-        else:
-            for node in self.tree.nodes:
-                for children in nx.dfs_successors(self.tree, source=node).values():
-                    for child in children:
-                        pairs.update(product(mut_mapping[node], mut_mapping[child]))
-        return pairs
-
-    def gt_latent_genos(self, u):
-        lat_genos = self.get_latent_genotypes(u)
-        latent_cna_genos = self.get_latent_cna_genos(lat_genos)
-        seg_geno = {}
-        for key, seg in self.mut_to_seg.items():
-            if seg not in seg_geno:
-               seg_geno[seg] = latent_cna_genos[key]
-        latent_x, latent_y = [], []
-        for seg,cna_geno in sorted(seg_geno.items()):
-            latent_x.append(cna_geno[0])
-            latent_y.append(cna_geno[1])
-        
-        latent_x = np.array(latent_x).reshape(-1,1)
-        latent_y = np.array(latent_y).reshape(-1, 1)
-        return latent_x, latent_y
-
-    def cna_genotype_similarity(self, gt_phi, inf_ct, inf_phi):
-        segments = len(self.seg_to_muts)
-        total_dist = 0
-        # if len(gt_phi.get_all_cells() ^ inf_phi.get_all_cells()) ==0:
-
-        
-        # all_u_dist = []
-        for u in gt_phi.clones:
-            gt_cells = gt_phi.get_cells(u)
-            if len(gt_cells) ==0:
-                continue
-            gt_x, gt_y = self.gt_latent_genos(u)
-            
-            node_mapping = {}
-            for i in gt_cells:
-                node = inf_phi.phi[i]
-                if node in node_mapping:
-                    node_mapping[node].append(i)
-                else:
-                    node_mapping[node] = [i]
-            for v, inf_cells in node_mapping.items():
-                ncells = len(inf_cells)
-                inf_x, inf_y = inf_ct.gt_latent_genos(v)
-                x_acc = inf_x == gt_x
-                y_acc = inf_y == gt_y
-                geno_diff =  np.sum(np.logical_and(x_acc, y_acc))
-           
-                total_dist  += ncells*geno_diff
-        
-    
-        mad = total_dist/ (inf_phi.n * segments)
-        return  mad
-                    
-
-
-
-
-
-
-        # self.mut2seg = {}
-        # for v in self.genotypes:
-        #     for s in self.genotypes[v]:
-        #         for m in self.genotypes[v][s]:
-        #             self.mut2seg[m]=s
-        # self.mut2seg = {m: s  for v in self.genotypes for s, muts in self.genotypes[v].items() for m in muts}
-        
-        # self.seg2muts = {}
-        # for m,s in self.mut2seg.items():
-        #     if s in self.seg2muts:
-        #         self.seg2muts[s].append(m)
-        #     else:
-        #         self.seg2muts[s] = [m]
-
-    
-
-    
-    # def get_mut_mapping(self):
-    #     if len(self.genotypes) ==0:
-    #         return {v: [] for v in self.tree}, {v: [] for v in self.tree}
-    #     gained= set()
-    #     lost = set()
-    
-    #     muts= set(list(chain.from_iterable([self.seg_to_muts[ell] for ell in self.seg_to_muts])))
-      
-    #     mut_mapping = {v: [] for v in self.tree}
-    #     mut_loss_mapping = {v: [] for v in self.tree}
-    #     for u in self.preorder():
-    #             for v in self.children(u):
-    #                 for j in muts:
-    #                     geno_v = self.genotypes[v][j]
-    #                     geno_u = self.genotypes[u][j]
-    #                     # if geno_u.z ==0 and geno_v.z > 0:
-    #                     if self.mut_copies(geno_u) ==0 and self.mut_copies(geno_v) > 0:
-    #                         mut_mapping[v].append(j)
-    #                         gained.add(j)
-    #                     if self.mut_copies(geno_u) > 0 and self.mut_copies(geno_v) == 0:
-    #                         mut_loss_mapping[v].append(j)   
-    #                         lost.add(j)
-
-
-               
-    #     missing= muts - (gained.union(lost))
-    #     if len(missing) > 0:
-    #         print(f"Warning: {len(missing)} SNVs never gained (w+z > 0) in any node, appending SNVs to root with 0 mutation state")
-    #         for m in missing:
-    #             print(f"{m}: {self.mut_to_seg[m]}")
-    #         # self.draw("test/bad_tree.png", segments=self.get_segments())
-    #     for m in missing:
-    #         mut_mapping[self.root].append(m)
-    #     return mut_mapping, mut_loss_mapping 
+   
