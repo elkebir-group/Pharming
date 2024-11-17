@@ -4,8 +4,7 @@
 # Created on: 2024-05-06 09:20:11
 
 
-from clonal_tree import ClonalTree
-import utils 
+
 import pandas as pd 
 import numpy as np 
 import networkx as nx 

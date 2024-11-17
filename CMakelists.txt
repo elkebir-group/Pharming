@@ -1,0 +1,40 @@
+cmake_minimum_required(VERSION 3.15)
+
+# Project metadata
+project(pharming LANGUAGES CXX)
+
+# Add Lemon and Boost as dependencies
+find_package(Boost REQUIRED)    # Ensure Boost is available
+find_package(Lemon REQUIRED)    # Ensure Lemon is installed
+
+# Add pybind11 (from the extern submodule)
+add_subdirectory(extern/pybind11)
+
+# Python extension module using pybind11
+pybind11_add_module(clonelib
+    phaming/clonelib/clonelib.cpp  # Path to your C++ source file
+)
+
+# Include paths for pybind11, Lemon, and Boost
+target_include_directories(clonelib PRIVATE
+    extern/pybind11/include
+    ${Boost_INCLUDE_DIRS}
+    ${LEMON_INCLUDE_DIRS}
+)
+
+# Link Boost and Lemon libraries
+target_link_libraries(clonelib PRIVATE
+    ${Boost_LIBRARIES}
+    ${LEMON_LIBRARIES}
+)
+
+# Set C++ standard
+set_target_properties(clonelib PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED YES
+)
+
+# Additional compiler flags (optional)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(clonelib PRIVATE -Wall -Wextra -Wpedantic)
+endif()
