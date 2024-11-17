@@ -7,7 +7,7 @@ import numpy as np
 import multiprocessing
 
 from .sti_v2 import STI
-from . import clonelib
+import clonelib
 from .tree_merging import ClonalTreeMerging
 from .utils import concat_and_sort, timeit_decorator, get_top_n
 from .dcf_clustering_v2 import DCF_Clustering
