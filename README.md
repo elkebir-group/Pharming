@@ -15,10 +15,16 @@ Solves the joint clonal tree inference problem and infers a joint CNA and SNV tr
 - `lemon`
 
 
-## Installation
+## Installation from github
 The following installation steps will install a `pharming` module, a `clonelib` module and all dependencies.
 
-First create a new conda environment.
+First, recursive clone the repo.
+```
+git clone git@github.com:elkebir-group/Pharming.git --recursive
+cd Pharming
+```
+
+Next, create a new conda environment.
 ```
 conda create -n pharming
 conda activate pharming
