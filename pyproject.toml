@@ -13,8 +13,14 @@ dependencies = [
     "scipy",
 ]
 
+[project.scripts]
+pharming = "pharming.main:main"
+pharming-data = "pharming.make_data:main"
+
 [tool.setuptools]
 packages = ["pharming"]
 
 [tool.setuptools.package-data]
 pharming = ["clonelib/*"]
+
+

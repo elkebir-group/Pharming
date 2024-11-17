@@ -1,13 +1,13 @@
-import networkx as nx 
 from itertools import product
-from utils import powerset, draw, merge_lists, pickle_object
-from clonal_tree import ClonalTree
-from solution import Solution
-import utils
 from copy import deepcopy
-from enumerate import Enumerate
-import itertools
+import networkx as nx 
 import numpy as np
+
+from .utils import powerset, merge_lists
+from .clonal_tree import ClonalTree
+from .solution import Solution
+from .enumerate import Enumerate
+
 
 class CNA_Merge:
     def __init__(self, T1, T2, Tm_edges, cell_threshold=0,  maxtrees=5000, verbose=False):

@@ -3,13 +3,13 @@
 from itertools import chain, combinations
 import networkx as nx
 import numpy as np
-import clonelib
-from clonal_tree import ClonalTree
-# from cell_mapping import CellAssign
-from enumerate import Enumerate
-from solution import Solution
-from utils import draw
-from genotype_tree import GenotypeTree
+
+from . import clonelib
+from .clonal_tree import ClonalTree
+from .enumerate import Enumerate
+from .solution import Solution
+from .utils import draw
+from .genotype_tree import GenotypeTree
 
 
 

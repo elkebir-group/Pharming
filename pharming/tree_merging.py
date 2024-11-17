@@ -1,9 +1,10 @@
-import numpy as np
-from cna_merge import CNA_Merge
-import itertools
-from utils import get_top_n, pickle_object, concat_and_sort
-import multiprocessing
 import concurrent.futures
+import itertools
+import numpy as np
+
+from .utils import get_top_n, concat_and_sort
+from .cna_merge import CNA_Merge
+
 RANDOM = 'random'
 NSNVS = 'nsnvs'
 INPLACE = "in-place"

@@ -5,7 +5,7 @@ import networkx as nx
 from itertools import  chain
 import pickle 
 import pygraphviz as pgv
-from cell_mapping import CellAssign
+from .cell_mapping import CellAssign
 from scipy.stats import binom
 from collections import defaultdict
 from scipy.special import logsumexp

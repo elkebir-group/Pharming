@@ -1,16 +1,15 @@
-from genotype_tree import GenotypeTree
-import numpy as np
-from scipy.optimize import minimize_scalar, minimize
-import clonelib
-import networkx as nx
-from collections import defaultdict 
 import argparse
-from scipy.optimize import linear_sum_assignment
+from collections import defaultdict 
 import pickle
-import pandas as pd
-from utils import timeit_decorator
 import  multiprocessing
-from decifer_post_process import post_process
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize_scalar, minimize
+
+from . import clonelib
+from .utils import timeit_decorator
+from .genotype_tree import GenotypeTree
+# from decifer_post_process import post_process
 # TOLERANCE = 2
 TOLERANCE = 10
 EPSILON = -1e40
@@ -557,20 +556,20 @@ def main(args):
             for d in dcfs:
                 file.write(f"{d}\n")
     
-    if args.post_dcfs is not None:
-        clust_assign, tree_assign = best[3], best[4]
-        snv_assign = defaultdict(list)
-        tassign = {}
-        for ell in clust_assign:
-            for j,q in clust_assign[ell].items():
-                snv_assign[q].append(j)
-            for j, t in tree_assign[ell].items():
-                tassign[j] = t
-        dcf_dict = {i: d for i, d in enumerate(dcfs)}
-        post_dcfs = post_process(dcf_dict, snv_assign, tassign, data)
-        with open(args.post_dcfs, "w+") as file:
-            for q, d in post_dcfs.items():
-                file.write(f"{d}\n")
+    # if args.post_dcfs is not None:
+    #     clust_assign, tree_assign = best[3], best[4]
+    #     snv_assign = defaultdict(list)
+    #     tassign = {}
+    #     for ell in clust_assign:
+    #         for j,q in clust_assign[ell].items():
+    #             snv_assign[q].append(j)
+    #         for j, t in tree_assign[ell].items():
+    #             tassign[j] = t
+    #     dcf_dict = {i: d for i, d in enumerate(dcfs)}
+    #     post_dcfs = post_process(dcf_dict, snv_assign, tassign, data)
+    #     with open(args.post_dcfs, "w+") as file:
+    #         for q, d in post_dcfs.items():
+    #             file.write(f"{d}\n")
     
     
 
@@ -603,7 +602,6 @@ if __name__ == "__main__":
     parser.add_argument("--mink", type=int, default=2, help="minimum number of clusters")
     parser.add_argument("--maxk", type=int, default= 5, help="maximum number of clusters")
     parser.add_argument("-D", "--dcfs", type=str, help="output file for inferred dcfs")
-    parser.add_argument("-P", "--post-dcfs", type=str, help="output file for post-processed dcfs")
     parser.add_argument("-s", "--seed", type=int, default=21,  help="output file for inferred dcfs")
     parser.add_argument("-j", "--cores", default=1, type=int, help="number of cores to use")
     parser.add_argument("--verbose", action= "store_true", help="print additional information.")

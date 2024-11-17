@@ -1,15 +1,16 @@
 
 # Created by: L.L. Weber
 # Created on: 2024-02-29 18:40:59
+import itertools
 import networkx as nx 
 import numpy as np
-from sti_v2 import STI
-import itertools
-import clonelib
 import multiprocessing
-from tree_merging import ClonalTreeMerging
-import utils
-from dcf_clustering_v2 import DCF_Clustering
+
+from .sti_v2 import STI
+from . import clonelib
+from .tree_merging import ClonalTreeMerging
+from .utils import concat_and_sort, timeit_decorator, get_top_n
+from .dcf_clustering_v2 import DCF_Clustering
 
 
 class Pharming:
@@ -191,7 +192,7 @@ class Pharming:
         if len(segtrees) ==0:
             print(f"Segment {ell} failed for {Tm_edges}!")
         else:
-            segtrees = utils.concat_and_sort(segtrees)
+            segtrees = concat_and_sort(segtrees)
 
             print(f" segment | cost | snv | cna")
         
@@ -233,7 +234,7 @@ class Pharming:
  
         return segtrees
    
-    @utils.timeit_decorator
+    @timeit_decorator
     def integrate(self, Tm_edges, segtrees, restarts=1):
             
             print(f"Starting integration for {len(segtrees)} segments...")
@@ -455,7 +456,7 @@ class Pharming:
        
   
 
-    @utils.timeit_decorator
+    @timeit_decorator
     def fit(self, data, lamb=1e3, segments= None, cores=1, Tm=None):
         '''
         @params Data data: the input data (C,A,D) to fit
@@ -539,7 +540,7 @@ class Pharming:
             # if i == self.ground_truth_tm:
             #     print("Including the ground truth mutation cluster tree!")
         
-        best_tree_int = utils.get_top_n(self.clonal_trees, self.top_n)
+        best_tree_int = get_top_n(self.clonal_trees, self.top_n)
         print("Best trees after initial integration ")
         for i,sol in enumerate(best_tree_int):
             cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
@@ -555,7 +556,7 @@ class Pharming:
                                                     [init_trees[i] for i in smallest_indices], 
                                                     init_order = init_order )
         
-        best_trees =  utils.get_top_n(self.clonal_trees, self.top_n)
+        best_trees =  get_top_n(self.clonal_trees, self.top_n)
 
         # print(f" tree | cost | snv | cna")
         for i,b in enumerate(best_trees):
@@ -580,7 +581,7 @@ class Pharming:
             # print(f"|{i} | {cost} | {snv} | {cna} |")
  
     
-        best_trees = utils.get_top_n(all_best_trees, self.top_n)
+        best_trees = get_top_n(all_best_trees, self.top_n)
         for sol in best_trees:
             sol.prune_leaves(self.k)
 

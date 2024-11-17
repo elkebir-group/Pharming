@@ -3,7 +3,7 @@
 import argparse
 import pandas as pd 
 import numpy as np
-from data import Data
+from .data import Data
 
 
 def load_from_files(var_fname, copy_fname, alpha=0.001 ):
@@ -128,7 +128,7 @@ def load(read_counts, copy_numbers, alpha=0.001):
                 seg_weights=seg_weights)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", required=True,
                         help="input file for variant and total read counts with unlabeled columns: [chr segment snv cell var total]")

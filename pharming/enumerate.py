@@ -6,20 +6,19 @@ Created on Wed Mar 24 2021
 @author: Palash Sashittal
 """
 
-import gurobipy as gp
-import numpy as np
-import pandas as pd
+
+
 import networkx as nx
 import itertools
-
+from pyomo.environ import *
+from pyomo.opt import SolverFactory
 
 
 # minimum correction tree parsimonious clone reconciliation problem
 class Enumerate:
 
     def __init__(self, T, S, threads = 1, timelimit = None, verbose = False, same_root=False):  
-        # self.snv_mat = snv_mat
-        # self.cna_mat = cna_mat
+   
  
         self.cna_clones = {}
         if not same_root:
@@ -92,181 +91,94 @@ class Enumerate:
 
         # print(f'snv root is {self.snv_root} and cna root is {self.cna_root}')
 
-    def solve(self, max_sol=10000):
-        model = gp.Model('solveMCTPCR')
-        model.Params.PoolSearchMode = 2
-        model.Params.PoolSolutions = max_sol
-        # model.Params.PoolIgnore = 1
+    # def solve_gurobi(self, max_sol=10000):
+    #     import gurobipy as gp
+    #     model = gp.Model('solveMCTPCR')
+    #     model.Params.PoolSearchMode = 2
+    #     model.Params.PoolSolutions = max_sol
+
+    #     nsamples =self.nsamples
  
-        # nsamples =  1 #self.snv_mat.shape[1]
-        # assert nsamples == self.cna_mat.shape[1], 'SNV and CNA matrix sizes do not match up.'
-        nsamples =self.nsamples
-        # nsnv = self.snv_mat.shape[0]
-        # ncna = self.cna_mat.shape[0]
-        nsnv = self.nsnv
-        ncna = self.ncna
+    #     nsnv = self.nsnv
+    #     ncna = self.ncna
 
 
-        x = model.addVars(nsnv, ncna, vtype=gp.GRB.BINARY, name='x')
-        w = model.addVars(nsamples, nsnv, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'w')
-        y = model.addVars(nsamples, nsnv, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'y')
-        z_snv = model.addVars(nsnv-1, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'z_snv')
-        z_cna = model.addVars(nsnv, ncna-1, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'z_cna')
-        d_snv = model.addVars(nsamples, nsnv, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'delta_snv')
-        d_cna = model.addVars(nsamples, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'delta_cna')
-
-        # encode product w[i,j,k] = y[i,j,k] * x[j,k]
-        # for i in range(nsamples):
-        #     for j in range(nsnv):
-        #         for k in range(ncna):
-        #             model.addConstr(w[i,j,k] <= y[i,j,k])
-        #             model.addConstr(w[i,j,k] <= x[j,k])
-        #             model.addConstr(w[i,j,k] >= x[j,k] + y[i,j,k] - 1)
-
-        # # encode abundance constraint for snv with correction
-        # for i in range(nsamples):
-        #     for j in range(nsnv):
-        #         sum = gp.LinExpr()
-        #         for k in range(ncna):
-        #             sum += w[i,j,k]
-        #         #model.addConstr(sum == self.snv_mat[j,i])
-        #         model.addConstr(self.snv_mat[j,i] - sum <= d_snv[i,j])
-        #         model.addConstr(sum - self.snv_mat[j,i] <= d_snv[i,j])
-
-        # # encode abundance constraint for cna
-        # for i in range(nsamples):
-        #     for k in range(ncna):
-        #         sum = gp.LinExpr()
-        #         for j in range(nsnv):
-        #             sum += w[i,j,k]
-        #         #model.addConstr(sum == self.cna_mat[k,i])
-        #         model.addConstr(self.cna_mat[k,i] - sum <= d_cna[i,k])
-        #         model.addConstr(sum - self.cna_mat[k,i] <= d_cna[i,k])
-
-        # # encode total abundance constraint
-        # for i in range(nsamples):
-        #     sum = gp.LinExpr()
-        #     for j in range(nsnv):
-        #         for k in range(ncna):
-        #             sum += w[i,j,k]
-        #     model.addConstr(sum == 1)
-
-        # encode z_snv[j,k] = x[parent(j), k] * x[j,k]
-        # encode z_cna[j,k] = x[j, parent(k)] * x[j,k]
-        for edge_idx, edge in enumerate(self.snv_edges):
-            parent = edge[0]
-            child = edge[1]
-            for k in range(ncna):
-                model.addConstr(z_snv[edge_idx, k] <= x[parent, k])
-                model.addConstr(z_snv[edge_idx, k] <= x[child, k])
-                model.addConstr(z_snv[edge_idx, k] >= x[parent, k] + x[child, k] - 1)
-
-        for edge_idx, edge in enumerate(self.cna_edges):
-            parent = edge[0]
-            child = edge[1]
-            for j in range(nsnv):
-                model.addConstr(z_cna[j, edge_idx] <= x[j, parent])
-                model.addConstr(z_cna[j, edge_idx] <= x[j, child])
-                model.addConstr(z_cna[j, edge_idx] >= x[j, parent] + x[j, child] - 1)
-
-        # encode sum_{k} z_snv[j, k] == 1
-        # encode sum_{j} z_cna[j, k] == 1
-        for edge_idx in range(nsnv-1):
-            sum = gp.LinExpr()
-            for k in range(ncna):
-                sum += z_snv[edge_idx, k]
-            #model.addConstr(sum <= 1)
-            model.addConstr(sum == 1)
-        for edge_idx in range(ncna - 1):
-            sum = gp.LinExpr()
-            for j in range(nsnv):
-                sum += z_cna[j, edge_idx]
-            #model.addConstr(sum <= 1)
-            model.addConstr(sum == 1)
-
-        # encode x[j,k] <= x[parent(j), k] + x[j, parent(k)]
-        for j in range(nsnv):
-            for k in range(ncna):
-                if j in self.snv_parent_dict.keys() or k in self.cna_parent_dict.keys():
-                    sum = gp.LinExpr()
-                    if j in self.snv_parent_dict.keys():
-                        sum += x[self.snv_parent_dict[j][0], k]
-                    if k in self.cna_parent_dict.keys():
-                        sum += x[j, self.cna_parent_dict[k][0]]
-                    model.addConstr(x[j,k] <= sum)
-
-#         # set objective function
-#         obj_sum = gp.LinExpr()
-# #        for j in range(nsnv):
-# #            for k in range(ncna):
-# #                obj_sum += x[j,k]
-# #        model.setObjective(obj_sum, gp.GRB.MINIMIZE)
-#         for i in range(nsamples):
-#             for j in range(nsnv):
-#                 obj_sum += d_snv[i,j]
-#             for k in range(ncna):
-#                 obj_sum += d_cna[i,k]
-        model.setObjective(1, gp.GRB.MINIMIZE)
-
-#        model.write('mctpcr.lp')
+    #     x = model.addVars(nsnv, ncna, vtype=gp.GRB.BINARY, name='x')
+    #     w = model.addVars(nsamples, nsnv, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'w')
+    #     y = model.addVars(nsamples, nsnv, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'y')
+    #     z_snv = model.addVars(nsnv-1, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'z_snv')
+    #     z_cna = model.addVars(nsnv, ncna-1, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'z_cna')
+    #     d_snv = model.addVars(nsamples, nsnv, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'delta_snv')
+    #     d_cna = model.addVars(nsamples, ncna, vtype = gp.GRB.CONTINUOUS, lb = 0, ub = 1, name = 'delta_cna')
 
 
-        model.setParam(gp.GRB.Param.Threads, self.threads)
-        model.optimize()
+    #     for edge_idx, edge in enumerate(self.snv_edges):
+    #         parent = edge[0]
+    #         child = edge[1]
+    #         for k in range(ncna):
+    #             model.addConstr(z_snv[edge_idx, k] <= x[parent, k])
+    #             model.addConstr(z_snv[edge_idx, k] <= x[child, k])
+    #             model.addConstr(z_snv[edge_idx, k] >= x[parent, k] + x[child, k] - 1)
+
+    #     for edge_idx, edge in enumerate(self.cna_edges):
+    #         parent = edge[0]
+    #         child = edge[1]
+    #         for j in range(nsnv):
+    #             model.addConstr(z_cna[j, edge_idx] <= x[j, parent])
+    #             model.addConstr(z_cna[j, edge_idx] <= x[j, child])
+    #             model.addConstr(z_cna[j, edge_idx] >= x[j, parent] + x[j, child] - 1)
+
+    #     # encode sum_{k} z_snv[j, k] == 1
+    #     # encode sum_{j} z_cna[j, k] == 1
+    #     for edge_idx in range(nsnv-1):
+    #         sum = gp.LinExpr()
+    #         for k in range(ncna):
+    #             sum += z_snv[edge_idx, k]
+    #         #model.addConstr(sum <= 1)
+    #         model.addConstr(sum == 1)
+    #     for edge_idx in range(ncna - 1):
+    #         sum = gp.LinExpr()
+    #         for j in range(nsnv):
+    #             sum += z_cna[j, edge_idx]
+    #         #model.addConstr(sum <= 1)
+    #         model.addConstr(sum == 1)
+
+    #     # encode x[j,k] <= x[parent(j), k] + x[j, parent(k)]
+    #     for j in range(nsnv):
+    #         for k in range(ncna):
+    #             if j in self.snv_parent_dict.keys() or k in self.cna_parent_dict.keys():
+    #                 sum = gp.LinExpr()
+    #                 if j in self.snv_parent_dict.keys():
+    #                     sum += x[self.snv_parent_dict[j][0], k]
+    #                 if k in self.cna_parent_dict.keys():
+    #                     sum += x[j, self.cna_parent_dict[k][0]]
+    #                 model.addConstr(x[j,k] <= sum)
 
 
-        num_solutions = model.SolCount
-        self.trees = []
-        labels = [(i,j) for i in range(nsnv) for j in range(ncna)]
-        for i in range(num_solutions):
-            # model.setParam(gp.GRB.Param.SolutionNumber, i)
-            model.setParam(gp.GRB.Param.SolutionNumber, i)
-    # Retrieve the values of decision variables for the i-th solution
-            x_variables = [var for var in model.getVars() if var.varName.startswith("x")]
-
-# Retrieve the solution values for the filtered decision variables
-            solx = model.getAttr('Xn', x_variables)
-            self.sol_clones = [labels[i] for i, val in enumerate(solx) if val > 0.5]
-            # self.sol_clones = [key for key, val in solx.items() if val >= 0.5]
-
-            # x_variables = [var for var in model.getVars() if var.varName.startswith("x")]
-
-# Retrieve the solution values for the filtered decision variables
-# solution_values_for_x = model.getAttr('Xn', x_variables)
-            # print(self.sol_clones)
-            self.trees.append(self.getCloneTree())
-
-        return self.trees 
-        # if model.status == gp.GRB.OPTIMAL:
-        #     solx = model.getAttr('x', x)
-
-            # self.sol_props = model.getAttr('x', w)
+    #     model.setObjective(1, gp.GRB.MINIMIZE)
 
 
-    def writeCloneFile(self, clone_file, snv_clones = None, cna_clones = None):
-        clone_data = []
-        for clone in self.sol_clones:
-            #for sample in range(self.nsamples):
-            if snv_clones:
-                snv_clone = snv_clones[clone[0]]
-            else:
-                snv_clone = clone[0]
-            if cna_clones:
-                cna_clone = cna_clones[clone[1]]
-            else:
-                cna_clone = clone[1]
+    #     model.setParam(gp.GRB.Param.Threads, self.threads)
+    #     model.optimize()
 
-            clone_data.append([clone, snv_clone, cna_clone] + [self.sol_props[sample, clone[0], clone[1]] for sample in range(self.nsamples)])
-        df_clone = pd.DataFrame(clone_data, columns=['clone', 'snv_clone', 'cna_clone'] + [f'sample_{idx}' for idx in range(self.nsamples)])
-        df_clone.to_csv(clone_file, sep='\t', index=False)
 
-    def writeCloneTree(self,T, clone_tree_file):
-    
-        clone_edges = list(T.edges)
+    #     num_solutions = model.SolCount
+    #     self.trees = []
+    #     labels = [(i,j) for i in range(nsnv) for j in range(ncna)]
+    #     for i in range(num_solutions):
+    #         # model.setParam(gp.GRB.Param.SolutionNumber, i)
+    #         model.setParam(gp.GRB.Param.SolutionNumber, i)
+    #     # Retrieve the values of decision variables for the i-th solution
+    #         x_variables = [var for var in model.getVars() if var.varName.startswith("x")]
 
-        with open(clone_tree_file, 'w') as output:
-            for clone_edge in clone_edges:
-                output.write(f'{clone_edge[0]}\t{clone_edge[1]}\n')
+    #     # Retrieve the solution values for the filtered decision variables
+    #         solx = model.getAttr('Xn', x_variables)
+    #         self.sol_clones = [labels[i] for i, val in enumerate(solx) if val > 0.5]
+
+    #         self.trees.append(self.getCloneTree())
+
+    #     return self.trees 
+ 
     
     def getCloneTree(self):
         clone_edges = []
@@ -307,79 +219,101 @@ class Enumerate:
 
         return nx.DiGraph(clone_edges)
 
-        # with open(clone_tree_file, 'w') as output:
-        #     for clone_edge in clone_edges:
-        #         output.write(f'{clone_edge[0]}\t{clone_edge[1]}\n')
-
-    # def writeDOT(self, dot_file, snv_clones = None, cna_clones = None):
-
-    #     with open(dot_file, 'w') as output:
-
-    #         output.write(f'digraph N {{\n')
-    #         output.write(f"\toverlap=\"false\"\n")
-    #         output.write(f"\trankdir=\"TB\"\n")
-
-    #         idx_dict = {}
-    #         idx = 0
-    #         for clone in self.sol_clones:
-    #             if snv_clones:
-    #                 snv_clone = snv_clones[clone[0]]
-    #             else:
-    #                 snv_clone = clone[0]
-    #             if cna_clones:
-    #                 cna_clone = cna_clones[clone[1]]
-    #             else:
-    #                 cna_clone = clone[1]
-
-    #             idx_dict[clone] = idx
-    #             output.write(f'\t{idx} [label=\"{snv_clone}, {cna_clone}\", style=\"bold\"];\n')
-
-    #             idx += 1
-
-    #         for clone1, clone2 in itertools.permutations(self.sol_clones, 2):
-    #             if snv_clones:
-    #                 snv_clone1 = snv_clones[clone1[0]]
-    #                 snv_clone2 = snv_clones[clone2[0]]
-    #             else:
-    #                 snv_clone1 = clone1[0]
-    #                 snv_clone2 = clone2[0]
-
-    #             if cna_clones:
-    #                 cna_clone1 = cna_clones[clone1[1]]
-    #                 cna_clone2 = cna_clones[clone2[1]]
-    #             else:
-    #                 cna_clone1 = clone1[1]
-    #                 cna_clone2 = clone2[1]
-
-    #             if clone1[0] == clone2[0]:
-    #                 if clone1[1] in self.cna_parent_dict.keys():
-    #                     if clone2[1] in self.cna_parent_dict[clone1[1]]:
-    #                         output.write(f"\t{idx_dict[clone2]} -> {idx_dict[clone1]} [style=\"bold\"];\n")
-
-    #             if clone1[1] == clone2[1]:
-    #                 if clone1[0] in self.snv_parent_dict.keys():
-    #                     if clone2[0] in self.snv_parent_dict[clone1[0]]:
-    #                         output.write(f"\t{idx_dict[clone2]} -> {idx_dict[clone1]} [style=\"bold\"];\n")
-
-    #         output.write(f'}}')
+ 
 
 
-# import pygraphviz as pgv
-# def draw(tree, fname):
-#         ptree = pgv.AGraph(strict=False, directed=False)
-#         ptree.add_edges_from(list(tree.edges))
-#         ptree.layout("dot")
-#         ptree.draw(fname)
-# # S_edge  = [(0,1), (0,2)]
-# S = nx.DiGraph([((1,1), (1,3)), ((1,1), (2,0)) ])
-# T = nx.DiGraph([ (0,1), (0,3), (1,2)])
-# trees = Enumerate(T,S).solve()
-# [draw(trees[i], f"test/refinement{i}.png") for i in range(len(trees))]
-# cna_clones = {0: (1,1), 1: (1,3), 2: (2,0)}
-# T_edges = [(0, 1), (1,2), (2,3), (1, 4) ]
-# snv_clones = {0: -1, 1: 0, 2: 1, 3: 2, 4:3}
+    def solve(self, max_sol=10000):
+        # Create Pyomo model
+        model = ConcreteModel()
 
-# trees = obj.solve(cna_clones=cna_clones, snv_clones=snv_clones)
+        nsamples = self.nsamples
+        nsnv = self.nsnv
+        ncna = self.ncna
 
-# obj.writeCloneTree("test/clone_tree.txt")
+        # Define sets
+        model.SNV = RangeSet(0, nsnv - 1)
+        model.CNA = RangeSet(0, ncna - 1)
+        model.SAMPLES = RangeSet(0, nsamples - 1)
+        model.SNV_EDGES = RangeSet(0, len(self.snv_edges) - 1)
+        model.CNA_EDGES = RangeSet(0, len(self.cna_edges) - 1)
 
+        # Define variables
+        model.x = Var(model.SNV, model.CNA, within=Binary)
+        model.w = Var(model.SAMPLES, model.SNV, model.CNA, bounds=(0, 1))
+        model.y = Var(model.SAMPLES, model.SNV, model.CNA, bounds=(0, 1))
+        model.z_snv = Var(model.SNV_EDGES, model.CNA, bounds=(0, 1))
+        model.z_cna = Var(model.SNV, model.CNA_EDGES, bounds=(0, 1))
+        model.delta_snv = Var(model.SAMPLES, model.SNV, bounds=(0, 1))
+        model.delta_cna = Var(model.SAMPLES, model.CNA, bounds=(0, 1))
+
+        # Add constraints for SNV edges
+        def snv_edge_constraint_rule(model, edge_idx, k):
+            parent, child = self.snv_edges[edge_idx]
+            return [
+                model.z_snv[edge_idx, k] <= model.x[parent, k],
+                model.z_snv[edge_idx, k] <= model.x[child, k],
+                model.z_snv[edge_idx, k] >= model.x[parent, k] + model.x[child, k] - 1
+            ]
+        model.snv_edge_constraints = ConstraintList()
+        for edge_idx, edge in enumerate(self.snv_edges):
+            for k in range(ncna):
+                for constr in snv_edge_constraint_rule(model, edge_idx, k):
+                    model.snv_edge_constraints.add(constr)
+
+        # Add constraints for CNA edges
+        def cna_edge_constraint_rule(model, j, edge_idx):
+            parent, child = self.cna_edges[edge_idx]
+            return [
+                model.z_cna[j, edge_idx] <= model.x[j, parent],
+                model.z_cna[j, edge_idx] <= model.x[j, child],
+                model.z_cna[j, edge_idx] >= model.x[j, parent] + model.x[j, child] - 1
+            ]
+        model.cna_edge_constraints = ConstraintList()
+        for edge_idx, edge in enumerate(self.cna_edges):
+            for j in range(nsnv):
+                for constr in cna_edge_constraint_rule(model, j, edge_idx):
+                    model.cna_edge_constraints.add(constr)
+
+        # Sum constraints for z_snv
+        model.z_snv_sum_constraints = ConstraintList()
+        for edge_idx in range(nsnv - 1):
+            model.z_snv_sum_constraints.add(
+                sum(model.z_snv[edge_idx, k] for k in range(ncna)) == 1
+            )
+
+        # Sum constraints for z_cna
+        model.z_cna_sum_constraints = ConstraintList()
+        for edge_idx in range(ncna - 1):
+            model.z_cna_sum_constraints.add(
+                sum(model.z_cna[j, edge_idx] for j in range(nsnv)) == 1
+            )
+
+        # Constraints for x
+        model.x_constraints = ConstraintList()
+        for j in range(nsnv):
+            for k in range(ncna):
+                if j in self.snv_parent_dict.keys() or k in self.cna_parent_dict.keys():
+                    expr = 0
+                    if j in self.snv_parent_dict.keys():
+                        expr += model.x[self.snv_parent_dict[j][0], k]
+                    if k in self.cna_parent_dict.keys():
+                        expr += model.x[j, self.cna_parent_dict[k][0]]
+                    model.x_constraints.add(model.x[j, k] <= expr)
+
+        # Objective function
+        model.objective = Objective(expr=1, sense=minimize)
+
+        # Solve the model
+        opt = SolverFactory('glpk')
+        result = opt.solve(model)
+
+        # Extract solutions
+        self.trees = []
+        labels = [(i, j) for i in range(nsnv) for j in range(ncna)]
+        for _ in range(max_sol):
+            x_solution = {(i, j): model.x[i, j].value for i in range(nsnv) for j in range(ncna)}
+            sol_clones = [labels[i] for i, val in x_solution.items() if val > 0.5]
+            self.sol_clones = sol_clones
+            self.trees.append(self.getCloneTree())
+
+        return self.trees

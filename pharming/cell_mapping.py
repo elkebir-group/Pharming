@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 import pickle 
 import pandas as pd 
-import numpy as np
-import argparse 
-from sklearn.metrics.cluster import adjusted_rand_score
+import numpy as np 
+
 
 @dataclass
 class CellAssign:
@@ -68,11 +67,6 @@ class CellAssign:
         else:
             return self.cell_mapping[node]
     
-    # def get_all_cells(self):
-    #     all_cells = []
-    #     for n in self.cell_mapping:
-    #         all_cells += self.cell_mapping[n]
-    #     return set(all_cells)
     
     def get_cell_count(self):
          return {n : self.cell_mapping[n].shape[0] for n in self.clones if n in self.cell_mapping}
@@ -105,14 +99,14 @@ class CellAssign:
         df = self.to_dataframe()
         df.to_csv(fname, index=False)
 
-    def compute_ari(self,obj) -> float:
-        #  gt_mut = self.get_mut_clusters()
-         gt =   pd.Series(self.phi)
-         pred = pd.Series(obj.phi)
-         df = pd.concat([gt, pred], axis=1, keys=['gt', 'pred'])
-        #  pred_mut = obj.get_mut_clusters()
+    # def compute_ari(self,obj) -> float:
+    #     #  gt_mut = self.get_mut_clusters()
+    #      gt =   pd.Series(self.phi)
+    #      pred = pd.Series(obj.phi)
+    #      df = pd.concat([gt, pred], axis=1, keys=['gt', 'pred'])
+    #     #  pred_mut = obj.get_mut_clusters()
  
-         return adjusted_rand_score(df["gt"].values, df["pred"].values)
+    #      return adjusted_rand_score(df["gt"].values, df["pred"].values)
 
 
     def __str__(self):
@@ -122,41 +116,5 @@ class CellAssign:
             mystr += f"{n}: {count}\n"
         return mystr
 
-# def load_from_pickle(fname):
-#     return pd.read_pickle(fname)
-
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("-p", "--phi", required=True,
-#                         help="input file for cell assignment")
-#     parser.add_argument("-t", "--tree", required=True,
-#                         help="pickled clonal tree")
-#     parser.add_argument("-P", "--assign",
-#                         help="input file for cell assignment")
-        
-    
-#     args = parser.parse_args()
-
-#     ct = load_from_pickle(args.tree)
-    
-#     cell_assignment = pd.read_csv(args.phi)
-#     phi = {}
-
-#     # print(cell_assignment.head())
-#     for index, row in cell_assignment.iterrows():
-
-#         i = row['Cell']
-#         v = row['Cluster']
-
-        
-    
-#         phi[index] = v
-
-
-#     ca = CellAssign(phi, ct.clones())
-#     if args.assign is not None:
-#         ca.save(args.assign)
 
          
