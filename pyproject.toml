@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "scikit-build", "wheel", "cmake"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pharming"
+version = "0.1.0"
+description = "A package to build a joint CNA and SNV clonal tree from  low pass scDNA-seq data"
+dependencies = [
+    "numpy",
+    "networkx",
+    "pandas",
+    "scipy",
+]
+
+[tool.setuptools]
+packages = ["pharming"]
+
+[tool.setuptools.package-data]
+pharming = ["clonelib/*"]
