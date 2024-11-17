@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=42", "scikit-build", "wheel", "cmake"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.10", "pybind11"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "pharming"
@@ -17,10 +17,12 @@ dependencies = [
 pharming = "pharming.main:main"
 pharming-data = "pharming.make_data:main"
 
-[tool.setuptools]
-packages = ["pharming"]
 
-[tool.setuptools.package-data]
-pharming = ["clonelib/*"]
+
+[tool.scikit-build]
+wheel.expand-macos-universal-tags = true
+minimum-version = "build-system.requires"
+
+
 
 

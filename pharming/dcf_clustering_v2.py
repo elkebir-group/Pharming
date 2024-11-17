@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar, minimize
 
-from . import clonelib
+import clonelib
 from .utils import timeit_decorator
 from .genotype_tree import GenotypeTree
 # from decifer_post_process import post_process

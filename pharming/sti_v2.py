@@ -4,7 +4,7 @@ from itertools import chain, combinations
 import networkx as nx
 import numpy as np
 
-from . import clonelib
+import clonelib
 from .clonal_tree import ClonalTree
 from .enumerate import Enumerate
 from .solution import Solution
