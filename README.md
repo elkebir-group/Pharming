@@ -13,6 +13,7 @@ Solves the joint clonal tree inference problem and infers a joint CNA and SNV tr
 - `pyomo`
 - `glpk`
 - `lemon`
+- `boost-cpp`
 
 
 ## Installation from github
@@ -32,7 +33,7 @@ conda activate pharming
 
 Next, install all dependencies via conda-forge.
 ```
-conda install python=3.9 lemon glpk pyomo pygraphviz  -c conda-forge -y
+conda install python=3.9 lemon glpk pyomo pygraphviz boost-cpp  -c conda-forge -y
 ```
 
 Finally, install both the `pharming` and `clonelib` modules and CLI tools.
