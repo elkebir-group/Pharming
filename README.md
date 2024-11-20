@@ -41,7 +41,7 @@ Finally, install both the `pharming` and `clonelib` modules and CLI tools.
 pip install .
 ```
 
-Note: `clonelib` is a pybind11 module that is used by `pharming`.  
+Note: `clonelib` is a module that is used by `pharming`.  
 
 To check that all module and CLI tools installed correctly, run the following checks:
 ```
@@ -57,7 +57,7 @@ Pharming requires two input files:
 
 ## Output
 Pharming has two main outputs:  
-1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also functions for analyzing and visualizing the output
+1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output
 2. Visualization of the `Solution` object
 
 
