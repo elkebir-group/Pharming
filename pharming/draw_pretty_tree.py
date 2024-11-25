@@ -93,8 +93,10 @@ class DrawPrettyTree:
         
         if self.cell_count[nodeID] > 0 and self.include_cell_counts:
                 nodeLab += f"{self.cell_count[nodeID]} cells\n\n"
-        if self.include_CNAs:
+        if self.include_CNAs and self.segment_dict is not None:
             nodeLab += self.new_cn_states(nodeID)
+        else:
+            nodeLab += self.new_cn_states_discrete(nodeID)
         self.T.add_node(nodeID, label=nodeLab, fillcolor=col, style="filled", fontsize=20) 
 # G.add_node(3, label="Node 3", fillcolor="#3498DB", style="filled")
         if nodeID != self.ct.root:

@@ -59,7 +59,10 @@ class Pharming:
         print(f"Top n: {self.top_n}")
 
         self.collapse = collapse
-        self.cell_threshold = cell_threshold
+        if cell_threshold is not None:
+            self.cell_threshold = cell_threshold
+        else:
+            cell_threshold = 0
 
         print(f"Collapse CNA internal nodes: {self.collapse} with cell threshold: {self.cell_threshold}")
         self.order = order
@@ -102,7 +105,7 @@ class Pharming:
         if self.sum_condition:
             return [tree for tree in trees if self.check_dcfs(tree,delta)]
         else:
-            return trees
+            return [tree for tree in trees]
         
    
     def enumerate_cna_trees_python(self, cn_states):
@@ -511,7 +514,7 @@ class Pharming:
  
         # while loop < self.max_loops and len(scriptTm) > 0:
         print(f"DCFs delta: {delta}")
-        print(f"Starting mutation cluster trees iteration {loop} with {len(scriptTm)} trees...")
+        print(f"Starting mutation cluster trees iteration with {len(scriptTm)} trees...")
         
         stis_init = self.preprocess(init_segs, delta)
     
