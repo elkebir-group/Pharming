@@ -164,12 +164,21 @@ This is an example of how to use the pharming CLI tool. The input may either be 
 ```
 pharming -d example/data.pkl -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
  --sum-condition --collapse --cell-threshold 10 \
- -L 1  -P example/solutions.pkl --tree example/tree.png --labels  example/labels.csv
+ -L 1 10 14   -P example/solutions.pkl --tree example/tree.png --labels  example/labels.csv
 ```
-10 14 
+
 `--sum-condition` will utilize the DCFs to prune SNV cluster trees that violate the sum condition. `--collapse` is 
 flag that can be used to speed up inference by collapsing linear chains in intermediate clonal trees that have fewer than
 `--cell-threshold` assigned cells. 
+
+To run `Pharming` from the raw files, use the following command:
+```
+pharming -f example/read_counts.tsv -c example/copy_numbers.csv \
+ -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
+ --sum-condition --collapse --cell-threshold 10 \
+ -L 1 10 14   -P example/solutions.pkl \
+ --tree example/tree.png --labels example/labels.csv
+```
 
 ### pharming module
 Pharming can also be imported a python module.
