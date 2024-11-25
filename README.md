@@ -17,7 +17,7 @@ Solves the joint clonal tree inference problem and infers a joint CNA and SNV tr
 
 
 ## Installation from github
-The following installation steps will install a `pharming` module, a `clonelib` module and all dependencies.
+The following installation steps will install a `pharming` module and CLI tools.
 
 First, recursive clone the repo.
 ```
@@ -36,16 +36,16 @@ Next, install all dependencies via conda-forge.
 conda install python=3.9 lemon glpk pyomo pygraphviz boost-cpp  -c conda-forge -y
 ```
 
-Finally, install both the `pharming` and `clonelib` modules and CLI tools.
+Finally, install both the `pharming` module and CLI tools.
 ```
 pip install .
 ```
 
-Note: `clonelib` is a pybind11 module that is used by `pharming`.  
+
 
 To check that all module and CLI tools installed correctly, run the following checks:
 ```
-python -c "import clonelib"
+python -c "import pharming"
 pharming --help
 pharming-data --help
 ```
@@ -57,7 +57,7 @@ Pharming requires two input files:
 
 ## Output
 Pharming has two main outputs:  
-1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also functions for analyzing and visualizing the output
+1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output
 2. Visualization of the `Solution` object
 
 
