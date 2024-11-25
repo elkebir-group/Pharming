@@ -40,13 +40,11 @@ class Solution:
 
         self.ct.draw(fname,self.phi, segments=segments, include_dcfs=True)
     
-    def toJson(self, fname, segment_csv=None, snv_csv=None):
-        self.ct.toJson(fname, segment_csv, snv_csv)
 
     def get_tree(self):
         return self.ct 
     
-    def optimize(self, data, lamb, cell_threshold=0):
+    def optimize(self, data, lamb):
         # if self.segments == set([145, 178, 237]):
         #     self.png("dlp/test/pre.png")
         self.cost, self.phi = self.ct.optimize(data, lamb)
@@ -151,14 +149,7 @@ class Solution:
 
         return prec, recall, acc
     
-    def cna_metrics(self, gt, fname=None):
-        res=  self.ct.cna_metrics(gt)
-        if fname is not None:
-            
-            df = pd.DataFrame([res])
-            df.to_csv(fname, index=False)
-        else:
-            return res
+
 
     def snv_assignment_posterior(self, data, fname=None):
         df = self.all_snv_tree_costs(data)
@@ -205,30 +196,7 @@ class Solution:
     def compute_snv_likelihoods(self, data):
         return self.ct.compute_snv_likelihoods(data, self.phi)
 
-    # def refit_segment(self, segment, data,lamb, cna_tree=None, threshold=0.05):
-    #     self.ct.filter_segments([segment])
-    #     Tm = self.get_snv_cluster_tree()
-    #     if not cna_tree:
-    #         cn_prop = self.data.thresholded_cn_prop(segment, threshold,
-    #                                                        start_state= (1,1), include_start_state=False)
-    #         if len(cn_prop) == 1:
 
 
-    def is_ancestral(self, i,j):
-        
-        u = self.phi.phi[i]
-        v = self.phi.phi[j]
-        if u==v: return True
-        return u in nx.ancestors(self.ct.tree, v)
-
-    def is_clustered(self, i,j):
-        u = self.phi.phi[i]
-        v = self.phi.phi[j]
-        return u == v
-
-    def is_incomparable(self, i,j):
-        u = self.phi.phi[i]
-        v = self.phi.phi[j]
-        return self.ct.is_incomparable(u,v)
 
     

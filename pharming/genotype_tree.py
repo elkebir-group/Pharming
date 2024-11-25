@@ -1,12 +1,15 @@
+"""
+Modeling a genotype tree of DCF clustering.
+"""
+
 import networkx as nx
 import numpy as np
 from scipy.stats import binom
 from scipy.stats import beta
-import math
+
 
 EPSILON = -10e10
 # from genotype import genotype, CNAgenotype
-
 
 class GenotypeTree:
     def __init__(self, edges, id=0):
@@ -153,7 +156,7 @@ class GenotypeTree:
         if v >= vmin and v <= vplus:
             return v
         else:
-            return np.NaN
+            return np.nan
 
     def v_to_dcf(self, v, cn, trunc=True):
         ###### needs to be updated ###

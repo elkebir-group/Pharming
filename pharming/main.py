@@ -48,7 +48,7 @@ def main():
                         help="whether linear chains of copy number events should be collapsed prior to integration")
     parser.add_argument("--sum-condition", action="store_true",
                         help="use the sum condition to filter mutation cluster trees")
-    parser.add_argument("--cell-threshold", type=int,
+    parser.add_argument("--cell-threshold", type=int, default=0,
                         help="if collapsing is used, the minimum number of cells a CNA only clone requires to avoid collapsing, NA if not collapsing.")
     parser.add_argument("-L", "--segments", required=False, type=int, nargs='+',
                     help="segment ids of trees to build")

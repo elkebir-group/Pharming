@@ -3,7 +3,7 @@ from copy import deepcopy
 import networkx as nx 
 import numpy as np
 
-from .utils import powerset, merge_lists
+from .utils import powerset, merge_lists, inverse_dict
 from .clonal_tree import ClonalTree
 from .solution import Solution
 from .enumerate import Enumerate
@@ -51,7 +51,10 @@ class CNA_Merge:
         self.mut_to_segs = self.CT1.mut_to_seg.copy() | self.CT2.mut_to_seg.copy()
         self.rho = self.CT1.rho | self.CT2.rho
         self.k = max(self.T_m)
-        self.cell_threshold = cell_threshold
+        if cell_threshold is not None:
+            self.cell_threshold = cell_threshold
+        else:
+            cell_threshold = 0
         self.maxtrees = maxtrees
 
 
@@ -175,7 +178,7 @@ class CNA_Merge:
                     # genos[n][j] = genotype(*geno)
  
         
-        ct = ClonalTree(T, genos, utils.inverse_dict(self.mut_to_segs), rho=self.rho)
+        ct = ClonalTree(T, genos, inverse_dict(self.mut_to_segs), rho=self.rho)
         # assert ct.check_genotypes()
             # print("fail")
             # gt = ct.get_genotypes()

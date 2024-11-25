@@ -313,10 +313,10 @@ class STI:
         for g, trees in enumerate(self.T_SNV_groups):
      
             self.tree_assign[g] = {}
-            # jg_cost = np.full(len(self.snvs), fill_value=np.Inf)
+            # jg_cost = np.full(len(self.snvs), fill_value=np.inf)
  
             for j in self.snvs:
-                jg_cost = np.Inf
+                jg_cost = np.inf
                 for p, t in enumerate(trees):
                     # gt = GenotypeTree(t.edges)
         
@@ -363,7 +363,7 @@ class STI:
         for g, trees in enumerate(self.T_SNV_groups):
      
             self.tree_assign[g] = {}
-            jg_cost = np.full(len(self.snvs), fill_value=np.Inf)
+            jg_cost = np.full(len(self.snvs), fill_value=np.inf)
 
             for p, t in enumerate(trees):
                 gt = GenotypeTree(t.edges)
@@ -467,7 +467,7 @@ class STI:
         psi = {}
         for j, idx in zip(self.snvs, group_assign):
             g= groups[idx]
-            bestval = np.Inf 
+            bestval = np.inf 
             bestq  = None
             omega[j] = self.tree_assign[g][j]
             for q in group_to_clust[g]:
@@ -683,7 +683,7 @@ class STI:
     #     for g, trees in enumerate(self.T_SNV_groups):
     #         tree_assign[g] = {}
     #         for j in self.snvs:
-    #             jg_cost = np.Inf
+    #             jg_cost = np.inf
     #             for p,t, in enumerate(trees):
     #                 cost, ct, ca = self.compute_tree_cost(j, t)
     #                 if cost < jg_cost:
@@ -712,7 +712,7 @@ class STI:
               
                
         #         for j in self.snvs:
-        #             jg_cost = np.Inf
+        #             jg_cost = np.inf
         #             for p,t in enumerate(trees):
                      
         #                 cost, ct, ca,post_dcf = self.compute_tree_cost(j, dcf, t)
@@ -742,7 +742,7 @@ class STI:
               
                
     #             for j in self.snvs:
-    #                 jg_cost = np.Inf
+    #                 jg_cost = np.inf
     #                 for p,t in enumerate(trees):
                      
     #                     cost, ct, ca,post_dcf = self.compute_tree_cost(j, dcf, t)
@@ -807,7 +807,7 @@ class STI:
         
         
         # objval, sol = self.solve(model, [x, z])
-        # if objval == np.Inf:
+        # if objval == np.inf:
         #     return None, None
         # x_sol = sol[0]
         # z_sol = sol[1]
@@ -847,7 +847,7 @@ class STI:
         
     #     else:
     #          print("warning: model infeasible!")
-    #          return np.Inf, solutions 
+    #          return np.inf, solutions 
 
 
     # def get_group(self, nxtree, cna_genos, q):

@@ -307,13 +307,26 @@ class Enumerate:
         opt = SolverFactory('glpk')
         result = opt.solve(model)
 
+
         # Extract solutions
         self.trees = []
-        labels = [(i, j) for i in range(nsnv) for j in range(ncna)]
+
         for _ in range(max_sol):
+            result = opt.solve(model)
+            if result.solver.termination_condition != TerminationCondition.optimal:
+                break  # No more solutions
+
+            # Extract solution
             x_solution = {(i, j): model.x[i, j].value for i in range(nsnv) for j in range(ncna)}
-            sol_clones = [labels[i] for i, val in x_solution.items() if val > 0.5]
+            sol_clones = [(i, j) for (i, j), val in x_solution.items() if val > 0.5]
             self.sol_clones = sol_clones
             self.trees.append(self.getCloneTree())
 
+            # Add no-good cut to exclude the current solution
+            model.x_constraints.add(
+                sum(1 - model.x[i, j] if val > 0.5 else model.x[i, j]
+                    for (i, j), val in x_solution.items()) >= 1
+            )
+
+       
         return self.trees

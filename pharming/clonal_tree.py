@@ -120,9 +120,9 @@ class ClonalTree:
         self.psi = {}
 
   
-        self.cost = np.Inf
-        self.snv_cost = np.Inf
-        self.cna_cost = np.Inf
+        self.cost = np.inf
+        self.snv_cost = np.inf
+        self.cna_cost = np.inf
 
         if rho is not None:
             for ell in rho:
@@ -1196,7 +1196,7 @@ class ClonalTree:
         if not rho:
             raise ValueError("A mapping rho of SNV clusters to valid SNV trees for each segment must be provided.")
         
-        opt_cost = np.Inf
+        opt_cost = np.inf
         best_phi = None
         cna_genos = self.get_cna_genos()
         for i in range(max_iterations):
@@ -1219,8 +1219,8 @@ class ClonalTree:
             best_ca = CellAssign(best_phi, self.clones())
             self.genotypes = best_geno
             self.cost = opt_cost 
-            self.snv_cost = np.NAN
-            self.cna_cost = np.NAN
+            self.snv_cost = np.nan
+            self.cna_cost = np.nan
 
             # _ = self.compute_likelihood(dat, best_ca, lamb)
       

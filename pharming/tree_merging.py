@@ -12,7 +12,7 @@ WRANDOM = "weighted-random"
 COST = "cost"
 class ClonalTreeMerging:
     def __init__(self, k, rng=None, seed=1026, order = INPLACE, progressive=True, top_n=1,
-         collapse = True, cell_threshold=25, inter_opt=False, init_on_first= False, maxtrees=5000, verbose=False ):
+         collapse = True, cell_threshold=25, inter_opt=False, maxtrees=5000, verbose=False ):
         
         self.k = k
         if rng is not None:

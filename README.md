@@ -52,8 +52,8 @@ pharming-data --help
 
 ## Input
 Pharming requires two input files:
-1. alternate and total read counts for each SNV
-2. allele-specific copy number profiles
+1. alternate and total read counts for each SNV --- see [example/read_counts.tsv](example/read_counts.tsv) for an example. Note the names of the columns are not important but the order of the columns must match the example. 
+2. allele-specific copy number profiles  --- see [example/copy_numbers.csv](example/copy_numbers.csv) for an example. Note the names of the columns are not important but the order of the columns must match the example. 
 
 ## Output
 Pharming has two main outputs:  
@@ -88,6 +88,12 @@ optional arguments:
   -a ALPHA, --alpha ALPHA
                         sequencing error rate
   -D DATA, --data DATA  filename of pickled data object
+```
+
+#### Example
+The tool takes in the example [read counts](example/read_counts.tsv) and [allele-specific copy number profiles ](example/copy_numbers.csv) and outputs a resuable Pharming data object (`example/data.pkl`). 
+```
+pharming-data -f example/read_counts.tsv -c example/copy_numbers.csv -a 0.001 -D example/data.pkl
 ```
 
 ### pharming tool
@@ -151,14 +157,35 @@ optional arguments:
 
 ```
 
+#### Example
+This is an example of how to use the pharming CLI tool. The input may either be the input files or the resuable data object created with the 
+`pharming-data` tool.  Pharming may be run on a subset of segments using `-L` argument followed by a space separated list of segment ids.
+
+```
+pharming -d example/data.pkl -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
+ --sum-condition --collapse --cell-threshold 10 \
+ -L 1  -P example/solutions.pkl --tree example/tree.png --labels  example/labels.csv
+```
+10 14 
+`--sum-condition` will utilize the DCFs to prune SNV cluster trees that violate the sum condition. `--collapse` is 
+flag that can be used to speed up inference by collapsing linear chains in intermediate clonal trees that have fewer than
+`--cell-threshold` assigned cells. 
+
 ### pharming module
 Pharming can also be imported a python module.
 ```
- import pharming
- import pandas as pd
- dat  = pd.read_pickle("mydata.pkl")
- ph = Pharming(k=4)
- best_tree = ph.fit(dat)
+from pharming.pharming import Pharming
+import pandas as pd
+dat  = pd.read_pickle("example/data.pkl")
+dcfs = {}
+with open("example/dcfs.txt", "r+") as file:
+  for i, line in enumerate(file):
+    dcfs[i] = float(line.strip()) 
+ph = Pharming(dcfs=dcfs, seed=11, top_n=5,
+  collapse=True,
+  cell_threshold=10,
+  sum_condition=True)
+best_trees = ph.fit(dat, lamb=1000, segments=[1,10,14])
 ```
 
 **Full documentation and API for the pharming module coming soon!**
