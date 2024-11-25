@@ -181,7 +181,7 @@ pharming -f example/read_counts.tsv -c example/copy_numbers.csv \
 ```
 
 ### pharming module
-Pharming can also be imported a python module.
+Pharming can also be imported a python module. See [tutorial.ipynb](tutorial.ipynb) for more details.
 ```
 from pharming.pharming import Pharming
 import pandas as pd
