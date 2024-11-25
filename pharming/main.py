@@ -5,7 +5,8 @@
 import argparse
 import networkx as nx
 from .pharming import Pharming
-from .utils import load_pickled_object, pickle_object
+from .utils import pickle_object
+from .make_data import load_from_files
 
 def main():
     parser = argparse.ArgumentParser()
@@ -18,6 +19,8 @@ def main():
                         help="input files of copy numbers by segment with unlabeled columns [segment cell totalCN]")
     parser.add_argument("-s" ,"--seed", required=False, type=int, default=1026,
                         help="random number seed (default: 1026)")
+    parser.add_argument("-a","--alpha", required=False, type=float, default=0.001,
+                        help="per base sequencing error rate")
     parser.add_argument("-j" ,"--cores", required=False, type=int,default=1,
                         help="Max number of cores to use for inferring segment trees")
     parser.add_argument("-l" ,"--lamb", required=False, type=float, default=1e3,
@@ -79,7 +82,7 @@ def main():
     if args.data is not None:
         dat = load_pickled_object(args.data)
     elif args.file and args.copy_numbers is not None:
-        dat = load_pickled_object(args.file, args.copy_numbers )
+        dat = load_from_files(args.file, args.copy_numbers, args.alpha )
 
     else:
         IOError("Either both read counts and copy number files \
