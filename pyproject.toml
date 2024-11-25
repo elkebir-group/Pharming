@@ -14,7 +14,6 @@ dependencies = [
 ]
 
 
-
 [project.scripts]
 pharming = "pharming.main:main"
 pharming-data = "pharming.make_data:main"

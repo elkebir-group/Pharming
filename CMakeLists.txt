@@ -27,7 +27,7 @@ find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 add_subdirectory(extern/pybind11)
 
 # Define the Python extension module
-pybind11_add_module(_clonelib
+pybind11_add_module(clonelib
     clonelib/clonelib.cpp
     clonelib/basematrix.cpp
     clonelib/readmatrix.cpp
@@ -39,7 +39,7 @@ pybind11_add_module(_clonelib
 )
 
 # Install the Python extension module
-install(TARGETS _clonelib DESTINATION ${SKBUILD_PROJECT_NAME})
+install(TARGETS clonelib DESTINATION ${SKBUILD_PROJECT_NAME})
 
 
 
