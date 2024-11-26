@@ -5,7 +5,7 @@
 import argparse
 import networkx as nx
 from .pharming import Pharming
-from .utils import pickle_object
+from .utils import pickle_object, load_pickled_object
 from .make_data import load_from_files
 
 def main():
