@@ -57,8 +57,14 @@ Pharming requires two input files:
 
 ## Output
 Pharming has two main outputs:  
-1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output
-2. Visualization of the `Solution` object
+1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output ---see [tutorial.ipynb](tutorial.ipynb) to see examples of how to interact with the solution object.
+2. A streamlined visualization of output clonal tree --- see [example/tree0.png] to see the number of introduced SNVs or lost SNVs on each edgee, the copy number state changes for each segment and the number of cells assigned to each clone.
+3. The flat files containing the 
+  - cell assignment (`example/output/pred_cell.csv`), with columns `cell,cluster`
+  - SNV clustering (`example/output/pred_mut.csv`),  with columnes `mutation,cluster`
+  - lost SNVs on each edge (`example/output/pred_mut_loss.csv`), with columnes `mutation,cluster`
+  - genotypes of each clone and SNV (`example/output/pred_genotype.csv`) wiht columns `node,snv,x,y,xbar,ybar,segment`
+  - pngs of the top n clonal trees (`example/output/ct0.png`)
 
 
 ## Usage
@@ -177,6 +183,7 @@ pharming -f example/read_counts.tsv -c example/copy_numbers.csv \
  -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
  --sum-condition --collapse --cell-threshold 10 \
  -L 1 10 14   -P example/solutions.pkl \
+ -O example/output \
  --tree example/tree.png --labels example/labels.csv
 ```
 
