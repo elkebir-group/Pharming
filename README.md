@@ -168,9 +168,10 @@ This is an example of how to use the pharming CLI tool. The input may either be 
 `pharming-data` tool.  Pharming may be run on a subset of segments using `-L` argument followed by a space separated list of segment ids.
 
 ```
-pharming -d example/data.pkl -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
- --sum-condition --collapse --cell-threshold 10 \
- -L 1 10 14   -P example/solutions.pkl --tree example/tree.png --labels  example/labels.csv
+pharming -d example/data.pkl -s 11 -l 1000 -n 3 --dcfs example/dcfs.txt  \
+ --sum-condition --collapse --cell-threshold 20 \
+ -O example/output \
+ -L 1 10  -P example/solutions.pkl --tree example/tree.png --labels  example/labels.csv
 ```
 
 `--sum-condition` will utilize the DCFs to prune SNV cluster trees that violate the sum condition. `--collapse` is 
@@ -180,9 +181,9 @@ flag that can be used to speed up inference by collapsing linear chains in inter
 To run `Pharming` from the raw files, use the following command:
 ```
 pharming -f example/read_counts.tsv -c example/copy_numbers.csv \
- -s 11 -l 1000 -n 5 --dcfs example/dcfs.txt  \
- --sum-condition --collapse --cell-threshold 10 \
- -L 1 10 14   -P example/solutions.pkl \
+ -s 11 -l 1000 -n 3 --dcfs example/dcfs.txt  \
+ --sum-condition --collapse --cell-threshold 20 \
+ -L 1 10   -P example/solutions.pkl \
  -O example/output \
  --tree example/tree.png --labels example/labels.csv
 ```
