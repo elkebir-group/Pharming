@@ -59,7 +59,7 @@ Pharming requires two input files:
 Pharming has two main outputs:  
 1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output ---see [tutorial.ipynb](tutorial.ipynb) to see examples of how to interact with the solution object.
 2. A streamlined visualization of output clonal tree --- see [example/tree0.png] to see the number of introduced SNVs or lost SNVs on each edge, the copy number state changes for each segment and the number of cells assigned to each clone.
-<img src="images/tree.png" alt="Tree Visualization" width="500">
+<img src="example/tree.png" alt="Tree Visualization" width="500">
 3. The flat files containing the 
   - cell assignment (`example/output/pred_cell.csv`), with columns `cell,cluster`
   - SNV clustering (`example/output/pred_mut.csv`),  with columnes `mutation,cluster`
