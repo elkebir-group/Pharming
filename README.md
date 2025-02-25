@@ -58,7 +58,8 @@ Pharming requires two input files:
 ## Output
 Pharming has two main outputs:  
 1. A pickled `Solution` object containing the clonal tree, cost and cell assignment. The `Solution` object also has functions for analyzing and visualizing the output ---see [tutorial.ipynb](tutorial.ipynb) to see examples of how to interact with the solution object.
-2. A streamlined visualization of output clonal tree --- see [example/tree0.png] to see the number of introduced SNVs or lost SNVs on each edgee, the copy number state changes for each segment and the number of cells assigned to each clone.
+2. A streamlined visualization of output clonal tree --- see [example/tree0.png] to see the number of introduced SNVs or lost SNVs on each edge, the copy number state changes for each segment and the number of cells assigned to each clone.
+![Tree Visualization](example/tree.png)
 3. The flat files containing the 
   - cell assignment (`example/output/pred_cell.csv`), with columns `cell,cluster`
   - SNV clustering (`example/output/pred_mut.csv`),  with columnes `mutation,cluster`
@@ -203,6 +204,7 @@ ph = Pharming(dcfs=dcfs, seed=11, top_n=5,
   cell_threshold=10,
   sum_condition=True)
 best_trees = ph.fit(dat, lamb=1000, segments=[1,10,14])
+best_trees[0].write_flat_files('example/output')
 ```
 
 **Full documentation and API for the pharming module coming soon!**
