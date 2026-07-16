@@ -1,6 +1,8 @@
 
 # Created by: L.L. Weber
 # Created on: 2024-02-29 18:40:59
+
+## Ori's personal commments are made using 2 hashes (## comment)
 import itertools
 import networkx as nx 
 import numpy as np
@@ -14,6 +16,7 @@ from .dcf_clustering_v2 import DCF_Clustering
 
 
 class Pharming:
+    ## take in our arguments passed in from main.py
     def __init__(self, 
                 dcfs=None, 
                 k=3,
@@ -33,6 +36,8 @@ class Pharming:
         
         self.verbose =verbose
         self.verbose = True 
+
+        ## introduces an element of randomness
         self.rng = np.random.default_rng(seed)
 
         if dcfs is not None:
@@ -48,7 +53,7 @@ class Pharming:
         self.cnatrees = {} 
 
 
-        
+        ## number of maternal + paternal alleles starting out with
         self.start_state = start_state
         print(f"Start state: {self.start_state}")
         self.ninit_segs= ninit_segs
@@ -58,6 +63,7 @@ class Pharming:
         self.top_n = top_n
         print(f"Top n: {self.top_n}")
 
+        ## look at main.py for note about collapse
         self.collapse = collapse
         if cell_threshold is not None:
             self.cell_threshold = cell_threshold
@@ -456,23 +462,133 @@ class Pharming:
             
             stis = {ell: vals for ell, vals in dictlist}
         return stis
-       
-  
+    
+
+    def calculate_cluster_distance(self, profile_a, profile_b):
+        """
+        Calculates the Euclidean distance between two DCF cluster profiles.
+        
+        :param np.ndarray or dict profile_a: First DCF profile vector.
+        :param np.ndarray or dict profile_b: Second DCF profile vector.
+        :return: float representing the distance.
+        """
+        # If the profiles are passed as dictionaries, convert them to sorted numpy arrays
+        if isinstance(profile_a, dict):
+            profile_a = np.array([profile_a[i] for i in sorted(profile_a.keys())])
+        if isinstance(profile_b, dict):
+            profile_b = np.array([profile_b[i] for i in sorted(profile_b.keys())])
+            
+        return np.linalg.norm(profile_a - profile_b)   
+    
+    def hierarchical_clustering_dcfs(self, dcfs_runs, max_distance_threshold=0.05):
+        k = len(dcfs_runs[0])
+        profiles = np.array([[run[i] for i in range(k)] for run in dcfs_runs]) # converts array of dictionary of cluster_num -> dcfs val to array or arrays where the dcfs[run][cluster_num] = dcfs_val
+        # Format: (centroid_array, weight_int, list_of_original_indices)
+        clusters = [(profiles[i], 1, [i]) for i in range(len(profiles))] 
+        
+        while len(clusters) > 1:
+            min_dist = float('inf')
+            to_merge = None
+            
+            # Find the two closest clusters using our separate function
+            for i in range(len(clusters)):
+                for j in range(i + 1, len(clusters)):
+                    dist = self.calculate_cluster_distance(clusters[i][0], clusters[j][0])
+                    if dist < min_dist:
+                        min_dist = dist
+                        to_merge = (i, j)
+                        
+            # --- TERMINATION CONDITION ---
+            # If the closest clusters are further apart than our threshold, terminate!
+            if min_dist > max_distance_threshold:
+                print(f"Clustering terminated: Next closest clusters are {min_dist:.4f} apart.")
+                break
+                
+            # Execute the merge if under the threshold
+            idx1, idx2 = to_merge
+            c1, w1, items1 = clusters[idx1]
+            c2, w2, items2 = clusters[idx2]
+            
+            new_weight = w1 + w2
+            new_centroid = (c1 * w1 + c2 * w2) / new_weight
+            new_items = items1 + items2
+            
+            del clusters[idx2]
+            del clusters[idx1]
+            clusters.append((new_centroid, new_weight, new_items))
+            
+        # Format output back into DCF dictionary representations
+        final_groups = []
+        for centroid, weight, items in clusters:
+            dcf_dict = {cluster_id: float(val) for cluster_id, val in enumerate(centroid)}
+            final_groups.append({"dcf_profile": dcf_dict, "weight": weight, "members": items})
+            
+        final_groups = sorted(final_groups, key=lambda x: x["weight"], reverse=True)
+        return final_groups
+
+
+    def assemble_tree(self, dcf, weight,init_segs, init_order, Tm):
+        if Tm is not None:
+            scriptTm = [Tm]
+        else:
+            scriptTm = self.enumerate_mutcluster_trees(dcf)
+        # delta = self.delta.copy()
+        stis_init = self.preprocess(init_segs, dcf)
+        init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
+        self.clonal_trees = init_trees
+
+        #identify the mutation cluster trees that yield minimum cost over the initial segments
+        ## find the lowest cost indices of the clonal trees (find the indices of the best clonal trees)
+        sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
+        if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
+            smallest_indices = sorted_indices
+        else:
+            smallest_indices = sorted_indices[:self.ninit_Tm]
+        
+        best_tree_int = get_top_n(self.clonal_trees , self.top_n)
+
+        # calculate how good these trees really are
+        print("Best trees after initial integration ")
+        best_score_within_dcf = np.inf
+
+        # review this scoring function with prof and chat
+        alpha = 1 #placeholder val for weight on cost as opposed to likelihood
+        n = 200 # placeholder val
+        for i,sol in enumerate(best_tree_int):
+            likelihood, snv, cna = sol.compute_likelihood(self.data, self.lamb)
+            score = 2 * alpha * sol.cost - 2 * likelihood + weight * np.log(n)
+            if score < best_score_within_dcf:
+                best_score_within_dcf = score
+        return {"dcf" : dcf, "score" : best_score_within_dcf, "scriptTm" : scriptTm, "smallest_indices" : smallest_indices, "init_trees" : init_trees}
+
+    def generate_best_delta(self, init_segs, init_order, num_runs=50, max_distance_threshold=0.05, Tm=None):
+        dcfs_runs = []
+        if self.delta:
+            dcfs_runs.append(self.delta.copy())
+        else:
+            for i in range(num_runs):
+                self.delta = self.infer_dcfs()          
+                dcfs_runs.append(self.delta.copy())
+        dcf_clusterings = self.hierarchical_clustering_dcfs(dcfs_runs, max_distance_threshold)
+
+
+        
+        best_overall_score = np.inf
+        # best_dcf = None
+        best_tree_features = None
+        for dcf_dict in dcf_clusterings:
+            dcf = dcf_dict["dcf_profile"]
+            weight = dcf_dict["weight"]
+            tree_features = self.assemble_tree(dcf, weight, init_segs, init_order, Tm=Tm)
+            score = tree_features["score"]
+            if score < best_overall_score:
+                best_overall_score = score
+                best_tree_features = tree_features
+        return best_tree_features
 
     @timeit_decorator
     def fit(self, data, lamb=1e3, segments= None, cores=1, Tm=None):
-        '''
-        @params Data data: the input data (C,A,D) to fit
-        @params float lamb (float): a regularization parameter the cost function
-        @params list segments: the list of segment ids to fit
-        @params int cores: the number of processors to use 
-
-        Fits a clonal tree T (with assosciated genotypes) and a mapping phi of cells to clones with minimum cost
-        for the input data and specified segments. 
-
-        returns a list of the top_n Solutions to the Clonal Tree Inference with Copy Number problem (CTICN)
-        ''' 
-        
+        print(".....NEW FIT.....")
         self.data = data
 
 
@@ -484,23 +600,151 @@ class Pharming:
         if segments is None:
             segments = data.segments
 
+        ## splits our segments into those with at least 1 snv and min_cn_states unique number of (x, y) CNA states (stored in init_segs) and those which have less but still more than 1 (infer_segs). For example, if a segment contained both (1, 1) and (2, 1), that would could have 2 cn_states
+        ## place_segs are all those sges that have 1 cn_state but still have snvs
         init_segs, infer_segs, place_segs, no_snvs_segs = self.partition_segments(segments, min_cn_states=2)
         print(f"\nSegment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
-        
-        print("Plowing the field.... ")
-        if self.delta is None:
-            self.delta = self.infer_dcfs()
+        print(".....NEW FIT.....")
+       ## this returns an order for the segments which is random, but is biased towards segments with higher numbers of snvs
+        init_order = self.order_segments(init_segs)
+        print("Segment integration order:")
+        print(init_order)
 
-        if Tm is not None:
-            scriptTm = [Tm]
-            for T_m in scriptTm:
-                for n in T_m:
-                    if n not in self.delta:
-                        raise ValueError(f" Node {n} does not match a cluster id. \
-                                         Each node label in the mutation cluster \
-                                         tree must map to a unique value in [k] ")
-        else:
-            scriptTm = self.enumerate_mutcluster_trees(self.delta)
+        ## if we are given the dcfs, then we wil use that, otherwise, we must calculate it ourselves
+        print("Plowing the field.... ")
+        num_runs = 50
+        max_threshold = .05
+        features = self.generate_best_delta(
+                    init_segs=init_segs, 
+                    init_order=init_order, 
+                    num_runs=num_runs, 
+                    max_distance_threshold=max_threshold, 
+                    Tm=Tm
+                )
+        self.delta = features["dcf"]
+        delta = self.delta.copy()
+        scriptTm = features["scriptTm"]
+        smallest_indices = features["smallest_indices"]
+        init_trees = features["init_trees"]
+
+        print("\nWatering the fields.... ")
+        if len(infer_segs) > 0:
+            # FIX 2: Prevent IndexError by handling Tm being provided (where scriptTm length is 1)
+            if Tm is not None:
+                init_Tm = scriptTm
+                selected_init_trees = init_trees
+            else:
+                init_Tm = [scriptTm[i] for i in smallest_indices]
+                selected_init_trees = [init_trees[i] for i in smallest_indices]
+                
+            init_order_infer = self.order_segments(infer_segs)
+            stis_infer = self.preprocess(infer_segs, delta)
+            
+            self.clonal_trees, costs = self.infer(
+                init_Tm, 
+                stis_infer, 
+                selected_init_trees, 
+                init_order=init_order_infer
+            )     
+
+        best_trees =  get_top_n(self.clonal_trees, self.top_n)
+
+        # print(f" tree | cost | snv | cna")
+        for i,b in enumerate(best_trees):
+            cost, snv, cna = b.compute_likelihood(self.data, self.lamb)
+            # print(f"|{i} | {cost} | {snv} | {cna} |")
+        
+        ## Removes linear chain from each tree with no cells assigned and maps SNVs in segments with only 1 CN states    
+        ## This function takes in a Solution list and post-processes the clonal tree of each solution such that linear chains with no cell assignments are removed from the tree. Each clonal tree object is modified in place.
+        ## in other words, if we have a node which is not assigned any particular cell and has only 1 child, we remove the obsolete node in the post process
+        self.post_process(best_trees)
+
+        ## Place SNVs that occur in segments with only a single copy number state in the clonal tree of each solution.
+        # List solutions: a list of solutions iterable segments: an iterable of segments that consist of only 1 copy number state
+        self.place_snvs(best_trees, place_segs)
+
+    
+    
+        print("\nHarvesting....")
+        ## optmize every tree by trying to find the best placement of snvs and cells to nodes using power iteration (coordinate descent). The clonal tree structure itself is not changes
+        for sol in best_trees:
+            sol.optimize(self.data, self.lamb)
+        
+        # all_best_trees = []
+        # all_best_trees.append(best_trees)
+        best_trees = sorted(best_trees, key=lambda x: x.cost)
+        # print(f" tree | cost | snv | cna")
+
+        ## show the likelihood of every tree
+        for i,b in enumerate(best_trees):
+            cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
+            # print(f"|{i} | {cost} | {snv} | {cna} |")
+ 
+    
+        ## save only the top n best trees and prune all of the leaves without any cells assigned to them
+        best_trees = get_top_n(best_trees, self.top_n)
+        for sol in best_trees:
+            sol.prune_leaves(self.k)
+
+        ## returns the optimized version of the best clonal trees
+
+        return  best_trees
+
+    # @timeit_decorator
+    # def fit(self, data, lamb=1e3, segments= None, cores=1, Tm=None):
+    #     ## data is your CNA file, snv file, and total read counts all wrapped in the Data data structure
+    #     ## Tm specified whether we are already given an snv cluster tree to constrain our fitting to or not
+    #     '''
+    #     @params Data data: the input data (C,A,D) to fit
+    #     @params float lamb (float): a regularization parameter the cost function
+    #     @params list segments: the list of segment ids to fit
+    #     @params int cores: the number of processors to use 
+
+    #     Fits a clonal tree T (with assosciated genotypes) and a mapping phi of cells to clones with minimum cost
+    #     for the input data and specified segments. 
+
+    #     returns a list of the top_n Solutions to the Clonal Tree Inference with Copy Number problem (CTICN)
+    #     ''' 
+    #     ## initilaizations
+    #     self.data = data
+
+
+    #     self.lamb = lamb 
+    #     self.cores = cores 
+        
+
+
+    #     if segments is None:
+    #         segments = data.segments
+
+    #     ## splits our segments into those with at least 1 snv and min_cn_states unique number of (x, y) CNA states (stored in init_segs) and those which have less but still more than 1 (infer_segs). For example, if a segment contained both (1, 1) and (2, 1), that would could have 2 cn_states
+    #     ## place_segs are all those sges that have 1 cn_state but still have snvs
+    #     init_segs, infer_segs, place_segs, no_snvs_segs = self.partition_segments(segments, min_cn_states=2)
+    #     print(f"\nSegment partition:\ninitial segments: {len(init_segs)}\ninference segments: {len(infer_segs)}\nplace segments: {len(place_segs)}\n")
+        
+    #    ## this returns an order for the segments which is random, but is biased towards segments with higher numbers of snvs
+    #     init_order = self.order_segments(init_segs)
+    #     print("Segment integration order:")
+    #     print(init_order)
+
+    #     ## if we are given the dcfs, then we wil use that, otherwise, we must calculate it ourselves
+    #     print("Plowing the field.... ")
+    #     if self.delta is None:
+    #         self.delta = self.infer_dcfs()
+       
+        
+    #     ## if we are given an snv cluster tree to structure our clonal tree off of, we make sure every cluster appearing in our tree also appears as a node in our dcfs calculation
+    #         ## if we are not given an snv cluster tree to structure our clonal tree off of, we build all possible snv cluster trees from scratch given our dcfs satisfying the sum rule
+    #     if Tm is not None:
+    #         scriptTm = [Tm]
+    #         for T_m in scriptTm:
+    #             for n in T_m:
+    #                 if n not in self.delta:
+    #                     raise ValueError(f" Node {n} does not match a cluster id. \
+    #                                      Each node label in the mutation cluster \
+    #                                      tree must map to a unique value in [k] ")
+    #     else:
+    #         scriptTm = self.enumerate_mutcluster_trees(self.delta)
 
 
                     
@@ -508,89 +752,109 @@ class Pharming:
   
        
         
-        all_best_trees = []
+    #     all_best_trees = []
 
-        delta = self.delta.copy()
+    #     delta = self.delta.copy()
  
-        # while loop < self.max_loops and len(scriptTm) > 0:
-        print(f"DCFs delta: {delta}")
-        print(f"Starting mutation cluster trees iteration with {len(scriptTm)} trees...")
+    #     # while loop < self.max_loops and len(scriptTm) > 0:
+    #     print(f"DCFs delta: {delta}")
+    #     print(f"Starting mutation cluster trees iteration with {len(scriptTm)} trees...")
         
-        stis_init = self.preprocess(init_segs, delta)
+    #     ## This is the segment tree inference step. For each segment in init_segs, we infer a list of clonal trees for just that segment (look at fig 2C in the paper)
+    #     stis_init = self.preprocess(init_segs, delta)
     
-        print("Planting the seeds.... ")
-        init_order = self.order_segments(init_segs)
-        print("Segment integration order:")
-        print(init_order)
-        init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
+    #     print("Planting the seeds.... ")
 
-        self.clonal_trees = init_trees
+    #     # I moved this to earlier in the code
+    #     # ## this returns an order for the segments which is random, but is biased towards segments with higher numbers of snvs
+    #     # init_order = self.order_segments(init_segs)
+    #     # print("Segment integration order:")
+    #     # print(init_order)
+
+
+    #     ## This step is equivalent to the merging step when the best fitting clonal trees from each segment are merged 
+    #     init_trees, costs = self.infer(scriptTm, stis_init, init_order=init_order)
+
+    #     self.clonal_trees = init_trees
     
 
-        # return utils.concat_and_sort(init_trees)
+    #     # return utils.concat_and_sort(init_trees)
 
-        #identify the mutation cluster trees that yield minimum cost over the initial segments
-        sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
-        if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
-            smallest_indices = sorted_indices
-        else:
-            smallest_indices = sorted_indices[:self.ninit_Tm]
+    #     #identify the mutation cluster trees that yield minimum cost over the initial segments
+    #     ## find the lowest cost indices of the clonal trees (find the indices of the best clonal trees)
+    #     sorted_indices = sorted(range(len(costs)), key=lambda i: costs[i])
+    #     if self.ninit_Tm is None or len(sorted_indices) <= self.ninit_Tm:
+    #         smallest_indices = sorted_indices
+    #     else:
+    #         smallest_indices = sorted_indices[:self.ninit_Tm]
     
         
-        print(f"Best mutation cluster trees:")
-        for i in smallest_indices:
-            print(f"{i}: {list(scriptTm[i].edges)}")
-            # if i == self.ground_truth_tm:
-            #     print("Including the ground truth mutation cluster tree!")
+    #     print(f"Best mutation cluster trees:")
+    #     ## print out the cluster tree edges (enough for viewer to visualize tree) that match up to the best clonal trees
+    #     for i in smallest_indices:
+    #         print(f"{i}: {list(scriptTm[i].edges)}")
+    #         # if i == self.ground_truth_tm:
+    #         #     print("Including the ground truth mutation cluster tree!")
         
-        best_tree_int = get_top_n(self.clonal_trees, self.top_n)
-        print("Best trees after initial integration ")
-        for i,sol in enumerate(best_tree_int):
-            cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
+    #     ## this is never used aside from here
+    #     best_tree_int = get_top_n(self.clonal_trees, self.top_n)
+    #     print("Best trees after initial integration ")
+    #     for i,sol in enumerate(best_tree_int):
+    #         cost, snv, cna = sol.compute_likelihood(self.data, self.lamb)
             
-
-    
-        print("\nWatering the fields.... ")
-        if len(infer_segs) > 0:
-            init_Tm = [scriptTm[i] for i in smallest_indices]
-            init_order = self.order_segments(infer_segs)
-            stis_infer = self.preprocess(infer_segs, delta)
-            self.clonal_trees, costs = self.infer(init_Tm, stis_infer, 
-                                                    [init_trees[i] for i in smallest_indices], 
-                                                    init_order = init_order )
+    #     ## UP UNTIL THIS POINT WE FOUND THE BEST CLONAL TREES ON ONLY THE SEGMENTS WITH HIGH AMOUNTS OF COPY NUMBER STATES. NOW WE USE OUR RESULTS AS A HEURISTIC TO BUILD THE CLONAL TREE OF ALL SEGS
+    #     ## WE NOW DO THE SAME PROCESS, BUT IN OUR INPUT, WE USE THE SNV CLUSTER TREE LIST, AS WELL AS THE CLONAL TREES FROM OUR HIGH CN STATES SAMPLE AS A BASELINE FOR HOW WE BUILD THE CLONAL TREE 
+    #         ## think of this as the tweaking to our skeletal baseline clonal tree
+    #     print("\nWatering the fields.... ")
+    #     if len(infer_segs) > 0:
+    #         init_Tm = [scriptTm[i] for i in smallest_indices]
+    #         init_order = self.order_segments(infer_segs)
+    #         stis_infer = self.preprocess(infer_segs, delta)
+    #         self.clonal_trees, costs = self.infer(init_Tm, stis_infer, 
+    #                                                 [init_trees[i] for i in smallest_indices], 
+    #                                                 init_order = init_order )
         
-        best_trees =  get_top_n(self.clonal_trees, self.top_n)
+    #     best_trees =  get_top_n(self.clonal_trees, self.top_n)
 
-        # print(f" tree | cost | snv | cna")
-        for i,b in enumerate(best_trees):
-            cost, snv, cna = b.compute_likelihood(self.data, self.lamb)
-            # print(f"|{i} | {cost} | {snv} | {cna} |")
-            
-        self.post_process(best_trees)
-
-        self.place_snvs(best_trees, place_segs)
-
-    
-    
-        print("\nHarvesting....")
-        for sol in best_trees:
-            sol.optimize(self.data, self.lamb)
+    #     # print(f" tree | cost | snv | cna")
+    #     for i,b in enumerate(best_trees):
+    #         cost, snv, cna = b.compute_likelihood(self.data, self.lamb)
+    #         # print(f"|{i} | {cost} | {snv} | {cna} |")
         
-        all_best_trees.append(best_trees)
-        best_trees = sorted(best_trees, key=lambda x: x.cost)
-        # print(f" tree | cost | snv | cna")
-        for i,b in enumerate(best_trees):
-            cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
-            # print(f"|{i} | {cost} | {snv} | {cna} |")
+    #     ## Removes linear chain from each tree with no cells assigned and maps SNVs in segments with only 1 CN states    
+    #     ## This function takes in a Solution list and post-processes the clonal tree of each solution such that linear chains with no cell assignments are removed from the tree. Each clonal tree object is modified in place.
+    #     ## in other words, if we have a node which is not assigned any particular cell and has only 1 child, we remove the obsolete node in the post process
+    #     self.post_process(best_trees)
+
+    #     ## Place SNVs that occur in segments with only a single copy number state in the clonal tree of each solution.
+    #     # List solutions: a list of solutions iterable segments: an iterable of segments that consist of only 1 copy number state
+    #     self.place_snvs(best_trees, place_segs)
+
+    
+    
+    #     print("\nHarvesting....")
+    #     ## optmize every tree by trying to find the best placement of snvs and cells to nodes using power iteration (coordinate descent). The clonal tree structure itself is not changes
+    #     for sol in best_trees:
+    #         sol.optimize(self.data, self.lamb)
+        
+    #     all_best_trees.append(best_trees)
+    #     best_trees = sorted(best_trees, key=lambda x: x.cost)
+    #     # print(f" tree | cost | snv | cna")
+
+    #     ## show the likelihood of every tree
+    #     for i,b in enumerate(best_trees):
+    #         cost,snv, cna = b.compute_likelihood(self.data, self.lamb)
+    #         # print(f"|{i} | {cost} | {snv} | {cna} |")
  
     
-        best_trees = get_top_n(all_best_trees, self.top_n)
-        for sol in best_trees:
-            sol.prune_leaves(self.k)
+    #     ## save only the top n best trees and prune all of the leaves without any cells assigned to them
+    #     best_trees = get_top_n(all_best_trees, self.top_n)
+    #     for sol in best_trees:
+    #         sol.prune_leaves(self.k)
 
+    #     ## returns the optimized version of the best clonal trees
 
-
-        return  best_trees
+    #     return  best_trees
         
 
 

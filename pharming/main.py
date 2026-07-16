@@ -1,5 +1,7 @@
 # Created by: L.L. Weber
 # Created on: 2024-02-29 17:30:46
+
+## Ori's personal commments are made using 2 hashes (## comment)
 """Main module for Pharming CLI"""
 
 import argparse
@@ -9,6 +11,8 @@ from .utils import pickle_object, load_pickled_object
 from .make_data import load_from_files
 
 def main():
+
+    # when you input all of the various arguments, the parser helps read the arguments that you inputted
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-d", "--data", required=False,
@@ -43,12 +47,17 @@ def main():
                         help="proportion threshold for determining CN states")
     parser.add_argument("--order", choices=[ 'random','weighted-random', 'nsnvs', 'in-place', 'cost'], default="weighted-random",
                         help="ordering strategy for progressive integration, choose one of 'random', 'weighted-random', 'nsnvs', 'in-place'")
+    
+    ## starting number of maternal and paternal alleles
     parser.add_argument("--root_x", type=int, default=1,
                         help="starting state for maternal (x) allele")
     parser.add_argument("--root_y", type=int, default=1,
                         help="starting state for paternal (y) allele")
+
     parser.add_argument("--collapse", action="store_true",
                         help="whether linear chains of copy number events should be collapsed prior to integration")
+    
+    ## The sum condition constraint says that the sum of DCF scores of all child branches cannot be larger than the parent branch they split from. 
     parser.add_argument("--sum-condition", action="store_true",
                         help="use the sum condition to filter mutation cluster trees")
     parser.add_argument("--cell-threshold", type=int, default=0,
@@ -73,12 +82,13 @@ def main():
         help = "filename to save the encoding for the labels of the pretty tree.")
 
 
-
+    ## at this point, args is a sort of dictionary where data --> xxx.csv, dcfs --> [some dictionary of dcfs], copy_numbers --> [number of CNAs] ...
     args = parser.parse_args()
     
 
     print("\nWelcome to the Pharm! Let's start pharming.....\n")
     
+    ## this is all data preprocessing to figure out how the data was inputted and standardizing it into a signle data type
     if args.data is not None:
         dat = load_pickled_object(args.data)
     elif args.file and args.copy_numbers is not None:
@@ -89,6 +99,7 @@ def main():
                 must be specified or alternatively, the path to the \
                 preprocessed pharming data object!")
   
+    ## initialize our segments
     if args.segfile is not None:
         with open(args.segfile, "r+") as file:
             segments = [int(line.strip()) for line in file]
@@ -100,6 +111,7 @@ def main():
         else:
             segments = args.segments
 
+    ## exclude any segments that are not specified
     if args.excl_segments is not None:
         segments = [ell for ell in segments if ell not in args.excl_segments]
     # segments = [ell for ell in segments if ell not in [226,94, 341]]
@@ -110,7 +122,7 @@ def main():
     for ell in segments:
         print(f"{ell}\t{dat.num_snvs(ell)}\t{dat.num_cn_states(ell)}\t{len(dat.thresholded_cn_prop(ell, thresh=args.thresh_prop, include_start_state=False))}")
     
-
+    ## preprocessing of dcfs, dcfs was previously calculated, as well as the number of clusters
     if args.delta is not None:
         dlist = {}
         delta = {i:  dlist[i] for i in range(len(dlist))}
@@ -126,13 +138,15 @@ def main():
      
                      raise ValueError("DCF file is not properly formatted.")
     
+    ## extract number of clusters
     if delta is None:
         k = args.snv_clusters
     else:
          k = len(delta)
     
 
-    
+    ## optionally, you can give the algorithm a predefined snv cluster tree (which the code piece builds as a graph) so that the pharming algorithm is constrained to a single solution
+        ## otherwise, the snv cluster tree must be solved for on its own
     if args.Tm is not None:
         T_m =nx.DiGraph()
         # edges = [(1,0), (1,2), (0,3)]
@@ -145,11 +159,14 @@ def main():
     else:
         T_m = None 
 
+    ## prevents CNAs containing less than cell_threshold to occur when calculating clonal tree. 
+        ## In this way, we can simplify the model such that we don't need to look at every CNA to calculate the tree, just ones with high enough cell counts 
     if args.collapse and args.cell_threshold is None:
         cell_threshold  = int(args.thresh_prop*dat.N)
     else:
         cell_threshold = args.cell_threshold 
 
+    ## creating our pharming object
     ph = Pharming(dcfs = delta,
                 k= k, 
                 start_state=(args.root_x, args.root_y), 
@@ -164,9 +181,10 @@ def main():
                 sum_condition = args.sum_condition,
                 )
 
-  
+    ## finding our clonal tree solutions
     solutions = ph.fit(dat,args.lamb, segments, cores=args.cores, Tm=T_m)
 
+    ## take the best tree and draw it out as our solutions
     if len(solutions) >0:
         sol = solutions[0]
         if args.tree is not None:
@@ -175,6 +193,8 @@ def main():
         print("Model selection scores:")
         icl, bic = solutions[0].ICL(dat, args.lamb)
         if args.model_selection is not None:
+
+            # show the scores for each tree
             with open(args.model_selection, "w+") as file:
                 file.write("solution,ICL,BIC\n")
                 for i, sol in enumerate(solutions):
@@ -189,6 +209,7 @@ def main():
          print("Pickling solutions...")
          pickle_object(solutions, args.pickle)
     
+    ## drawing a tree for every solution
     if args.out is not None:
         print("Drawing clonal trees...")
         for i,sol in enumerate(solutions):
