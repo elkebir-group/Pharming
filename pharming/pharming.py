@@ -553,10 +553,10 @@ class Pharming:
 
         # review this scoring function with prof and chat
         alpha = 1 #placeholder val for weight on cost as opposed to likelihood
-        n = 200 # placeholder val
+        n = .01 # placeholder val as a constant to control the impact of the size of the cluster on the algorithm
         for i,sol in enumerate(best_tree_int):
             likelihood, snv, cna = sol.compute_likelihood(self.data, self.lamb)
-            score = 2 * alpha * sol.cost - 2 * likelihood + weight * np.log(n)
+            score = 2 * alpha * sol.cost - 2 * likelihood - weight * n
             if score < best_score_within_dcf:
                 best_score_within_dcf = score
         return {"dcf" : dcf, "score" : best_score_within_dcf, "scriptTm" : scriptTm, "smallest_indices" : smallest_indices, "init_trees" : init_trees}
