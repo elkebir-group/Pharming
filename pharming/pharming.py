@@ -527,7 +527,7 @@ class Pharming:
         return final_groups
 
 
-    def assemble_tree(self, dcf, weight,init_segs, init_order, Tm):
+    def assemble_tree(self, dcf, normalized_weight,init_segs, init_order, Tm):
         if Tm is not None:
             scriptTm = [Tm]
         else:
@@ -556,7 +556,7 @@ class Pharming:
         n = .01 # placeholder val as a constant to control the impact of the size of the cluster on the algorithm
         for i,sol in enumerate(best_tree_int):
             likelihood, snv, cna = sol.compute_likelihood(self.data, self.lamb)
-            score = 2 * alpha * sol.cost - 2 * likelihood - weight * n
+            score = alpha * sol.cost + likelihood - normalized_weight * n
             if score < best_score_within_dcf:
                 best_score_within_dcf = score
         return {"dcf" : dcf, "score" : best_score_within_dcf, "scriptTm" : scriptTm, "smallest_indices" : smallest_indices, "init_trees" : init_trees}
@@ -579,7 +579,8 @@ class Pharming:
         for dcf_dict in dcf_clusterings:
             dcf = dcf_dict["dcf_profile"]
             weight = dcf_dict["weight"]
-            tree_features = self.assemble_tree(dcf, weight, init_segs, init_order, Tm=Tm)
+            normalized_weight = weight/num_runs
+            tree_features = self.assemble_tree(dcf, normalized_weight, init_segs, init_order, Tm=Tm)
             score = tree_features["score"]
             if score < best_overall_score:
                 best_overall_score = score
