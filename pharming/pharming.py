@@ -94,8 +94,6 @@ class Pharming:
         G = nx.DiGraph()
         G.add_nodes_from([q for q in range(self.k)])
         for u,v in itertools.combinations(range(self.k),2):
-            print(u, delta[u])
-            print(v, delta[v])
             if delta[u] >= delta[v]:
                 G.add_edge(u,v, weight=1)
             elif delta[u] < delta[v]:
@@ -442,8 +440,6 @@ class Pharming:
     #    print(like)
        like, dcfs , _, _, _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
        self.delta = {i: dcfs[i] for i in range(len(dcfs))}
-       print(self.delta)
-       return self.delta
 
     def preprocess(self, seg_list, delta):
 
@@ -493,7 +489,7 @@ class Pharming:
         
         print("Plowing the field.... ")
         if self.delta is None:
-            self.delta = self.infer_dcfs()
+            self.infer_dcfs()
         print("self.delta: ", self.delta)
         if Tm is not None:
             scriptTm = [Tm]
