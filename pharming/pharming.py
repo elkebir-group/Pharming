@@ -438,7 +438,7 @@ class Pharming:
        dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
     #    like, dcfs , _, _, _ = dcf_clust.decifer(self.data, np.array([0.179, 0.241, 0.32, 0.424, 0.985]) )
     #    print(like)
-       like, dcfs , _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
+       like, dcfs , _, _, _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
        self.delta = {i: dcfs[i] for i in range(len(dcfs))}
 
     def preprocess(self, seg_list, delta):
@@ -489,8 +489,8 @@ class Pharming:
         
         print("Plowing the field.... ")
         if self.delta is None:
-            self.delta = self.infer_dcfs()
-
+            self.infer_dcfs()
+        print("self.delta: ", self.delta)
         if Tm is not None:
             scriptTm = [Tm]
             for T_m in scriptTm:
