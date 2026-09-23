@@ -235,7 +235,7 @@ class DCF_Clustering:
         k = # of SNV clusters 
         '''
         init_dcfs =dcfs.copy()
-        prev_likelihood = np.NINF
+        prev_likelihood = -np.inf
         self.k = len(dcfs)
 
         self.data = data 
@@ -268,7 +268,7 @@ class DCF_Clustering:
                 # if len(thresh_cn_prop) > 4 and self.data.num_snvs(ell) < 100:
                 #     continue
           
-                seg_like = np.NINF
+                seg_like = -np.inf
                 
                 if self.cna_restriction:
 
@@ -478,7 +478,7 @@ class DCF_Clustering:
         # print(elbow)
 
         #add model selection 
-               
+        # print("return from run", results_by_k[selected])
         return results_by_k[selected]#best
         
 

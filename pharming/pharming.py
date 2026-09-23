@@ -5,7 +5,8 @@ import itertools
 import networkx as nx 
 import numpy as np
 import multiprocessing
-
+import sys
+import time
 from .sti_v2 import STI
 from . import clonelib
 from .tree_merging import ClonalTreeMerging
@@ -434,30 +435,499 @@ class Pharming:
 
 
     
-    def infer_dcfs(self):
-       dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
-    #    like, dcfs , _, _, _ = dcf_clust.decifer(self.data, np.array([0.179, 0.241, 0.32, 0.424, 0.985]) )
-    #    print(like)
-       like, dcfs , _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
-       self.delta = {i: dcfs[i] for i in range(len(dcfs))}
+    """Paste these methods inside the Pharming class in pharming.py."""
 
-    def preprocess(self, seg_list, delta):
+    def _export_dcf_bootstrap_analysis(self,matrix_norm_boot,normal_sorted_dcfs,boot_sorted_dcfs,output_dir="bootstrap_results",):
+        """Save DCF tables, co-clustering heatmaps, and raw analysis arrays."""
+        from pathlib import Path
 
-        if self.cores <= 1:
-            stis = {}
-            dictlist = []
-            for ell in seg_list:
-                _, stis[ell]  = self.preprocess_helper(ell, delta)
-           
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+        from scipy.cluster.hierarchy import leaves_list, linkage
+        from scipy.spatial.distance import squareform
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        matrix_norm_boot = np.asarray(matrix_norm_boot)
+        normal_sorted_dcfs = np.asarray(normal_sorted_dcfs, dtype=float)
+        boot_sorted_dcfs = np.asarray(boot_sorted_dcfs, dtype=float)
+
+        if matrix_norm_boot.ndim != 4 or matrix_norm_boot.shape[0] != 2:
+            raise ValueError(
+                "matrix_norm_boot must have shape (2, snv_count, snv_count, 2)."
+            )
+        if matrix_norm_boot.shape[-1] != 2:
+            raise ValueError(
+                "The last matrix dimension must contain [different, same] counts."
+            )
+        if normal_sorted_dcfs.ndim != 2 or boot_sorted_dcfs.ndim != 2:
+            raise ValueError(
+                "The sorted DCF arrays must have shape (replicates, clusters)."
+            )
+        if normal_sorted_dcfs.shape[1] != boot_sorted_dcfs.shape[1]:
+            raise ValueError(
+                "Normal and bootstrap runs must have the same number of clusters."
+            )
+
+        snv_count = matrix_norm_boot.shape[1]
+        number_of_clusters = normal_sorted_dcfs.shape[1]
+        dcf_columns = [
+            f"dcf_rank_{rank}_descending"
+            for rank in range(1, number_of_clusters + 1)
+        ]
+
+        normal_dcf_table = pd.DataFrame(
+            normal_sorted_dcfs,
+            columns=dcf_columns,
+        )
+        normal_dcf_table.insert(
+            0,
+            "replicate",
+            np.arange(1, len(normal_dcf_table) + 1),
+        )
+        normal_dcf_table.to_csv(
+            output_dir / "normal_sorted_dcfs.csv",
+            index=False,
+        )
+
+        boot_dcf_table = pd.DataFrame(
+            boot_sorted_dcfs,
+            columns=dcf_columns,
+        )
+        boot_dcf_table.insert(
+            0,
+            "replicate",
+            np.arange(1, len(boot_dcf_table) + 1),
+        )
+        boot_dcf_table.to_csv(
+            output_dir / "bootstrap_sorted_dcfs.csv",
+            index=False,
+        )
+
+        normal_counts = matrix_norm_boot[0]
+        boot_counts = matrix_norm_boot[1]
+        valid_normal = normal_counts.sum(axis=2)
+        valid_boot = boot_counts.sum(axis=2)
+
+        normal_rates = np.divide(
+            normal_counts[:, :, 1],
+            valid_normal,
+            out=np.full((snv_count, snv_count), np.nan),
+            where=valid_normal > 0,
+        )
+        boot_rates = np.divide(
+            boot_counts[:, :, 1],
+            valid_boot,
+            out=np.full((snv_count, snv_count), np.nan),
+            where=valid_boot > 0,
+        )
+
+        np.fill_diagonal(normal_rates, 1.0)
+        np.fill_diagonal(boot_rates, 1.0)
+        rate_difference = boot_rates - normal_rates
+
+        # Determine one ordering from the normal runs, then use that same
+        # ordering for all panels so the heatmaps remain directly comparable.
+        if snv_count > 1:
+            ordering_rates = np.nan_to_num(normal_rates, nan=0.0)
+            ordering_rates = (ordering_rates + ordering_rates.T) / 2.0
+            np.fill_diagonal(ordering_rates, 1.0)
+
+            distance = np.clip(1.0 - ordering_rates, 0.0, 1.0)
+            np.fill_diagonal(distance, 0.0)
+            snv_order = leaves_list(
+                linkage(
+                    squareform(distance, checks=False),
+                    method="average",
+                )
+            )
         else:
-            args = [(ell, delta) for ell in seg_list]
-            with multiprocessing.Pool(self.cores) as pool:
-                dictlist = pool.starmap(self.preprocess_helper, args)
+            snv_order = np.array([0], dtype=int)
+
+        normal_ordered = normal_rates[np.ix_(snv_order, snv_order)]
+        boot_ordered = boot_rates[np.ix_(snv_order, snv_order)]
+        difference_ordered = rate_difference[np.ix_(snv_order, snv_order)]
+
+        figure, axes = plt.subplots(
+            1,
+            3,
+            figsize=(19, 6),
+            constrained_layout=True,
+        )
+
+        normal_image = axes[0].imshow(
+            normal_ordered,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="viridis",
+            interpolation="nearest",
+            aspect="auto",
+        )
+        axes[0].set_title("Normal co-clustering")
+        axes[0].set_xlabel("SNVs")
+        axes[0].set_ylabel("SNVs")
+
+        axes[1].imshow(
+            boot_ordered,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="viridis",
+            interpolation="nearest",
+            aspect="auto",
+        )
+        axes[1].set_title("Bootstrap co-clustering")
+        axes[1].set_xlabel("SNVs")
+        axes[1].set_ylabel("SNVs")
+
+        finite_differences = difference_ordered[
+            np.isfinite(difference_ordered)
+        ]
+        maximum_difference = (
+            float(np.max(np.abs(finite_differences)))
+            if finite_differences.size
+            else 1.0
+        )
+        if maximum_difference == 0.0:
+            maximum_difference = 1.0
+
+        difference_image = axes[2].imshow(
+            difference_ordered,
+            vmin=-maximum_difference,
+            vmax=maximum_difference,
+            cmap="coolwarm",
+            interpolation="nearest",
+            aspect="auto",
+        )
+        axes[2].set_title("Bootstrap minus normal")
+        axes[2].set_xlabel("SNVs")
+        axes[2].set_ylabel("SNVs")
+
+        # Thousands of SNV labels would be unreadable, so only display them
+        # for small datasets. These labels are internal zero-based SNV IDs.
+        if snv_count <= 40:
+            positions = np.arange(snv_count)
+            labels = [str(int(snv_id)) for snv_id in snv_order]
+            for axis in axes:
+                axis.set_xticks(positions)
+                axis.set_yticks(positions)
+                axis.set_xticklabels(labels, rotation=90, fontsize=6)
+                axis.set_yticklabels(labels, fontsize=6)
+        else:
+            for axis in axes:
+                axis.set_xticks([])
+                axis.set_yticks([])
+
+        figure.colorbar(
+            normal_image,
+            ax=[axes[0], axes[1]],
+            label="Proportion of runs assigned together",
+            shrink=0.8,
+        )
+        figure.colorbar(
+            difference_image,
+            ax=axes[2],
+            label="Change in co-clustering rate",
+            shrink=0.8,
+        )
+        figure.savefig(
+            output_dir / "coclustering_heatmaps.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(figure)
+
+        # Plot the median and interquartile range of each descending DCF rank.
+        ranks = np.arange(1, number_of_clusters + 1)
+        normal_median = np.nanmedian(normal_sorted_dcfs, axis=0)
+        normal_lower = np.nanpercentile(normal_sorted_dcfs, 25, axis=0)
+        normal_upper = np.nanpercentile(normal_sorted_dcfs, 75, axis=0)
+        boot_median = np.nanmedian(boot_sorted_dcfs, axis=0)
+        boot_lower = np.nanpercentile(boot_sorted_dcfs, 25, axis=0)
+        boot_upper = np.nanpercentile(boot_sorted_dcfs, 75, axis=0)
+
+        figure, axis = plt.subplots(
+            figsize=(9, 6),
+            constrained_layout=True,
+        )
+        axis.plot(
+            ranks,
+            normal_median,
+            marker="o",
+            linewidth=2,
+            color="#2166ac",
+            label="Normal median",
+        )
+        axis.fill_between(
+            ranks,
+            normal_lower,
+            normal_upper,
+            alpha=0.20,
+            color="#2166ac",
+            label="Normal interquartile range",
+        )
+        axis.plot(
+            ranks,
+            boot_median,
+            marker="o",
+            linewidth=2,
+            color="#b2182b",
+            label="Bootstrap median",
+        )
+        axis.fill_between(
+            ranks,
+            boot_lower,
+            boot_upper,
+            alpha=0.20,
+            color="#b2182b",
+            label="Bootstrap interquartile range",
+        )
+        axis.set_title("DCF distributions by descending rank")
+        axis.set_xlabel("DCF rank, largest to smallest")
+        axis.set_ylabel("DCF")
+        axis.set_xticks(ranks)
+        axis.set_ylim(0.0, 1.05)
+        axis.grid(alpha=0.25)
+        axis.legend()
+        figure.savefig(
+            output_dir / "dcf_rank_distributions.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(figure)
+
+        np.savez_compressed(
+            output_dir / "bootstrap_analysis_arrays.npz",
+            matrix_norm_boot=matrix_norm_boot,
+            normal_sorted_dcfs=normal_sorted_dcfs,
+            boot_sorted_dcfs=boot_sorted_dcfs,
+            normal_coclustering_rates=normal_rates,
+            bootstrap_coclustering_rates=boot_rates,
+            bootstrap_minus_normal=rate_difference,
+            snv_order=snv_order,
+        )
+
+        print(f"Bootstrap analysis saved in: {output_dir.resolve()}")
+
+        return {
+            "normal_rates": normal_rates,
+            "boot_rates": boot_rates,
+            "rate_difference": rate_difference,
+            "snv_order": snv_order,
+        }
+
+
+    def infer_dcfs(self):
+        start_time = time.perf_counter()
+        num_replicates = 10
+        snv_count = self.data.m
+
+        print("start dcf")
+        dcf_clust = DCF_Clustering(
+            rng=self.rng,
+            nrestarts=18,
+            cna_restriction=1,
+        )
+
+        normal_replicates = []
+        normal_sorted_dcfs = []
+        matrix_norm_boot = np.zeros(
+            (2, snv_count, snv_count, 2),
+            dtype=np.uint16,
+        )
+        # matrix_norm_boot = np.zeros(
+        #     (2, snv_count, snv_count, 2, 2),
+        #     dtype=np.uint16,
+        # )
+
+        # ------------------------------------------------------------
+        # Full-data replicates
+        # ------------------------------------------------------------
+        for replicate_id in range(num_replicates):
+            like, dcfs, _, clusters, _, _, _ = dcf_clust.run(
+                self.data,
+                k_vals=[self.k],
+                cores=6,
+            )
+
+            dcfs = np.asarray(dcfs, dtype=float)
+            dcf_order = np.argsort(-dcfs)
+            dcfs_sorted = dcfs[dcf_order]
+            cluster_to_rank = {
+                int(cluster_id): rank
+                for rank, cluster_id in enumerate(dcf_order, start=1)
+            }
+
+            normal_replicates.append(
+                {
+                    "like": like,
+                    "dcfs": dcfs,
+                    "dcfs_sorted": dcfs_sorted,
+                    "cluster_to_rank": cluster_to_rank,
+                    "clusters": clusters,
+                }
+            )
+            normal_sorted_dcfs.append(dcfs_sorted)
+
+            print(
+                f"Normal replicate {replicate_id + 1}: "
+                f"likelihood={like}, sorted DCFs={dcfs_sorted}"
+            )
+
+        # ------------------------------------------------------------
+        # Cell-bootstrap replicates
+        # ------------------------------------------------------------
+        boot_replicates = []
+        boot_sorted_dcfs = []
+
+        for bootstrap_id in range(num_replicates):
+            indices = self.rng.choice(
+                self.data.N,
+                size=self.data.N,
+                replace=True,
+            )
+            bootstrap_data = self.data.resample_cells(indices)
+
+            like, dcfs, _, clusters, _, _, _ = dcf_clust.run(
+                bootstrap_data,
+                k_vals=[self.k],
+                cores=6,
+            )
+
+            dcfs = np.asarray(dcfs, dtype=float)
+            dcf_order = np.argsort(-dcfs)
+            dcfs_sorted = dcfs[dcf_order]
+            cluster_to_rank = {
+                int(cluster_id): rank
+                for rank, cluster_id in enumerate(dcf_order, start=1)
+            }
+        # self.reality_matrix_norm_boot=self.reality_matrix_norm_boot
+            boot_replicates.append(
+                {
+                    "like": like,
+                    "dcfs": dcfs,
+                    "dcfs_sorted": dcfs_sorted,
+                    "cluster_to_rank": cluster_to_rank,
+                    "clusters": clusters,
+                }
+            )
+            boot_sorted_dcfs.append(dcfs_sorted)
+
+            print(
+                f"Bootstrap replicate {bootstrap_id + 1}: "
+                f"likelihood={like}, sorted DCFs={dcfs_sorted}"
+            )
+
+        # ------------------------------------------------------------
+        # Pairwise normal co-clustering counts
+        # ------------------------------------------------------------
+        for normal_rep in normal_replicates:
+            for snv_i in range(snv_count):
+                segment_i = self.data.snv_to_seg[snv_i]
+                cluster_i = normal_rep["clusters"].get(
+                    segment_i,
+                    {},
+                ).get(snv_i)
+                # real_cluster_j = real_cluster_assign[snv_i]
+                if cluster_i is None:
+                    continue
+
+                for snv_j in range(snv_i + 1, snv_count):
+                    segment_j = self.data.snv_to_seg[snv_j]
+                    cluster_j = normal_rep["clusters"].get(
+                        segment_j,
+                        {},
+                    ).get(snv_j)
+                    
+                    # real_cluster_j = real_cluster_assign[snv_j]
+                    if cluster_j is None:
+                        continue
+
+                    same_cluster = int(cluster_i == cluster_j)
+                    # reality_cluster = int(real_cluster_i == real_cluster_j)
+                    matrix_norm_boot[0, snv_i, snv_j, same_cluster] += 1
+                    matrix_norm_boot[0, snv_j, snv_i, same_cluster] += 1
+                    # reality_matrix_norm_boot[0, snv_i, snv_j, same_cluster, reality_cluster] += 1
+                    # reality_matrix_norm_boot[0, snv_j, snv_i, same_cluster, reality_cluster] += 1
+        # ------------------------------------------------------------
+        # Pairwise bootstrap co-clustering counts
+        # ------------------------------------------------------------
+        for boot_rep in boot_replicates:
+            for snv_i in range(snv_count):
+                segment_i = self.data.snv_to_seg[snv_i]
+                cluster_i = boot_rep["clusters"].get(
+                    segment_i,
+                    {},
+                ).get(snv_i)
+
+                # real_cluster_j = real_cluster_assign[snv_i]
+                if cluster_i is None:
+                    continue
+
+                for snv_j in range(snv_i + 1, snv_count):
+                    segment_j = self.data.snv_to_seg[snv_j]
+                    cluster_j = boot_rep["clusters"].get(
+                        segment_j,
+                        {},
+                    ).get(snv_j)
+                    # real_cluster_j = real_cluster_assign[snv_j]
+                    if cluster_j is None:
+                        continue
+
+                    same_cluster = int(cluster_i == cluster_j)
+                    # reality_cluster = int(real_cluster_i == real_cluster_j)
+
+                    matrix_norm_boot[1, snv_i, snv_j, same_cluster] += 1
+                    matrix_norm_boot[1, snv_j, snv_i, same_cluster] += 1
+                    # reality_matrix_norm_boot[1, snv_i, snv_j, same_cluster, reality_cluster] += 1
+                    # reality_matrix_norm_boot[1, snv_j, snv_i, same_cluster, reality_cluster] += 1
+        normal_sorted_dcfs = np.asarray(normal_sorted_dcfs, dtype=float)
+        boot_sorted_dcfs = np.asarray(boot_sorted_dcfs, dtype=float)
+
+        self._export_dcf_bootstrap_analysis(
+            matrix_norm_boot=matrix_norm_boot,
+            normal_sorted_dcfs=normal_sorted_dcfs,
+            boot_sorted_dcfs=boot_sorted_dcfs,
+            output_dir="bootstrap_results",
+            # reality_matrix_norm_boot=reality_matrix_norm_boot
+        )
+
+        # Use the median of each descending bootstrap rank. Axis 0 aggregates
+        # across bootstrap replicates while preserving the DCF ranks.
+        consensus_dcfs = np.median(boot_sorted_dcfs, axis=0)
+        self.delta = {
+            rank: float(dcf)
+            for rank, dcf in enumerate(consensus_dcfs)
+        }
+
+        # Retain the results on the object for later notebook analysis.
+        self.matrix_norm_boot = matrix_norm_boot
+        self.normal_sorted_dcfs = normal_sorted_dcfs
+        self.boot_sorted_dcfs = boot_sorted_dcfs
+        # self.reality_matrix_norm_boot=self.reality_matrix_norm_boot
+        elapsed_time = time.perf_counter() - start_time
+        print("Bootstrap consensus DCFs:", self.delta)
+        print(f"Executed in {elapsed_time:.4f} seconds")
+        sys.exit()
             
-            stis = {ell: vals for ell, vals in dictlist}
-        return stis
-       
-  
+        def preprocess(self, seg_list, delta):
+
+            if self.cores <= 1:
+                stis = {}
+                dictlist = []
+                for ell in seg_list:
+                    _, stis[ell]  = self.preprocess_helper(ell, delta)
+            
+            else:
+                args = [(ell, delta) for ell in seg_list]
+                with multiprocessing.Pool(self.cores) as pool:
+                    dictlist = pool.starmap(self.preprocess_helper, args)
+                
+                stis = {ell: vals for ell, vals in dictlist}
+            return stis
+        
+    
 
     @timeit_decorator
     def fit(self, data, lamb=1e3, segments= None, cores=1, Tm=None):
@@ -489,8 +959,8 @@ class Pharming:
         
         print("Plowing the field.... ")
         if self.delta is None:
-            self.delta = self.infer_dcfs()
-
+            self.infer_dcfs()
+        print("self.delta: ", self.delta)
         if Tm is not None:
             scriptTm = [Tm]
             for T_m in scriptTm:

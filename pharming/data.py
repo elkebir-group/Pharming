@@ -389,5 +389,18 @@ class Data:
 
 
 
-
+    def resample_cells(self, indices):
+        return Data(
+            var=self.var[indices, :],
+            total=self.total[indices, :],
+            copy_x=self.copy_x[indices, :],
+            copy_y=self.copy_y[indices, :],
+            snv_to_seg=self.snv_to_seg,
+            seg_to_snvs=self.seg_to_snvs,
+            cell_lookup=self.cell_lookup.iloc[indices].reset_index(drop=True),
+            mut_lookup=self.mut_lookup,
+            seg_lookup=self.seg_lookup,
+            alpha=self.alpha,
+            seg_weights=self.seg_weights
+        )
 
