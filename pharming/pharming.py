@@ -307,8 +307,7 @@ class Pharming:
         print("No Snvs Segs:")
         print(no_snvs_segs)
         return init_segs, infer_segs, place_segs, no_snvs_segs
-      
-
+    
     def infer(self, Tm_list, stis, init_trees=None, init_order=None):
         """
         infer a clonal tree for a list of mutation cluster trees
@@ -434,12 +433,322 @@ class Pharming:
 
 
     
+    # def infer_dcfs(self):
+    #    dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
+    # #    like, dcfs , _, _, _ = dcf_clust.decifer(self.data, np.array([0.179, 0.241, 0.32, 0.424, 0.985]) )
+    # #    print(like)
+    #    like, dcfs , _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
+    #    self.delta = {i: dcfs[i] for i in range(len(dcfs))}
+    # def infer_dcfs(self):
+    #     dcf_clust = DCF_Clustering(
+    #         rng=self.rng,
+    #         nrestarts=18,
+    #         cna_restriction=True,
+    #     )
+
+    #     _, dcfs, *_ = dcf_clust.run(
+    #         self.data,
+    #         k_vals=[self.k],
+    #         cores=6,
+    #     )
+
+    #     return {i: dcfs[i] for i in range(len(dcfs))}
+
     def infer_dcfs(self):
-       dcf_clust = DCF_Clustering(rng= self.rng, nrestarts=18, cna_restriction=1)
-    #    like, dcfs , _, _, _ = dcf_clust.decifer(self.data, np.array([0.179, 0.241, 0.32, 0.424, 0.985]) )
-    #    print(like)
-       like, dcfs , _, _, _= dcf_clust.run(self.data, k_vals=[self.k], cores=6)
-       self.delta = {i: dcfs[i] for i in range(len(dcfs))}
+        """Benchmark original and optimized DCF clustering on paired runs.
+
+        Both implementations receive the same data, configuration, and RNG seed in
+        every replicate.  A new clustering object is created for every timed run so
+        that an implementation cannot inherit caches from a previous replicate.
+
+        The method returns the best optimized DCF solution for Pharming to use.
+        """
+        import gc
+        import os
+        import pickle
+        import time
+        from pathlib import Path
+
+        import numpy as np
+        import pandas as pd      
+        from .dcf_clustering_v2 import DCF_Clustering as OriginalDCFClustering
+        from .dcf_clustering_v3 import DCF_Clustering as OptimizedDCFClustering
+        print("got everything imported")
+        print("Benchmarking original versus optimized DCF clustering", flush=True)
+        print("THIS IS THEBenchmarking original versus optimized DCF clustering run 2", flush=True)
+        print("*\n*\n*\n*\n*\n")
+        num_replicates = 5
+        benchmark_cores = 1
+        base_seed = 11
+        num_restarts = 18
+
+        # Similarity thresholds. These affect only the PASS/FAIL summary; all raw
+        # comparison measurements are saved regardless of the thresholds.
+        dcf_atol = 0.02
+        cost_rtol = 0.01
+        ari_threshold = 0.95
+
+        results_root = Path(
+            "/home/oriw2/Pharming/pharming_output/old_v_optimized_dcf"
+        )
+        run_dir = results_root / (
+            f"run_{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
+        )
+        run_dir.mkdir(parents=True, exist_ok=False)
+        print(f"Saving benchmark results to: {run_dir}", flush=True)
+
+        implementations = {
+            "original": OriginalDCFClustering,
+            "optimized": OptimizedDCFClustering,
+        }
+
+        def run_once(kind, clustering_class, seed):
+            # Separate generators with the same seed give both implementations the
+            # same initial DCF centers and sampled segments.
+            clustering = clustering_class(
+                rng=np.random.default_rng(seed),
+                nrestarts=num_restarts,
+                cna_restriction=True,
+                iterations=100,
+                nsegs=15,
+                thresh_prop=0.05,
+                max_cn_states=4,
+            )
+
+            gc.collect()
+            started = time.perf_counter()
+            result = clustering.run(
+                self.data,
+                k_vals=[self.k],
+                cores=benchmark_cores,
+            )
+            elapsed = time.perf_counter() - started
+
+            if len(result) != 7:
+                raise ValueError(
+                    f"{kind} run() returned {len(result)} values; expected 7"
+                )
+
+            norm_cost, dcfs, cna_trees, clusters, snv_trees, raw_cost, num_snvs = result
+            return {
+                "kind": kind,
+                "elapsed_seconds": float(elapsed),
+                "norm_cost": float(norm_cost),
+                "raw_cost": float(raw_cost),
+                "num_snvs": int(num_snvs),
+                "dcfs": np.asarray(dcfs, dtype=float),
+                "dcfs_sorted": np.sort(np.asarray(dcfs, dtype=float)),
+                "clusters": clusters,
+                "cna_trees": cna_trees,
+                "snv_trees": snv_trees,
+            }
+
+        def assignment_vector(cluster_assignments):
+            """Return one cluster label per SNV; -1 means unassigned."""
+            labels = np.full(self.data.m, -1, dtype=np.int64)
+            for segment_assignments in cluster_assignments.values():
+                for snv, cluster in segment_assignments.items():
+                    labels[int(snv)] = int(cluster)
+            return labels
+
+        def comb2(values):
+            values = np.asarray(values, dtype=np.int64)
+            return np.sum(values * (values - 1) // 2, dtype=np.int64)
+
+        def adjusted_rand_index(labels_a, labels_b):
+            """Label-permutation-invariant clustering agreement, without sklearn."""
+            labels_a = np.asarray(labels_a)
+            labels_b = np.asarray(labels_b)
+            keep = (labels_a >= 0) & (labels_b >= 0)
+            labels_a = labels_a[keep]
+            labels_b = labels_b[keep]
+
+            n = labels_a.size
+            if n < 2:
+                return float("nan"), int(n)
+
+            _, a_inverse = np.unique(labels_a, return_inverse=True)
+            _, b_inverse = np.unique(labels_b, return_inverse=True)
+            contingency = np.zeros(
+                (a_inverse.max() + 1, b_inverse.max() + 1),
+                dtype=np.int64,
+            )
+            np.add.at(contingency, (a_inverse, b_inverse), 1)
+
+            total_pairs = n * (n - 1) / 2.0
+            same_both = float(comb2(contingency.ravel()))
+            same_a = float(comb2(contingency.sum(axis=1)))
+            same_b = float(comb2(contingency.sum(axis=0)))
+            expected = same_a * same_b / total_pairs
+            maximum = 0.5 * (same_a + same_b)
+            denominator = maximum - expected
+
+            if abs(denominator) < 1e-15:
+                ari = 1.0 if np.array_equal(a_inverse, b_inverse) else 0.0
+            else:
+                ari = (same_both - expected) / denominator
+            return float(ari), int(n)
+
+        def save_pickle(name, value):
+            destination = run_dir / name
+            temporary = run_dir / f".{name}.tmp"
+            with temporary.open("wb") as output_file:
+                pickle.dump(value, output_file, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(temporary, destination)
+
+        comparison_rows = []
+        all_results = []
+        optimized_results = []
+
+        for replicate_id in range(num_replicates):
+            seed = base_seed + replicate_id
+
+            # Alternate order to reduce systematic first-run/cache-temperature bias.
+            order = (
+                ["original", "optimized"]
+                if replicate_id % 2 == 0
+                else ["optimized", "original"]
+            )
+
+            paired = {}
+            for kind in order:
+                print(
+                    f"Replicate {replicate_id + 1}/{num_replicates}: {kind}",
+                    flush=True,
+                )
+                paired[kind] = run_once(kind, implementations[kind], seed)
+
+            original = paired["original"]
+            optimized = paired["optimized"]
+            optimized_results.append(optimized)
+
+            if original["dcfs_sorted"].shape == optimized["dcfs_sorted"].shape:
+                dcf_abs_diff = np.abs(
+                    original["dcfs_sorted"] - optimized["dcfs_sorted"]
+                )
+                dcf_mean_abs_diff = float(np.mean(dcf_abs_diff))
+                dcf_max_abs_diff = float(np.max(dcf_abs_diff))
+                dcfs_close = bool(
+                    np.allclose(
+                        original["dcfs_sorted"],
+                        optimized["dcfs_sorted"],
+                        rtol=0.0,
+                        atol=dcf_atol,
+                    )
+                )
+            else:
+                dcf_mean_abs_diff = float("nan")
+                dcf_max_abs_diff = float("nan")
+                dcfs_close = False
+
+            cost_abs_diff = abs(original["norm_cost"] - optimized["norm_cost"])
+            cost_scale = max(abs(original["norm_cost"]), 1e-12)
+            cost_relative_diff = cost_abs_diff / cost_scale
+            costs_close = bool(cost_relative_diff <= cost_rtol)
+
+            ari, compared_snvs = adjusted_rand_index(
+                assignment_vector(original["clusters"]),
+                assignment_vector(optimized["clusters"]),
+            )
+            assignments_close = bool(np.isfinite(ari) and ari >= ari_threshold)
+
+            speedup = (
+                original["elapsed_seconds"] / optimized["elapsed_seconds"]
+                if optimized["elapsed_seconds"] > 0
+                else float("inf")
+            )
+            passed = dcfs_close and costs_close and assignments_close
+
+            row = {
+                "replicate": replicate_id + 1,
+                "seed": seed,
+                "original_dcfs": original["dcfs"].tolist(),
+                "optimized_dcfs": optimized["dcfs"].tolist(),
+                "original_dcfs_sorted": original["dcfs_sorted"].tolist(),
+                "optimized_dcfs_sorted": optimized["dcfs_sorted"].tolist(),
+                "original_seconds": original["elapsed_seconds"],
+                "optimized_seconds": optimized["elapsed_seconds"],
+                "speedup": speedup,
+                "original_norm_cost": original["norm_cost"],
+                "optimized_norm_cost": optimized["norm_cost"],
+                "cost_absolute_difference": cost_abs_diff,
+                "cost_relative_difference": cost_relative_diff,
+                "dcf_mean_absolute_difference": dcf_mean_abs_diff,
+                "dcf_max_absolute_difference": dcf_max_abs_diff,
+                "assignment_ari": ari,
+                "compared_snvs": compared_snvs,
+                "similarity_pass": passed,
+            }
+            comparison_rows.append(row)
+            all_results.append({
+                "replicate": replicate_id + 1,
+                "seed": seed,
+                "original": original,
+                "optimized": optimized,
+                "comparison": row,
+            })
+
+            print(
+                f"  original={original['elapsed_seconds']:.3f}s, "
+                f"optimized={optimized['elapsed_seconds']:.3f}s, "
+                f"speedup={speedup:.2f}x",
+                flush=True,
+            )
+            print(
+                f"  original DCFs:        {original['dcfs']}",
+                flush=True,
+            )
+            print(
+                f"  optimized DCFs:       {optimized['dcfs']}",
+                flush=True,
+            )
+            print(
+                f"  original DCFs sorted: {original['dcfs_sorted']}",
+                flush=True,
+            )
+            print(
+                f"  optimized DCFs sorted:{optimized['dcfs_sorted']}",
+                flush=True,
+            )
+            print(
+                f"  max DCF difference={dcf_max_abs_diff:.6f}, "
+                f"cost relative difference={cost_relative_diff:.3%}, "
+                f"assignment ARI={ari:.6f}, "
+                f"similarity={'PASS' if passed else 'FAIL'}",
+                flush=True,
+            )
+
+            save_pickle(
+                f"paired_replicate_{replicate_id + 1:02d}.pkl",
+                all_results[-1],
+            )
+
+        summary = pd.DataFrame(comparison_rows)
+        summary.to_csv(run_dir / "benchmark_summary.csv", index=False)
+        save_pickle("all_benchmark_results.pkl", all_results)
+
+        original_median = float(summary["original_seconds"].median())
+        optimized_median = float(summary["optimized_seconds"].median())
+        median_speedup = original_median / optimized_median
+        passed_replicates = int(summary["similarity_pass"].sum())
+
+        print("\nBenchmark summary", flush=True)
+        print(f"  Original median time:  {original_median:.3f}s", flush=True)
+        print(f"  Optimized median time: {optimized_median:.3f}s", flush=True)
+        print(f"  Median speedup:        {median_speedup:.2f}x", flush=True)
+        print(
+            f"  Similarity passes:     {passed_replicates}/{num_replicates}",
+            flush=True,
+        )
+        print(f"  Results: {run_dir}", flush=True)
+
+        # Continue Pharming with the lowest-cost optimized replicate. Do not call
+        # sys.exit(), and return the dictionary expected by fit().
+        best_optimized = min(optimized_results, key=lambda item: item["norm_cost"])
+        return {
+            cluster_id: float(dcf)
+            for cluster_id, dcf in enumerate(best_optimized["dcfs"])
+        }
 
     def preprocess(self, seg_list, delta):
 
@@ -448,7 +757,7 @@ class Pharming:
             dictlist = []
             for ell in seg_list:
                 _, stis[ell]  = self.preprocess_helper(ell, delta)
-           
+        
         else:
             args = [(ell, delta) for ell in seg_list]
             with multiprocessing.Pool(self.cores) as pool:
@@ -456,9 +765,7 @@ class Pharming:
             
             stis = {ell: vals for ell, vals in dictlist}
         return stis
-       
-  
-
+    
     @timeit_decorator
     def fit(self, data, lamb=1e3, segments= None, cores=1, Tm=None):
         '''
@@ -490,7 +797,7 @@ class Pharming:
         print("Plowing the field.... ")
         if self.delta is None:
             self.delta = self.infer_dcfs()
-
+        sys.exit()
         if Tm is not None:
             scriptTm = [Tm]
             for T_m in scriptTm:
